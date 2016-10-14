@@ -1,6 +1,6 @@
 #lang curly-fn racket/base
 
-(provide λ +
+(provide λ let +
          (rename-out [hash-percent-app #%app]
                      [hash-percent-datum #%datum]
                      [hash-percent-module-begin #%module-begin]))
@@ -18,7 +18,7 @@
   #:arity = 2
   #:arg-variances (const (list covariant contravariant)))
 
-(define-type-constructor ∀ #:bvs >= 0)
+;(define-type-constructor ∀ #:bvs >= 0)
 
 (define-type-constructor τ~ #:arity = 2)
 
@@ -43,12 +43,13 @@
        (symbol->string (syntax-e #'α))]
       [(~→ τa τb)
        (format "(→ ~a ~a)" (type->string #'τa) (type->string #'τb))]
-      [(~∀ [τv ...] τ)
+      ['#s(∀ [τv ...] τ)
        (format "(∀ ~a ~a)" (map type->string (attribute τv)) (type->string #'τ))]
       [(~τ~ τa τb)
        (format "(τ~~ ~a ~a)" (type->string #'τa) (type->string #'τb))]
       [~Integer "Integer"]
       [~String "String"]
+      [:id (type->str this-syntax)]
       #;[_ (type->str this-syntax)]))
 
   (let ([old-type=? (current-type=?)])
@@ -61,6 +62,14 @@
          [(_ #s(var _)) #f]
          [(_ _) (old-type=? τa τb)]))))
 
+  (let ([old-type-eval (current-type-eval)])
+    (current-type-eval
+     (syntax-parser
+       #:literals [quote]
+       ['#s(∀ τvs τ)
+        (old-type-eval #`#s(∀ τvs #,((current-type-eval) #'τ)))]
+       [_ (old-type-eval this-syntax)])))
+
   (define (infer+erase stx #:ctx [ctx #'()])
     (define wrapped-stx
       (syntax-parse ctx
@@ -68,8 +77,9 @@
          #:with (x- ...) (for/list ([x-stx (in-list (attribute x))])
                            (let ([tmp (generate-temporary x-stx)])
                              (datum->syntax tmp (syntax-e tmp) x-stx)))
+         #:with (τ_inst ...) #'(#,(instantiate-type #'τ) ...)
          #`(λ- (x- ...)
-               (let-syntax ([x (make-variable-like-transformer (⊢ x- : τ))]
+               (let-syntax ([x (make-variable-like-transformer (⊢ x- : τ_inst))]
                             ...)
                  #,stx))]))
     (define-values [τ xs- stx-]
@@ -138,6 +148,19 @@
                  (recur #'cdr))]
         [_ (get-properties this-syntax)])))
 
+  (define (collect-properties/stxs stx key)
+    (define (get-properties stx)
+      (let ([props (flatten-syntax-property-value (syntax-property stx key))])
+        (if (empty? props) (list)
+            (list (cons stx (first (flatten-syntax-property-value (syntax-property stx key))))))))
+    (let recur ([stx stx])
+      (syntax-parse stx
+        [(elem ...+ . cdr)
+         (append (get-properties this-syntax)
+                 (append-map recur (attribute elem))
+                 (recur #'cdr))]
+        [_ (get-properties this-syntax)])))
+
   (define (collect-constraints stx)
     (collect-properties stx 'constraints)))
 
@@ -166,25 +189,24 @@
      a))
 
   (define (apply-subst subst stx)
-    (syntax-parse stx
-      #:context 'apply-subst
-      #:literals [quote]
-      ['#s(var τv:id)
-       (free-id-table-ref subst #'τv stx)]
-      [(~→ τa τb)
-       ((current-type-eval)
-        #`(→ #,(apply-subst subst #'τa)
-             #,(apply-subst subst #'τb)))]
-      [(~∀ τvs τ)
-       ((current-type-eval)
-        #`(∀ τvs #,(apply-subst subst #'τ)))]
-      [(~τ~ τa τb)
-       (datum->syntax this-syntax
-                      (syntax-e ((current-type-eval)
-                                 #`(τ~ #,(apply-subst subst #'τa)
-                                       #,(apply-subst subst #'τb))))
-                      this-syntax this-syntax)]
-      [_ stx]))
+    ((current-type-eval)
+     (let recur ([stx stx])
+       (syntax-parse stx
+         #:context 'apply-subst
+         #:literals [quote]
+         ['#s(var τv:id)
+          (free-id-table-ref subst #'τv stx)]
+         ['#s(∀ τvs τ)
+          #`#s(∀ τvs #,(recur #'τ))]
+         [(~→ τa τb)
+          #`(→ #,(recur #'τa)
+               #,(recur #'τb))]
+         [(~τ~ τa τb)
+          (datum->syntax this-syntax
+                         (syntax-e #`(τ~ #,(recur #'τa)
+                                         #,(recur #'τb)))
+                         this-syntax this-syntax)]
+         [_ stx]))))
 
   (define (bind-subst τv τ)
     (make-immutable-free-id-table
@@ -200,12 +222,24 @@
           [(τ '#s(var τv:id))
            (bind-subst #'τv #'τ)]
           [((~→ τa τb) (~→ τc τd))
-           (compose-substs (unify #'τa #'τc #:src src)
-                           (unify #'τb #'τd #:src src))]
+           (unify* (list (cons #'τa #'τc)
+                         (cons #'τb #'τd))
+                   #:src src)]
           [(_ _)
            (raise-syntax-error #f (format "could not unify ~a with ~a"
                                           (type->string τa) (type->string τb))
                                src)])))
+
+  (define (unify* τ_pairs #:src src)
+    (match τ_pairs
+      ['() (make-immutable-free-id-table)]
+      [(list (cons τa τb)
+             (cons τas τbs) ...)
+       (let* ([subst (unify τa τb #:src src)]
+              [subst* (unify* (map cons (map #{apply-subst subst %} τas)
+                                        (map #{apply-subst subst %} τbs))
+                              #:src src)])
+         (compose-substs subst subst*))]))
 
   (define (solve-constraints cs)
     (let recur ([cs cs]
@@ -252,6 +286,40 @@
 
   (define (apply-substitutions-to-types subst stx)
     (apply-substitutions-to-props subst stx ':)))
+
+(begin-for-syntax
+  (define instantiate-type
+    (syntax-parser
+      #:literals [quote]
+      ['#s(∀ [α ...] τ)
+       (apply-subst
+        (make-immutable-free-id-table
+         (for/list ([var (in-list (attribute α))])
+           (cons var (fresh))))
+        #'τ)]
+      [_ this-syntax]))
+
+  (define (generalize-type stx)
+    (define collect-vars
+      (syntax-parser
+        #:context 'collect-vars
+        #:literals [quote]
+        ['#s(var τv:id) (list #'τv)]
+        [(left . right)
+         (append (collect-vars #'left)
+                 (collect-vars #'right))]
+        [_ '()]))
+    ((current-type-eval)
+     #`#s(∀ #,(collect-vars stx) #,stx))))
+
+(define-syntax-parser let
+  [(_ [x:id val:expr] e:expr)
+   #:with [τ_val [] val-] (infer+erase #'val)
+   #:with τ_generalized (generalize-type #'τ_val)
+   #:with [τ [x-] e-] (infer+erase #'e #:ctx #'([x : τ_generalized]))
+   (⊢ #,(syntax/loc this-syntax
+          (let- ([x- val-]) e-))
+      : τ)])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; definitions
