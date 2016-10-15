@@ -309,8 +309,10 @@
                                     (collect-vars #'right))
                             free-identifier=?)]
         [_ '()]))
-    ((current-type-eval)
-     #`#s(∀ #,(collect-vars stx) #,stx))))
+    (let ([free-vars (collect-vars stx)])
+      (if (empty? free-vars) stx
+          ((current-type-eval)
+           #`#s(∀ #,(collect-vars stx) #,stx))))))
 
 (define-syntax-parser let
   [(_ [x:id val:expr] e:expr)
