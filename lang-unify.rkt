@@ -167,7 +167,8 @@
          ['#s(var τv:id)
           (free-id-table-ref subst #'τv stx)]
          ['#s(∀ τvs τ)
-          #`#s(∀ τvs #,(recur #'τ))]
+          #`#s(∀ τvs #,((current-type-eval)
+                        (recur #'τ)))]
          [(~→ τa τb)
           #`(→ #,(recur #'τa)
                #,(recur #'τb))]
@@ -224,22 +225,6 @@
                (recur (map #{apply-subst subst* %} (rest cs))
                       (compose-substs subst* subst)))]))))
 
-  ; Given a subsitution set, recursively walks a syntax object and applies it to all existing type
-  ; variables.
-  (define (apply-substitutions-to-syntax subst stx)
-    (let recur ([stx stx])
-      (syntax-rearm
-       (syntax-parse (syntax-disarm stx (current-code-inspector))
-         #:context 'apply-substitutions-to-syntax
-         #:literals [quote]
-         ['#s(var α:id)
-          (free-id-table-ref subst #'α this-syntax)]
-         [(elem . rest)
-          (datum->syntax this-syntax (cons (recur #'elem) (recur #'rest))
-                         this-syntax this-syntax)]
-         [_ this-syntax])
-       stx)))
-
   ; Given a substitution set, recursively walks a syntax object and retroactively replaces ': syntax
   ; properties with their inferred types after unification. Also attaches a ':-string property, which
   ; contains the final value of ': converted to a string using type->string, which is useful for
@@ -247,9 +232,7 @@
   (define (apply-substitutions-to-types subst stx)
     (define (perform-substitution stx)
       (if (syntax-property stx ':)
-          (let ([new-type (apply-substitutions-to-syntax
-                           subst
-                           (get-stx-prop/car stx ':))])
+          (let ([new-type (apply-subst subst (get-stx-prop/car stx ':))])
             (syntax-property (syntax-property stx ': new-type #t)
                              ':-string (type->string new-type)))
           stx))
@@ -303,7 +286,7 @@
   [(_ [x:id val:expr] e:expr)
    #:with [τ_val [] val-] (infer+erase #'val)
    #:do [(define subst (solve-constraints (collect-constraints #'val-)))]
-   #:with τ_substituted (apply-substitutions-to-syntax subst #'τ_val)
+   #:with τ_substituted (apply-subst subst #'τ_val)
    #:with τ_generalized (generalize-type #'τ_substituted)
    #:with val-* (⊢ val- : τ_generalized)
    #:with [τ [x-] e-] (infer+erase #'e #:ctx #'([x : τ_generalized]))
