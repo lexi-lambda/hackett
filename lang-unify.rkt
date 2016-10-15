@@ -6,24 +6,14 @@
                      [hash-percent-module-begin #%module-begin]))
 
 (require (for-syntax racket/hash
-                     syntax/id-table)
+                     syntax/id-table
+                     "util/stx.rkt")
          (except-in macrotypes/typecheck #%module-begin)
          (postfix-in - racket/base)
          (prefix-in kernel: '#%kernel)
          macro-debugger/syntax-browser)
 
 ;; ---------------------------------------------------------------------------------------------------
-
-(begin-for-syntax
-  (define (make-variable-like-transformer/thunk ref-stx)
-    (lambda (stx)
-      (syntax-case stx ()
-        [id
-         (identifier? #'id)
-         (ref-stx)]
-        [(id . args)
-         (let ([stx* (list* '#%app #'id (cdr (syntax-e stx)))])
-           (datum->syntax stx stx* stx stx))]))))
 
 (define-type-constructor →
   #:arity = 2
@@ -35,12 +25,6 @@
 (define-base-type String)
 
 (begin-for-syntax
-  (define (propagate-originalness new-stx old-stx)
-    (if (or (syntax-original? old-stx)
-            (syntax-property old-stx 'original-for-check-syntax))
-        (syntax-property new-stx 'original-for-check-syntax #t)
-        new-stx))
-  
   (define (fresh)
     ((current-type-eval)
      (mk-type #`#s(var #,(generate-temporary)))))
@@ -136,28 +120,6 @@
                   (⊢ +/c : (→ Integer (→ Integer Integer)))))
 
 (begin-for-syntax
-  (define/match (flatten-syntax-property-value val)
-    [(#f)
-     '()]
-    [((cons a b))
-     (append (flatten-syntax-property-value a)
-             (flatten-syntax-property-value b))]
-    [((? list?))
-     (append-map flatten-syntax-property-value val)]
-    [(_)
-     (list val)])
-
-  (define (collect-properties stx key)
-    (define (get-properties stx)
-      (flatten-syntax-property-value (syntax-property stx key)))
-    (let recur ([stx stx])
-      (syntax-parse stx
-        [(elem ...+ . cdr)
-         (append (get-properties this-syntax)
-                 (append-map recur (attribute elem))
-                 (recur #'cdr))]
-        [_ (get-properties this-syntax)])))
-
   (define (collect-constraints stx)
     (collect-properties stx 'constraints)))
 
@@ -172,15 +134,6 @@
    #'(#%module-begin- . substituted)])
 
 (begin-for-syntax
-  ; left-biased union of immutable free-id tables
-  (define (free-id-table-union a b)
-    (let ([t (make-free-id-table)])
-      (for ([(k v) (in-free-id-table b)])
-        (free-id-table-set! t k v))
-      (for ([(k v) (in-free-id-table a)])
-        (free-id-table-set! t k v))
-      (make-immutable-free-id-table t)))
-  
   (define (compose-substs a b)
     (free-id-table-union
      (make-immutable-free-id-table
