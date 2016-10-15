@@ -14,11 +14,20 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
+(begin-for-syntax
+  (define (make-variable-like-transformer/thunk ref-stx)
+    (lambda (stx)
+      (syntax-case stx ()
+        [id
+         (identifier? #'id)
+         (ref-stx)]
+        [(id . args)
+         (let ([stx* (list* '#%app #'id (cdr (syntax-e stx)))])
+           (datum->syntax stx stx* stx stx))]))))
+
 (define-type-constructor →
   #:arity = 2
   #:arg-variances (const (list covariant contravariant)))
-
-;(define-type-constructor ∀ #:bvs >= 0)
 
 (define-type-constructor τ~ #:arity = 2)
 
@@ -33,7 +42,8 @@
         new-stx))
   
   (define (fresh)
-    (mk-type #`#s(var #,(generate-temporary))))
+    ((current-type-eval)
+     (mk-type #`#s(var #,(generate-temporary)))))
 
   (define type->string
     (syntax-parser
@@ -77,9 +87,9 @@
          #:with (x- ...) (for/list ([x-stx (in-list (attribute x))])
                            (let ([tmp (generate-temporary x-stx)])
                              (datum->syntax tmp (syntax-e tmp) x-stx)))
-         #:with (τ_inst ...) #'(#,(instantiate-type #'τ) ...)
          #`(λ- (x- ...)
-               (let-syntax ([x (make-variable-like-transformer (⊢ x- : τ_inst))]
+               (let-syntax ([x (make-variable-like-transformer/thunk
+                                (λ () (assign-type #'x- (instantiate-type #'τ))))]
                             ...)
                  #,stx))]))
     (define-values [τ xs- stx-]
@@ -148,28 +158,18 @@
                  (recur #'cdr))]
         [_ (get-properties this-syntax)])))
 
-  (define (collect-properties/stxs stx key)
-    (define (get-properties stx)
-      (let ([props (flatten-syntax-property-value (syntax-property stx key))])
-        (if (empty? props) (list)
-            (list (cons stx (first (flatten-syntax-property-value (syntax-property stx key))))))))
-    (let recur ([stx stx])
-      (syntax-parse stx
-        [(elem ...+ . cdr)
-         (append (get-properties this-syntax)
-                 (append-map recur (attribute elem))
-                 (recur #'cdr))]
-        [_ (get-properties this-syntax)])))
-
   (define (collect-constraints stx)
     (collect-properties stx 'constraints)))
 
 (define-syntax-parser hash-percent-module-begin
+  #:literals [#%plain-module-begin-]
   [(_ . body)
-   #:with expanded (local-expand #'(#%plain-module-begin- . body)
-                                 'module-begin null)
+   #:with (#%plain-module-begin- . expanded)
+          (local-expand #'(#%plain-module-begin- . body)
+                        'module-begin null)
    #:do [(define subst (solve-constraints (collect-constraints #'expanded)))]
-   (apply-substitutions-to-types subst #'expanded)])
+   #:with substituted (apply-substitutions-to-types subst #'expanded)
+   #'(#%module-begin- . substituted)])
 
 (begin-for-syntax
   ; left-biased union of immutable free-id tables
@@ -249,7 +249,7 @@
             #:context 'solve-constraints
             [(~τ~ τa τb)
              (let ([subst* (unify #'τa #'τb
-                                  #:src (syntax-property this-syntax 'constraint-source))])
+                                  #:src (get-stx-prop/car this-syntax 'constraint-source))])
                (recur (map #{apply-subst subst* %} (rest cs))
                       (compose-substs subst* subst)))]))))
 
@@ -266,13 +266,14 @@
          [_ this-syntax])
        stx)))
 
-  (define (apply-substitutions-to-props subst stx prop)
+  (define (apply-substitutions-to-types subst stx)
     (define (perform-substitution stx)
-      (if (syntax-property stx prop)
-          (syntax-property stx prop (apply-substitutions-to-syntax
-                                     subst
-                                     (syntax-property stx prop))
-                           (syntax-property-preserved? stx prop))
+      (if (syntax-property stx ':)
+          (let ([new-type (apply-substitutions-to-syntax
+                           subst
+                           (get-stx-prop/car stx ':))])
+            (syntax-property (syntax-property stx ': new-type #t)
+                             ':-string (type->string new-type)))
           stx))
     (let recur ([stx stx])
       (syntax-rearm
@@ -282,10 +283,7 @@
            (datum->syntax this-syntax (cons (recur #'elem) (recur #'rest))
                           this-syntax this-syntax))]
          [_ (perform-substitution this-syntax)])
-       stx)))
-
-  (define (apply-substitutions-to-types subst stx)
-    (apply-substitutions-to-props subst stx ':)))
+       stx))))
 
 (begin-for-syntax
   (define instantiate-type
@@ -304,10 +302,12 @@
       (syntax-parser
         #:context 'collect-vars
         #:literals [quote]
-        ['#s(var τv:id) (list #'τv)]
+        ['#s(var α:id)
+         (list #'α)]
         [(left . right)
-         (append (collect-vars #'left)
-                 (collect-vars #'right))]
+         (remove-duplicates (append (collect-vars #'left)
+                                    (collect-vars #'right))
+                            free-identifier=?)]
         [_ '()]))
     ((current-type-eval)
      #`#s(∀ #,(collect-vars stx) #,stx))))
@@ -315,10 +315,13 @@
 (define-syntax-parser let
   [(_ [x:id val:expr] e:expr)
    #:with [τ_val [] val-] (infer+erase #'val)
-   #:with τ_generalized (generalize-type #'τ_val)
+   #:do [(define subst (solve-constraints (collect-constraints #'val-)))]
+   #:with τ_substituted (apply-substitutions-to-syntax subst #'τ_val)
+   #:with τ_generalized (generalize-type #'τ_substituted)
+   #:with val-* (⊢ val- : τ_generalized)
    #:with [τ [x-] e-] (infer+erase #'e #:ctx #'([x : τ_generalized]))
    (⊢ #,(syntax/loc this-syntax
-          (let- ([x- val-]) e-))
+          (let- ([x- val-*]) e-))
       : τ)])
 
 ;; ---------------------------------------------------------------------------------------------------
