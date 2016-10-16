@@ -1,204 +1,458 @@
-#lang turnstile/lang
+#lang curly-fn racket/base
 
-(provide (rename-out [app #%app])
-         ∀
-         Integer String Maybe
+(provide : λ let data case _
+         → Integer String
+         + - *
+         (rename-out [hash-percent-app #%app]
+                     [hash-percent-datum #%datum]
+                     [hash-percent-module-begin #%module-begin]))
 
-         let data)
-
-(require (postfix-in - (combine-in racket/base
+(require (for-syntax macrotypes/stx-utils
+                     racket/base
+                     racket/dict
+                     racket/format
+                     racket/function
+                     racket/list
+                     racket/match
+                     racket/syntax
+                     syntax/id-table
+                     syntax/parse/class/local-value
+                     syntax/parse/define
+                     syntax/parse/experimental/specialize
+                     "util/stx.rkt")
+         (for-meta 2 racket/base
+                     racket/syntax
+                     syntax/transformer)
+         (only-in macrotypes/typecheck
+                  postfix-in type-error
+                  get-stx-prop/car)
+         (postfix-in - (combine-in racket/base
                                    racket/function
-                                   racket/splicing)))
-
-(define-syntax-category kind)
-(define-base-kind ★)
-
-(begin-for-syntax
-  (current-type? (λ (τ) (kind? (typeof τ))))
-
-  (define (syntax-properties stx)
-    (map (λ (key) (cons key (syntax-property stx key)))
-         (syntax-property-symbol-keys stx))))
-
-(define-type-constructor →-
-  #:arity = 2
-  #:arg-variances (const (list covariant contravariant))
-  #:no-attach-kind
-  #:no-provide)
-
-(define-kind-constructor ∀→ #:arity = 1 #:no-provide)
-(define-type-constructor ∀- #:bvs = 1 #:arr ∀→ #:no-provide)
-
-(define-typed-syntax →
-  [(_ a:type b:type) ≫
-   [⊢ a ≫ a- ⇐ ★]
-   [⊢ b ≫ b- ⇐ ★]
-   -------------------
-   [⊢ (→- a- b-) ⇒ ★]])
-
-(define-simple-macro (∀ [x:id {~datum :} k] τ)
-  (∀- ([x : k]) τ))
+                                   racket/match
+                                   racket/splicing))
+         (prefix-in kernel: '#%kernel)
+         syntax/parse/define)
 
 ;; ---------------------------------------------------------------------------------------------------
+;; type constructors
 
-(define-typed-syntax λ
-  #:datum-literals [:]
-  [(_ [x:id : τ_in:type] expr) ≫
-   [[x ≫ x- : τ_in.norm] ⊢ expr ≫ expr- ⇒ τ_out]
-   -----------------------------------------------
-   [⊢ (λ- (x-) expr-) ⇒ (→ τ_in.norm τ_out)]]
-  [(_ x:id expr) ⇐ (~→- τ_in τ_out) ≫
-   [[x ≫ x- : τ_in] ⊢ expr ≫ expr- ⇐ τ_out]
-   ------------------------------------------
-   [⊢ (λ- (x-) expr-)]])
+(begin-for-syntax
+  (struct ∀ (τvars τ) #:prefab)
+  (struct τ~ (a b src) #:prefab)
+  (struct base-type (id constructors) #:prefab)
+  (struct τvar (id) #:prefab)
+  (struct τapp (τ arg) #:prefab))
 
-(define-syntax-parser app
-  #:datum-literals [@]
-  ; type application
-  [(_ fn @ . args)
-   #'(app/τ fn . args)]
-  ; term application
-  [(_ fn . args)
-   #'(app/e fn . args)])
+(define-syntax (∀ stx) (raise-syntax-error #f "∀ cannot be used as an expression" stx))
 
-(define-typed-syntax app/τ
-  [(_ fn τ_arg:type) ≫
-   [⊢ fn ≫ fn- ⇒ : (~∀- (τ_var) τ_body) (⇒ (~∀→ k))]
-   [⊢ τ_arg ≫ τ_arg- ⇐ k]
-   #:with τ_inst (subst #'τ_arg- #'τ_var #'τ_body)
-   ------------------------------------------------
-   [⊢ fn- ⇒ τ_inst]]
-  [(_ fn τ_arg:type args ...+) ≫
-   -----------------------------------
-   [≻ (app (app/τ fn τ_arg) args ...)]])
+(define-simple-macro (define-base-type τ:id
+                       {~or {~optional {~seq #:arity arity:nat}
+                                       #:defaults ([arity #'0])}
+                            {~optional {~seq #:constructors constructors:expr}
+                                       #:defaults ([constructors #'#f])}}
+                       ...)
+  #:with τ-value (generate-temporary #'τ)
+  #:with [τ_arg ...] (generate-temporaries (make-list (syntax-e #'arity) #f))
+  #:do [(define (make-nested-τapps base-stx)
+          (let loop ([acc base-stx]
+                     [vars (attribute τ_arg)])
+            (if (empty? vars) acc
+                (loop #`(τapp #,acc #,(first vars))
+                      (rest vars)))))]
+  #:with nested-τapps-pat (make-nested-τapps #'(base-type (? (λ (id) (free-identifier=? #'τ id))) _))
+  #:with nested-τapps-constructor (make-nested-τapps #'(base-type #'τ constructors))
+  #:with value-definition
+         (if (zero? (syntax-e (attribute arity)))
+             #'(define τ-value nested-τapps-constructor)
+             #'(define (τ-value τ_arg ...)
+                 nested-τapps-constructor))
+  (begin
+    (define-syntax τ (base-type #'τ constructors))
+    (begin-for-syntax
+      value-definition
+      (define-match-expander τ
+        (syntax-parser
+          [(_ {~var τ_arg id} ...)
+           #'nested-τapps-pat])
+        (make-variable-like-transformer #'τ-value)))))
 
-(define-typed-syntax app/e
-  [(_ fn arg) ≫
-   [⊢ fn ≫ fn- ⇒ (~→- τ_in τ_out)]
-   [⊢ arg ≫ arg- ⇐ τ_in]
-   --------------------------------
-   [⊢ (#%app- fn- arg-) ⇒ τ_out]]
-  [(_ fn arg args ...+) ≫
-   ---------------------------
-   [≻ (app (app/e fn arg) args ...)]])
+(define-base-type → #:arity 2)
+(define-base-type Integer)
+(define-base-type String)
 
-(define-typed-syntax Λ
-  #:datum-literals [:]
-  [(_ [α:id : k:kind] expr) ≫
-   [[α ≫ α- : k.norm] ⊢ expr ≫ expr- ⇒ t]
-   ---------------------------------------------------
-   [⊢ expr- ⇒ (∀- ([α- : k.norm]) t)]])
+;; ---------------------------------------------------------------------------------------------------
+;; types
 
-(define-typed-syntax (ann e {~datum :} τ:type) ≫
-  [⊢ e ≫ e- ⇐ τ.norm]
-  --------------------
-  [⊢ e- ⇒ τ.norm])
+(begin-for-syntax
+  (define/match (type->string τ)
+    [((τvar α))
+     (symbol->string (syntax-e α))]
+    [((∀ αs τ))
+     (format "(∀ ~a ~a)" (map #{symbol->string (syntax-e %)} αs) (type->string τ))]
+    [((→ τa τb))
+     (format "(→ ~a ~a)" (type->string τa) (type->string τb))]
+    [((τ~ τa τb _))
+     (format "(τ~~ ~a ~a)" (type->string τa) (type->string τb))]
+    [((τapp τf τx))
+     (format "(~a ~a)" (type->string τf) (type->string τx))]
+    [((base-type id _))
+     (symbol->string (syntax-e id))])
 
-(define-typed-syntax def
-  #:datum-literals [:]
-  [(_ x:id : τ:type e:expr) ≫
-   #:with y (generate-temporary #'x)
-   ---------------------------------------
-   [≻ (begin
-        (define- y (ann e : τ.norm))
-        (define-syntax x (make-variable-like-transformer (⊢ y : τ.norm))))]]
-  [(_ x:id e:expr) ≫
-   [⊢ e ≫ e- ⇒ τ]
-   #:with y (generate-temporary #'x)
-   ---------------
-   [≻ (begin-
-        (define- y e-)
-        (define-syntax x (make-variable-like-transformer (⊢ y : τ))))]])
+  ; explicitly list all cases instead of having a fallback case to get better error messages when a
+  ; new type representation is added
+  (define type=?
+    (match-lambda**
+     [((τvar a) (τvar b))
+      (free-identifier=? a b)]
+     [((τvar _) _) #f]
+     [(_ (τvar _)) #f]
+     [((base-type a _) (base-type b _))
+      (free-identifier=? a b)]
+     [((base-type _ _) _) #f]
+     [(_ (base-type _ _)) #f]
+     [((τapp τf τx) (τapp τg τy))
+      (and (type=? τf τg)
+           (type=? τx τy))]
+     [((τapp _ _) _) #f]
+     [(_ (τapp _ _)) #f]))
 
-(define-typed-syntax let1
-  #:datum-literals [:]
-  [(_ [x:id : τ:type e_val:expr] e_body:expr) ≫
-   #:with y (generate-temporary #'x)
-   ---------------------------------
-   [≻ (letrec-syntaxes+values ([(x) (make-variable-like-transformer (⊢ y : τ.norm))])
-                              ([(y) (ann e_val : τ.norm)])
-        e_body)]]
-  [(_ [x:id e_val:expr] e_body:expr) ≫
-   [⊢ e_val ≫ e_val- ⇒ τ]
-   #:with y (generate-temporary #'x)
-   ---------------------------------
-   [≻ (letrec-syntaxes+values ([(x) (make-variable-like-transformer (⊢ y : τ))])
-                              ([(y) (ann e_val : τ)])
-        e_body)]])
+  (define current-type-var-environment
+    (make-parameter (make-immutable-free-id-table)))
+
+  (define (extend-type-var-environment ctx [env (current-type-var-environment)])
+    (for/fold ([env env])
+              ([(id τ) (in-dict ctx)])
+      (free-id-table-set env id τ)))
+
+  (define (type-eval stx #:ctx [ctx '()])
+    (parameterize ([current-type-var-environment (extend-type-var-environment ctx)])
+      (let loop ([stx stx])
+        (syntax-parse stx
+          #:context 'type-eval
+          #:literals [∀]
+          [τ:id
+           (or (free-id-table-ref (current-type-var-environment) #'τ #f)
+               (syntax-local-value #'τ))]
+          [(∀ [α:id ...] τ)
+           (∀ (attribute α) (loop #'τ))]
+          [(τ a)
+           (τapp (loop #'τ)
+                 (loop #'a))]
+          [(τ a as ...)
+           (loop #'((τ a) as ...))]))))
+
+  (define (typeof stx)
+    (get-stx-prop/car stx ':))
+
+  (define (assign-type stx τ)
+    (set-stx-prop/preserved stx ': τ))
+
+  (define-simple-macro (⊢ e {~datum :} τ)
+    (assign-type #`e (type-eval #`τ)))
+
+  ; Generates a fresh type variable.
+  (define (fresh [base 'g])
+    (τvar (generate-temporary base)))
+
+  (define (infer+erase stx #:ctx [ctx '()])
+    (define wrapped-stx
+      (match ctx
+        [(list (cons xs τs) ...)
+         (define/syntax-parse [x ...] xs)
+         (define/syntax-parse [x- ...]
+           (for/list ([x-stx (in-list xs)])
+             (let ([tmp (generate-temporary x-stx)])
+               (datum->syntax tmp (syntax-e tmp) x-stx))))
+         (define/syntax-parse [τ-proxy ...] (map property-proxy τs))
+         #`(λ- (x- ...)
+               (let-syntax ([x (make-variable-like-transformer/thunk
+                                (λ () (assign-type #'x- (instantiate-type
+                                                         (property-proxy-value #'τ-proxy)))))]
+                            ...)
+                 #,stx))]))
+    (define-values [τ xs- stx-]
+      (syntax-parse (local-expand wrapped-stx 'expression null)
+        #:literals [kernel:lambda kernel:let-values]
+        [(kernel:lambda xs-
+           (kernel:let-values _
+             (kernel:let-values _ body)))
+         (values (typeof #'body) #'xs- #'body)]))
+    (values τ xs- stx-))
+
+  (define-simple-macro (define/infer+erase [τ:id xs-pat stx-pat] args ...)
+    #:with xs-tmp (generate-temporary #'xs-pat)
+    #:with stx-tmp (generate-temporary #'stx-pat)
+    (begin
+      (define-values [τ xs-tmp stx-tmp] (infer+erase args ...))
+      (define/syntax-parse xs-pat xs-tmp)
+      (define/syntax-parse stx-pat stx-tmp)))
+
+  ; Given a type, replaces universally quantified type variables with fresh type variables.
+  (define instantiate-type
+    (match-lambda
+      [(∀ αs τ)
+       (apply-subst
+        (make-immutable-free-id-table
+         (for/list ([var (in-list αs)])
+           (cons var (fresh))))
+        τ)]
+      [τ τ]))
+
+  ; Given a type, finds all free type variables and universally quantifies them using ∀.
+  (define (generalize-type τ)
+    (define collect-vars
+      (match-lambda
+        [(τvar α)
+         (list α)]
+        [(τapp τf τx)
+         (remove-duplicates (append (collect-vars τf)
+                                    (collect-vars τx))
+                            free-identifier=?)]
+        [(base-type _ _)
+         '()]))
+    (let ([free-vars (collect-vars τ)])
+      (if (empty? free-vars) τ
+          (∀ free-vars τ)))))
+
+;; ---------------------------------------------------------------------------------------------------
+;; constraints & substitution
+
+(begin-for-syntax
+  ; Attaches a constraint to a syntax object by associating a type with the 'constraint syntax
+  ; property. Calls syntax-local-introduce and type-eval on the provided constraint.
+  (define (assign-constraint stx τa τb)
+    (syntax-property stx 'constraints (list (τ~ τa τb stx)) #t))
+
+  ; Like assign-constraint, but accepts a list of pairs and produces a set of constraints instead of a
+  ; single contraint.
+  (define (assign-constraints stx τ-pairs #:existing-constraints [existing-cs '()])
+    (syntax-property stx 'constraints
+                     (append (map #{τ~ (car %) (cdr %) stx} τ-pairs)
+                             existing-cs)
+                     #t))
+
+  ; Returns a list of all constraints in a syntax object by recursively collecting the values of the
+  ; 'constraint syntax property.
+  (define (collect-constraints stx)
+    (collect-properties stx 'constraints))
+
+  ; The empty substitution set.
+  (define empty-subst
+    (make-immutable-free-id-table))
+
+  ; Creates a substitution set containing exactly one subsitution between the given type variable and
+  ; the given type.
+  (define (bind-subst τv τ)
+    (make-immutable-free-id-table
+     (list (cons τv τ))))
+
+  ; Composes two substitution sets by applying one substitution set to the other and taking their
+  ; union.
+  (define (compose-substs a b)
+    (free-id-table-union
+     (make-immutable-free-id-table
+      (for/list ([(k v) (in-free-id-table b)])
+        (cons k (apply-subst a v))))
+     a))
+
+  ; Applies a subsitution set to a type or constraint by recursively replacing all substitutable type
+  ; variables with their substitutions.
+  (define (apply-subst subst τ)
+    (let loop ([τ τ])
+      (match τ
+        [(τvar α)
+         (free-id-table-ref subst α τ)]
+        [(∀ αs τ)
+         (∀ αs (loop τ))]
+        [(τapp τf τx)
+         (τapp (loop τf) (loop τx))]
+        [(base-type _ _)
+         τ]
+        [(τ~ a b src)
+         (τ~ (loop a) (loop b) src)])))
+
+  ; Attempts to unify the two provided types, reporting errors in terms of the provided source syntax
+  ; object.
+  (define (unify τa τb #:src src)
+    (if (type=? τa τb)
+        empty-subst
+        (match* (τa τb)
+          [((τvar α) τ)
+           (bind-subst α τ)]
+          [(τ (τvar α))
+           (bind-subst α τ)]
+          [((τapp τa τb) (τapp τc τd))
+           (unify* (list (cons τa τc)
+                         (cons τb τd))
+                   #:src src)]
+          [(_ _)
+           (raise-syntax-error #f (format "could not unify ~a with ~a"
+                                          (type->string τa) (type->string τb))
+                               src)])))
+
+  ; Attempts to unify each pair of types provided, propagating the substitutions performed back into
+  ; the set of constraints at each step.
+  (define (unify* τ_pairs #:src src)
+    (match τ_pairs
+      ['() (make-immutable-free-id-table)]
+      [(list (cons τa τb)
+             (cons τas τbs) ...)
+       (let* ([subst (unify τa τb #:src src)]
+              [subst* (unify* (map cons (map #{apply-subst subst %} τas)
+                                        (map #{apply-subst subst %} τbs))
+                              #:src src)])
+         (compose-substs subst subst*))]))
+
+  ; Given a set of constraints, attempts to solve them with unification.
+  (define (solve-constraints cs)
+    (let loop ([cs cs]
+               [subst empty-subst])
+      (if (empty? cs) subst
+          (match (first cs)
+            [(τ~ τa τb src)
+             (let ([subst* (unify τa τb #:src src)])
+               (loop (map #{apply-subst subst* %} (rest cs))
+                     (compose-substs subst* subst)))]))))
+
+  ; Given a substitution set, recursively walks a syntax object and retroactively replaces ': syntax
+  ; properties with their inferred types after unification. Also attaches a ':-string property, which
+  ; contains the final value of ': converted to a string using type->string, which is useful for
+  ; debugging.
+  (define (apply-substitutions-to-types subst stx)
+    (define (perform-substitution stx)
+      (if (syntax-property stx ':)
+          (let ([new-type (apply-subst subst (get-stx-prop/car stx ':))])
+            (syntax-property (syntax-property stx ': new-type #t)
+                             ':-string (type->string new-type)))
+          stx))
+    (let recur ([stx stx])
+      (syntax-rearm
+       (syntax-parse (syntax-disarm stx (current-code-inspector))
+         [(elem . rest)
+          (perform-substitution
+           (datum->syntax this-syntax (cons (recur #'elem) (recur #'rest))
+                          this-syntax this-syntax))]
+         [_ (perform-substitution this-syntax)])
+       stx))))
+
+;; ---------------------------------------------------------------------------------------------------
+;; general typed forms
+
+(define-syntax-parser λ1
+  [(_ x:id e:expr)
+   #:do [(define τv (fresh))
+         (define/infer+erase [τ [x-] e-] #'e #:ctx (list (cons #'x τv)))]
+   (assign-type #'(λ- (x-) e-)
+                (→ τv τ))])
+
+(define-syntax-parser λ
+  [(_ (x:id) e:expr)
+   #'(λ1 x e)]
+  [(_ (x:id xs:id ...) e:expr)
+   #'(λ1 x (λ (xs ...) e))])
+
+(define-syntax-parser hash-percent-app1
+  [(_ fn arg)
+   #:do [(define τv (fresh))
+         (define/infer+erase [τ_fn [] fn-] #'fn)
+         (define/infer+erase [τ_arg [] arg-] #'arg)]
+   (assign-constraint (assign-type (syntax/loc this-syntax
+                                     (#%app- fn- arg-))
+                                   τv)
+                      τ_fn (→ τ_arg τv))])
+
+(define-syntax-parser hash-percent-app
+  [(_ fn arg)
+   #'(hash-percent-app1 fn arg)]
+  [(_ fn arg args ...+)
+   #'(hash-percent-app (hash-percent-app fn arg) args ...)])
+
+(define-syntax-parser hash-percent-datum
+  [(_ . n:integer)
+   (⊢ (#%datum- . n) : Integer)]
+  [(_ . n:str)
+   (⊢ (#%datum- . n) : String)]
+  [(_ . x)
+   (type-error #:src #'x #:msg "Unsupported literal: ~v" #'x)])
+
+(define-syntax-parser hash-percent-module-begin
+  #:literals [#%plain-module-begin-]
+  [(_ . body)
+   #:with (#%plain-module-begin- . expanded)
+          (local-expand #'(#%plain-module-begin- . body)
+                        'module-begin null)
+   #:do [(define subst (solve-constraints (collect-constraints #'expanded)))]
+   #:with substituted (apply-substitutions-to-types subst #'expanded)
+   #'(#%module-begin- . substituted)])
+
+(define-syntax-parser let1
+  [(_ [x:id val:expr] e:expr)
+   #:do [(define/infer+erase [τ_val [] val-] #'val)
+         (define subst (solve-constraints (collect-constraints #'val-)))
+         (define τ_substituted (apply-subst subst τ_val))
+         (define τ_generalized (generalize-type τ_substituted))]
+   #:with val-* (assign-type #'val- τ_generalized)
+   #:do [(define/infer+erase [τ [x-] e-] #'e #:ctx (list (cons #'x τ_generalized)))]
+   (assign-type (syntax/loc this-syntax
+                  (let- ([x- val-*]) e-))
+                τ)])
 
 (define-syntax-parser let
-  [(_ (clause) body)
-   #'(let1 clause body)]
-  [(_ (clause clauses ...) body)
-   #'(let1 clause (let (clauses ...) body))])
+  [(_ () e:expr)
+   #'e]
+  [(_ ([x:id val:expr] [xs:id vals:expr] ...) e:expr)
+   #'(let1 [x val]
+       (let ([xs vals] ...)
+         e))])
 
-(define-typed-syntax letrec
-  #:datum-literals [:]
-  [(_ ([x:id : τ:type e_val:expr] ...) e_body:expr) ≫
-   #:with (y ...) (generate-temporaries #'(x ...))
-   -----------------------------------------------
-   [≻ (letrec-syntaxes+values ([(x) (make-variable-like-transformer (⊢ y : τ.norm))] ...)
-                              ([(y) (ann e_val : τ.norm)] ...)
-        e_body)]])
-
-;; ---------------------------------------------------------------------------------------------------
-
-(define-simple-macro (define-base-type: τ {~datum :} k)
-  #:with τ- (generate-temporary #'τ)
-  (begin
-    (define-base-type τ- #:no-attach-kind #:no-provide)
-    (define-syntax τ (make-variable-like-transformer (⊢ τ- : k)))))
-
-(define-kind-constructor →k
-  #:arity = 2
-  #:arg-variances (const (list covariant contravariant)))
-
-(define-base-type: Integer : ★)
-(define-base-type: String : ★)
-
-(define-base-type: Maybe : (→k ★ ★))
-
-(define-typed-syntax #%datum
-  [(_ . n:integer) ≫
-   ----------------------------
-   [⊢ (#%datum- . n) ⇒ Integer]]
-  [(_ . n:str) ≫
-   ---------------------------
-   [⊢ (#%datum- . n) ⇒ String]]
-  [(_ . x) ≫
-   ----------------------------------------------------------------------
-   [_ #:error (type-error #:src #'x #:msg "Unsupported literal: ~v" #'x)]])
+(define-syntax-parser :
+  [(_ e:expr τ-expr)
+   #:do [(define τ (type-eval #'τ-expr))
+         (define/infer+erase [τ_inferred [] e-] #'e)]
+   (assign-constraint (assign-type #'e- τ) τ τ_inferred)])
 
 ;; ---------------------------------------------------------------------------------------------------
-
-(define ((+ a) b) (+- a b))
-(define ((- a) b) (-- a b))
-(define ((* a) b) (*- a b))
-(define ((/ a) b) (quotient- a b))
-
-(define-primop + : (→ Integer (→ Integer Integer)))
-(define-primop - : (→ Integer (→ Integer Integer)))
-(define-primop * : (→ Integer (→ Integer Integer)))
-(define-primop / : (→ Integer (→ Integer Integer)))
-
-;; ---------------------------------------------------------------------------------------------------
-
-(define-primop string-append : (→ String (→ String String)))
-
-(define ((string-append a) b)
-  (string-append- a b))
-
-;; ---------------------------------------------------------------------------------------------------
+;; ADTs
 
 (begin-for-syntax
+  (define →/curried
+    (match-lambda*
+      [(list τa τb)
+       (→ τa τb)]
+      [(list τ τs ...)
+       (→ τ (apply →/curried τs))]))
+
+  ; like →/curried, but interprets (→ τ) as τ
+  (define →/curried*
+    (match-lambda*
+      [(list τ) τ]
+      [other (apply →/curried other)]))
+
+  (define-syntax-class type-constructor-spec
+    #:attributes [tag [arg 1] len nullary?]
+    #:description #f
+    [pattern tag:id
+             #:attr [arg 1] '()
+             #:attr len 0
+             #:attr nullary? #t]
+    [pattern (tag:id arg:id ...+)
+             #:attr len (length (attribute arg))
+             #:attr nullary? #f]
+    [pattern {~and (tag:id)
+                   {~fail (~a "types without arguments should not be enclosed in parentheses; perhaps"
+                              " you meant ‘" (syntax-e #'tag) "’?")}}
+             #:attr [arg 1] #f
+             #:attr len #f
+             #:attr nullary? #f])
+
   (define-syntax-class data-constructor-spec
     #:attributes [tag [arg 1] len nullary?]
     #:description #f
     [pattern tag:id
-             #:attr [arg 1] #'()
+             #:attr [arg 1] '()
              #:attr len 0
              #:attr nullary? #t]
-    [pattern {~and norm (tag:id arg ...+)}
+    [pattern (tag:id arg ...+)
              #:attr len (length (attribute arg))
              #:attr nullary? #f]
     [pattern {~and (tag:id)
@@ -206,88 +460,200 @@
                               "parentheses; perhaps you meant ‘" (syntax-e #'tag) "’?")}}
              #:attr [arg 1] #f
              #:attr len #f
-             #:attr nullary? #f]))
+             #:attr nullary? #f])
 
-(define-syntax-parser →/autocurry
-  [(_ τa τb) #'(→ τa τb)]
-  [(_ τ τs ...+) #'(→ τ (→/autocurry τs ...))])
+  (struct data-constructor (macro type match-clause)
+    #:property prop:procedure 0)
 
-; helper macro for `data`
+  (define (data-constructor-base-type constructor)
+    (define get-base-type
+      (match-lambda
+        [(→ τa τb)
+         (get-base-type τb)]
+        [τ τ]))
+    (match (data-constructor-type constructor)
+      [(∀ αs τ) (get-base-type τ)]
+      [τ        (get-base-type τ)]))
+
+  (define (data-constructor-arg-types constructor)
+    (define get-arg-types
+      (match-lambda
+        [(→ τa τb)
+         (cons τa (get-arg-types τb))]
+        [τ '()]))
+    (match (data-constructor-type constructor)
+      [(∀ αs τ) (get-arg-types τ)]
+      [τ        (get-arg-types τ)]))
+
+  (define (data-constructor-arity constructor)
+    (length (data-constructor-arg-types constructor)))
+
+  (define-syntax-class/specialize data-constructor-val
+    (local-value data-constructor? #:failure-message "not bound as a data constructor"))
+
+  (struct pat-base (stx) #:transparent)
+  (struct pat-var pat-base (id) #:transparent)
+  (struct pat-hole pat-base () #:transparent)
+  (struct pat-con pat-base (constructor pats) #:transparent)
+
+  (define-syntax-class pat
+    #:description "a pattern"
+    #:attributes [pat disappeared-uses]
+    #:literals [_]
+    [pattern {~and constructor:data-constructor-val ~!}
+             #:do [(define val (attribute constructor.local-value))
+                   (define arity (data-constructor-arity val))]
+             #:fail-unless (zero? arity)
+                           (~a "cannot match ‘" (syntax-e #'constructor) "’ as a value; it is a "
+                               "constructor with arity " arity)
+             #:attr pat (pat-con this-syntax val '())
+             #:attr disappeared-uses (list (syntax-local-introduce #'constructor))]
+    [pattern (constructor:data-constructor-val ~! arg:pat ...+)
+             #:do [(define val (attribute constructor.local-value))
+                   (define arity (data-constructor-arity val))]
+             #:fail-when (zero? arity)
+                         (~a "cannot match ‘" (syntax-e #'constructor) "’ as a constructor; it is a "
+                             "value and should not be enclosed with parentheses")
+             #:fail-when {(length (attribute arg)) . < . arity}
+                         (~a "not enough arguments provided for constructor ‘"
+                             (syntax-e #'constructor) "’, which has arity " arity)
+             #:fail-when {(length (attribute arg)) . > . arity}
+                         (~a "too many arguments provided for constructor ‘"
+                             (syntax-e #'constructor) "’, which has arity " arity)
+             #:attr pat (pat-con this-syntax (attribute constructor.local-value) (attribute arg.pat))
+             #:attr disappeared-uses (list* (syntax-local-introduce #'constructor)
+                                            (append* (attribute arg.disappeared-uses)))]
+    [pattern _
+             #:attr pat (pat-hole this-syntax)
+             #:attr disappeared-uses (list (syntax-local-introduce this-syntax))]
+    [pattern id:id
+             #:attr pat (pat-var this-syntax #'id)
+             #:attr disappeared-uses '()])
+
+  ; Given a pattern, calculates the set of bindings, the type the pattern will match against, and the
+  ; set of required constraints. Also creates a function that will produce a Racket `match` pattern
+  ; given a set of binding identifiers.
+  ;
+  ; pat? -> (listof (cons/c identifier? type?)) type? (listof constraint?)
+  ;         ((listof identifier?) -> syntax? (listof identifier?))
+  (define infer+erase-pattern
+    (match-lambda
+      [(pat-var _ id)
+       (let ([α (fresh)])
+         (values (list (cons id α)) α '()
+                 (match-lambda [(list* id rest) (values id rest)])))]
+      [(pat-hole _)
+       (let ([α (fresh)])
+         (values '() α '()
+                 (λ (ids) (values #'_ ids))))]
+      [(pat-con stx constructor pats)
+       (define-values [ctxs τs cs mk-pats] (infer+erase-patterns pats))
+       (let* ([α (fresh)]
+              [τ_fn (apply →/curried* (append τs (list α)))]
+              [τ_con (instantiate-type (data-constructor-type constructor))])
+         (values ctxs α (list* (τ~ τ_fn τ_con stx) cs)
+                 (λ (ids) (let-values ([(match-pats rest) (mk-pats ids)])
+                            (values ((data-constructor-match-clause constructor) match-pats)
+                                    rest)))))]))
+
+  ; Like infer+erase-pattern but for multiple patterns. Properly handles applying the `match` pattern
+  ; constructors of each pattern to the provided list of identifiers.
+  (define (infer+erase-patterns pats)
+    (define-values [ctxs τs cs mk-pats]
+      (for/lists [ctxs τs cs mk-pats]
+                 ([pat (in-list pats)])
+        (infer+erase-pattern pat)))
+    (values (append* ctxs) τs cs
+            (λ (ids) (for/fold ([match-pats '()]
+                                [rest ids])
+                               ([mk-pat (in-list mk-pats)])
+                       (let-values ([(match-pat rest*) (mk-pat rest)])
+                         (values (append match-pats (list match-pat)) rest*)))))))
+
 (define-syntax-parser define-data-constructor
-  [(_ τ:id constructor:data-constructor-spec)
+  [(_ τ:type-constructor-spec constructor:data-constructor-spec)
    #:with tag- (generate-temporary #'constructor.tag)
    #:with tag-/curried (generate-temporary #'constructor.tag)
-   #:with [τ_arg:type ...] #'(constructor.arg ...)
+   #:do [(define αs (map fresh (attribute τ.arg)))
+         (define type-ctx (map cons (attribute τ.arg) αs))]
+   #:with [α-proxy ...] (map property-proxy αs)
+   #:with [τ_arg-proxy ...] (map #{property-proxy (type-eval % #:ctx type-ctx)}
+                                 (attribute constructor.arg))
+   #:with τ_result (if (attribute τ.nullary?) #'τ.tag
+                       #'(τ.tag (property-proxy-value #'α-proxy) ...))
    #:with [field ...] (generate-temporaries #'(constructor.arg ...))
    #`(begin-
        ; check if the constructor is nullary or not
        #,(if (attribute constructor.nullary?)
              ; if it is, just define a value
-             #'(define- tag-
-                 (let- ()
-                   (struct- constructor.tag () #:transparent)
-                   (constructor.tag)))
+             #'(begin-
+                 (define- tag-
+                   (let- ()
+                     (struct- constructor.tag ())
+                     (constructor.tag)))
+                 (define-syntax constructor.tag
+                   (let ([τ_val (generalize-type τ_result)])
+                     (data-constructor
+                      (make-variable-like-transformer/thunk
+                       (thunk (assign-type #'tag- (instantiate-type τ_val))))
+                      τ_val (match-lambda [(list) #'(==- tag-)])))))
              ; if it isn’t, define a constructor function, but preserve the original `struct`-defined
              ; id as a syntax property (to be used with Racket’s `match`)
              #'(splicing-local- [(struct- tag- (field ...) #:transparent
                                    #:reflection-name 'constructor.tag)
                                  (define- tag-/curried (curry- tag-))]
                  (define-syntax constructor.tag
-                   (make-variable-like-transformer
-                    (syntax-property (⊢ tag-/curried : (→/autocurry τ_arg ... τ))
-                                     'orig-constructor #'tag-))))))])
+                   (let ([τ_fn (generalize-type (→/curried (property-proxy-value #'τ_arg-proxy) ...
+                                                           τ_result))])
+                     (data-constructor
+                      (make-variable-like-transformer/thunk
+                       (thunk (assign-type #'tag-/curried (instantiate-type τ_fn))))
+                      τ_fn (λ (ids) #`(tag- . #,ids))))))))])
 
 (define-syntax-parser data
-  [(_ τ:id constructor:data-constructor-spec ...)
-   #:with τ- (generate-temporary #'τ)
-   #:with [tag- ...] (generate-temporaries #'(constructor.tag ...))
+  [(_ τ:type-constructor-spec constructor:data-constructor-spec ...)
+   #:with τ-arity (length (attribute τ.arg))
    #'(begin-
-       (define-type-constructor τ-
-         #:arity = 0
-         #:no-attach-kind
-         #:no-provide)
-       (define-typed-syntax τ
-         [:id ≫
-          ------------
-          [⊢ #,(syntax-property #'(τ-) 'constructors #'(constructor ...)) ⇒ ★]])
+       (define-base-type τ.tag
+         #:arity τ-arity
+         #:constructors (list #'constructor ...))
        (define-data-constructor τ constructor) ...)])
 
-(define-typed-syntax case
-  #:literals [quote-syntax]
-  [(_ e_val:expr [tag:data-constructor-spec e_body:expr] ...+) ≫
-   ; get the type we’re destructuring on
-   [⊢ e_val ≫ e_val- ⇒ τ_val]
-   #:fail-unless (get-stx-prop/car #'τ_val 'constructors)
-                 (~a "cannot pattern match on value of type ‘" (type->str #'τ_val) "’ because it does"
-                     " not have any visible constructors")
-   #:with (constructor:data-constructor-spec ...)
-          (get-stx-prop/car #'τ_val 'constructors)
+(define-syntax-parser case
+  [(_ val:expr {~describe "a pattern-matching clause"
+                          [pat:pat body:expr]} ...+)
+   ; expand the value and all the bodies
+   #:do [(define/infer+erase [τ_val [] val-] #'val)
+         (match-define-values [τ_pats τ_bodies {app append* cs} match-clauses]
+           (for/lists [τ_pats τ_bodies css match-clauses]
+                      ([pat-val (in-list (attribute pat.pat))]
+                       [body-stx (in-list (attribute body))])
+             (define-values [ctx τ_pat cs mk-match-pat] (infer+erase-pattern pat-val))
+             (define/infer+erase [τ_body [x- ...] body-] body-stx #:ctx ctx)
+             (match-define-values [match-pat (list)] (mk-match-pat (attribute x-)))
+             (values τ_pat τ_body cs #`[#,match-pat body-])))]
 
-   ; assert that all of the tags are actually constructors of τ_val
-   #:do [(for ([given-constructor (in-list (attribute tag))]
-               [given-tag (in-list (attribute tag.tag))])
-           (unless (member given-tag (attribute constructor.tag) free-identifier=?)
-             (raise-syntax-error #f (~a "‘" (syntax-e given-tag) "’ is not a visible constructor of ‘"
-                                        (type->str #'τ_val) "’")
-                                 this-syntax given-constructor)))]
+   ; add constraints that ensure that the value being matched is consistent with the provided patterns
+   ; and that all clause bodies produce the same type
+   (assign-constraints (assign-type (syntax-property (quasisyntax/loc this-syntax
+                                                       (match- val- #,@match-clauses))
+                                                     'disappeared-use
+                                                     (attribute pat.disappeared-uses))
+                                    (first τ_bodies))
+                       (append (map #{cons τ_val %} τ_pats)
+                               (map #{cons (first τ_bodies) %} (rest τ_bodies)))
+                       #:existing-constraints cs)])
 
-   ; ensure that all the bodies produce the same type
-   #:with [[binding-id:id ...] ...] #'((tag.arg ...) ...)
-   #:with [[binding-type ...] ...] #'((constructor.arg ...) ...)
-   [[binding-id ≫ binding-id- : binding-type] ... ⊢ e_body ≫ e_body- ⇒ τ_result] ...
-   #:fail-unless (same-types? #'(τ_result ...))
-                 "all clause bodies must produce the same type"
-   #:with [τ_result* . _] #'(τ_result ...)
+;; ---------------------------------------------------------------------------------------------------
+;; primitive operators
 
-   ; perform exhaustiveness checking
-   #:fail-unless (for/and ([constr-tag (in-list (attribute constructor.tag))])
-                   (member constr-tag (attribute tag.tag) free-identifier=?))
-                 (~a "not all cases of type ‘" (type->str #'τ_val) "’ are accounted for")
+(define-simple-macro (define-primop id:id [e:expr {~datum :} τ])
+  (define-syntax id (make-variable-like-transformer (⊢ e : τ))))
 
-   #:with [tag-matcher ...] (map (λ (stx) (syntax-property (expand/df stx) 'orig-constructor))
-                                 (attribute tag.tag))
-   ---------------------------------------------------------------------------------------------------
-   [⊢ (let- ([val e_val-])
-        (match- val
-          [(tag-matcher binding-id- ...) e_body-] ...))
-      ⇒ τ_result*]])
+(define ((+/c a) b) (+- a b))
+(define ((-/c a) b) (-- a b))
+(define ((*/c a) b) (*- a b))
+
+(define-primop + [+/c : (→ Integer (→ Integer Integer))])
+(define-primop - [-/c : (→ Integer (→ Integer Integer))])
+(define-primop * [*/c : (→ Integer (→ Integer Integer))])

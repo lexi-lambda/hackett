@@ -1,23 +1,23 @@
 #lang s-exp "lang.rkt"
 
-(data OneOrTwo
-      (One Integer)
-      (Two Integer Integer))
+(data Bool true false)
 
-(def first
-  (λ [x : OneOrTwo]
-    (case x
-      [(One a) a]
-      [(Two a b) a])))
+(data (Maybe a)
+      (just a)
+      nothing)
 
-(def last
-  (λ [x : OneOrTwo]
-    (case x
-      [(One a) a]
-      [(Two a b) b])))
+(data (Tuple4 a b c d)
+      (tuple4 a b c d))
 
-(first (One 1))
-(last (One 1))
+(case true
+  [true 1]
+  [false 0])
 
-(first (Two 1 2))
-(last (Two 1 2))
+(let ([from-maybe (λ (x y) (case y
+                             [(just v) v]
+                             [nothing x]))])
+  (tuple4
+   (from-maybe 0 (just 1))
+   (from-maybe 0 nothing)
+   (from-maybe "" (just "hello"))
+   (from-maybe "" nothing)))

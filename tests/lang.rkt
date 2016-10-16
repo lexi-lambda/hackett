@@ -6,7 +6,7 @@
          syntax/parse)
 
 (define (get-type stx)
-  (syntax-parse (expand-syntax #`(module m rascal/lang-unify #,stx))
+  (syntax-parse (expand-syntax #`(module m rascal/lang #,stx))
     #:context 'typecheck
     #:literals [module #%plain-module-begin #%plain-app #%plain-lambda]
     [(module _ _
@@ -42,7 +42,7 @@
 
 (check-exn
  #px"could not unify Integer with \\(→ \\(→ Integer \\(→ Integer Integer\\)\\) g\\d+\\)"
- (thunk (expand-syntax #'(module m rascal/lang-unify
+ (thunk (expand-syntax #'(module m rascal/lang
                            (let ([always-int (λ (x) 0)]
                                  [foo (λ (x) (always-int x))])
                              (foo 1 +))))))

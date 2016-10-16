@@ -5,6 +5,7 @@
 (define deps
   '("base"
     "curly-fn-lib"
+    "syntax-classes-lib"
     "turnstile"))
 (define build-deps
   '("rackunit-lib"
