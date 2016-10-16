@@ -5,15 +5,24 @@
                      [hash-percent-datum #%datum]
                      [hash-percent-module-begin #%module-begin]))
 
-(require (for-syntax racket/hash
+(require (for-syntax macrotypes/stx-utils
+                     racket/base
+                     racket/hash
+                     racket/list
+                     racket/match
+                     racket/syntax
                      syntax/id-table
                      syntax/parse/define
                      "util/stx.rkt")
-         (for-meta 2 syntax/transformer)
-         (except-in macrotypes/typecheck #%module-begin)
+         (for-meta 2 racket/base
+                     racket/syntax
+                     syntax/transformer)
+         (only-in macrotypes/typecheck
+                  postfix-in type-error
+                  get-stx-prop/car)
          (postfix-in - racket/base)
          (prefix-in kernel: '#%kernel)
-         macro-debugger/syntax-browser)
+         syntax/parse/define)
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; type constructors
@@ -74,42 +83,45 @@
 
   ; explicitly list all cases instead of having a fallback case to get better error messages when a
   ; new type representation is added
-  (current-type=?
-   (match-lambda**
-    [((τvar a) (τvar b))
-     (free-identifier=? a b)]
-    [((τvar _) _) #f]
-    [(_ (τvar _)) #f]
-    [((base-type a) (base-type b))
-     (free-identifier=? a b)]
-    [((base-type _) _) #f]
-    [(_ (base-type _)) #f]
-    [((τapp τf τx) (τapp τg τy))
-     (and ((current-type=?) τf τg)
-          ((current-type=?) τx τy))]
-    [((τapp _ _) _) #f]
-    [(_ (τapp _ _)) #f]))
+  (define type=?
+    (match-lambda**
+     [((τvar a) (τvar b))
+      (free-identifier=? a b)]
+     [((τvar _) _) #f]
+     [(_ (τvar _)) #f]
+     [((base-type a) (base-type b))
+      (free-identifier=? a b)]
+     [((base-type _) _) #f]
+     [(_ (base-type _)) #f]
+     [((τapp τf τx) (τapp τg τy))
+      (and (type=? τf τg)
+           (type=? τx τy))]
+     [((τapp _ _) _) #f]
+     [(_ (τapp _ _)) #f]))
 
-  (current-type-eval
-   (syntax-parser
-     #:context 'current-type-eval
-     #:literals [∀]
-     [τ:id
-      (syntax-local-value #'τ)]
-     [(∀ [α:id ...] τ)
-      (∀ (attribute α) ((current-type-eval) #'τ))]
-     [(τ a)
-      (τapp ((current-type-eval) #'τ)
-            ((current-type-eval) #'a))]
-     [(τ a as ...)
-      ((current-type-eval)
-       #'((τ a) as ...))]))
+  (define type-eval
+    (syntax-parser
+      #:context 'current-type-eval
+      #:literals [∀]
+      [τ:id
+       (syntax-local-value #'τ)]
+      [(∀ [α:id ...] τ)
+       (∀ (attribute α) (type-eval #'τ))]
+      [(τ a)
+       (τapp (type-eval #'τ)
+             (type-eval #'a))]
+      [(τ a as ...)
+       (type-eval
+        #'((τ a) as ...))]))
+
+  (define (typeof stx)
+    (get-stx-prop/car stx ':))
 
   (define (assign-type stx τ)
     (set-stx-prop/preserved stx ': τ))
 
   (define-simple-macro (⊢ e {~datum :} τ)
-    (assign-type #`e ((current-type-eval) #`τ)))
+    (assign-type #`e (type-eval #`τ)))
 
   ; Generates a fresh type variable.
   (define (fresh) (τvar (generate-temporary)))
@@ -184,7 +196,7 @@
 
 (begin-for-syntax
   ; Attaches a constraint to a syntax object by associating a type with the 'constraint syntax
-  ; property. Calls syntax-local-introduce and (current-type-eval) on the provided constraint.
+  ; property. Calls syntax-local-introduce and type-eval on the provided constraint.
   (define (assign-constraint stx τa τb)
     (syntax-property stx 'constraints (list (τ~ τa τb stx)) #t))
 
@@ -231,7 +243,7 @@
   ; Attempts to unify the two provided types, reporting errors in terms of the provided source syntax
   ; object.
   (define (unify τa τb #:src src)
-    (if ((current-type=?) τa τb)
+    (if (type=? τa τb)
         empty-subst
         (match* (τa τb)
           [((τvar α) τ)
