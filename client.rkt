@@ -1,4 +1,4 @@
-#lang s-exp "lang.rkt"
+#lang rascal
 
 (data Bool true false)
 
