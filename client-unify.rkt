@@ -1,14 +1,23 @@
 #lang s-exp "lang-unify.rkt"
 
-(data Maybe-Integer
-      (just Integer)
+(data Bool true false)
+
+(data (Maybe a)
+      (just a)
       nothing)
 
-(data Either-String-Maybe-Integer
-      (left String)
-      (right Maybe-Integer))
+(data (Tuple4 a b c d)
+      (tuple4 a b c d))
 
-(case (right nothing)
-  [(left str) 0]
-  [(right (just x)) x]
-  [(right nothing) 0])
+(let ([from-maybe (λ x (λ y (case y
+                              [(just v) v]
+                              [nothing x])))])
+  ((((tuple4
+      ((from-maybe 0) (just 1)))
+     ((from-maybe 0) nothing))
+    ((from-maybe "") (just "hello")))
+   ((from-maybe "") nothing)))
+
+(case true
+  [true 1]
+  [false 0])

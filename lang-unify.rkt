@@ -8,6 +8,7 @@
 
 (require (for-syntax macrotypes/stx-utils
                      racket/base
+                     racket/dict
                      racket/format
                      racket/function
                      racket/list
@@ -61,8 +62,8 @@
   #:with nested-τapps-constructor (make-nested-τapps #'(base-type #'τ constructors))
   #:with value-definition
          (if (zero? (syntax-e (attribute arity)))
-             #'(define τ-proc nested-τapps-constructor)
-             #'(define (τ-proc τ_arg ...)
+             #'(define τ-value nested-τapps-constructor)
+             #'(define (τ-value τ_arg ...)
                  nested-τapps-constructor))
   (begin
     (define-syntax τ (base-type #'τ constructors))
@@ -72,7 +73,7 @@
         (syntax-parser
           [(_ {~var τ_arg id} ...)
            #'nested-τapps-pat])
-        (make-variable-like-transformer #'τ-proc)))))
+        (make-variable-like-transformer #'τ-value)))))
 
 (define-base-type → #:arity 2)
 (define-base-type Integer)
@@ -114,19 +115,30 @@
      [((τapp _ _) _) #f]
      [(_ (τapp _ _)) #f]))
 
-  (define type-eval
-    (syntax-parser
-      #:context 'type-eval
-      #:literals [∀]
-      [τ:id
-       (syntax-local-value #'τ)]
-      [(∀ [α:id ...] τ)
-       (∀ (attribute α) (type-eval #'τ))]
-      [(τ a)
-       (τapp (type-eval #'τ)
-             (type-eval #'a))]
-      [(τ a as ...)
-       (type-eval #'((τ a) as ...))]))
+  (define current-type-var-environment
+    (make-parameter (make-immutable-free-id-table)))
+
+  (define (extend-type-var-environment ctx [env (current-type-var-environment)])
+    (for/fold ([env env])
+              ([(id τ) (in-dict ctx)])
+      (free-id-table-set env id τ)))
+
+  (define (type-eval stx #:ctx [ctx '()])
+    (parameterize ([current-type-var-environment (extend-type-var-environment ctx)])
+      (let loop ([stx stx])
+        (syntax-parse stx
+          #:context 'type-eval
+          #:literals [∀]
+          [τ:id
+           (or (free-id-table-ref (current-type-var-environment) #'τ #f)
+               (syntax-local-value #'τ))]
+          [(∀ [α:id ...] τ)
+           (∀ (attribute α) (loop #'τ))]
+          [(τ a)
+           (τapp (loop #'τ)
+                 (loop #'a))]
+          [(τ a as ...)
+           (loop #'((τ a) as ...))]))))
 
   (define (typeof stx)
     (get-stx-prop/car stx ':))
@@ -138,7 +150,8 @@
     (assign-type #`e (type-eval #`τ)))
 
   ; Generates a fresh type variable.
-  (define (fresh) (τvar (generate-temporary)))
+  (define (fresh [base 'g])
+    (τvar (generate-temporary base)))
 
   (define (infer+erase stx #:ctx [ctx '()])
     (define wrapped-stx
@@ -267,7 +280,7 @@
            (bind-subst α τ)]
           [(τ (τvar α))
            (bind-subst α τ)]
-          [((→ τa τb) (→ τc τd))
+          [((τapp τa τb) (τapp τc τd))
            (unify* (list (cons τa τc)
                          (cons τb τd))
                    #:src src)]
@@ -402,6 +415,23 @@
       [(list τ) τ]
       [other (apply →/curried other)]))
 
+  (define-syntax-class type-constructor-spec
+    #:attributes [tag [arg 1] len nullary?]
+    #:description #f
+    [pattern tag:id
+             #:attr [arg 1] '()
+             #:attr len 0
+             #:attr nullary? #t]
+    [pattern (tag:id arg:id ...+)
+             #:attr len (length (attribute arg))
+             #:attr nullary? #f]
+    [pattern {~and (tag:id)
+                   {~fail (~a "types without arguments should not be enclosed in parentheses; perhaps"
+                              " you meant ‘" (syntax-e #'tag) "’?")}}
+             #:attr [arg 1] #f
+             #:attr len #f
+             #:attr nullary? #f])
+
   (define-syntax-class data-constructor-spec
     #:attributes [tag [arg 1] len nullary?]
     #:description #f
@@ -409,7 +439,7 @@
              #:attr [arg 1] '()
              #:attr len 0
              #:attr nullary? #t]
-    [pattern {~and norm (tag:id arg ...+)}
+    [pattern (tag:id arg ...+)
              #:attr len (length (attribute arg))
              #:attr nullary? #f]
     [pattern {~and (tag:id)
@@ -419,13 +449,28 @@
              #:attr len #f
              #:attr nullary? #f])
 
-  (struct data-constructor (macro base-type arg-types match-clause)
+  (struct data-constructor (macro type match-clause)
     #:property prop:procedure 0)
 
-  (define (data-constructor-type constructor)
-    (let ([base-type (data-constructor-base-type constructor)]
-          [arg-types (data-constructor-arg-types constructor)])
-      (apply →/curried* (append arg-types (list base-type)))))
+  (define (data-constructor-base-type constructor)
+    (define get-base-type
+      (match-lambda
+        [(→ τa τb)
+         (get-base-type τb)]
+        [τ τ]))
+    (match (data-constructor-type constructor)
+      [(∀ αs τ) (get-base-type τ)]
+      [τ        (get-base-type τ)]))
+
+  (define (data-constructor-arg-types constructor)
+    (define get-arg-types
+      (match-lambda
+        [(→ τa τb)
+         (cons τa (get-arg-types τb))]
+        [τ '()]))
+    (match (data-constructor-type constructor)
+      [(∀ αs τ) (get-arg-types τ)]
+      [τ        (get-arg-types τ)]))
 
   (define (data-constructor-arity constructor)
     (length (data-constructor-arg-types constructor)))
@@ -513,10 +558,16 @@
                          (values (append match-pats (list match-pat)) rest*)))))))
 
 (define-syntax-parser define-data-constructor
-  [(_ τ:id constructor:data-constructor-spec)
+  [(_ τ:type-constructor-spec constructor:data-constructor-spec)
    #:with tag- (generate-temporary #'constructor.tag)
    #:with tag-/curried (generate-temporary #'constructor.tag)
-   #:with [τ_arg-proxy ...] (map #{property-proxy (type-eval %)} (attribute constructor.arg))
+   #:do [(define αs (map fresh (attribute τ.arg)))
+         (define type-ctx (map cons (attribute τ.arg) αs))]
+   #:with [α-proxy ...] (map property-proxy αs)
+   #:with [τ_arg-proxy ...] (map #{property-proxy (type-eval % #:ctx type-ctx)}
+                                 (attribute constructor.arg))
+   #:with τ_result (if (attribute τ.nullary?) #'τ.tag
+                       #'(τ.tag (property-proxy-value #'α-proxy) ...))
    #:with [field ...] (generate-temporaries #'(constructor.arg ...))
    #`(begin-
        ; check if the constructor is nullary or not
@@ -528,27 +579,31 @@
                      (struct- constructor.tag () #:transparent)
                      (constructor.tag)))
                  (define-syntax constructor.tag
-                   (data-constructor (make-variable-like-transformer
-                                      (assign-type #'tag- τ))
-                                     τ '() (match-lambda [(list) #'(==- tag-)]))))
+                   (let ([τ_val (generalize-type τ_result)])
+                     (data-constructor
+                      (make-variable-like-transformer/thunk
+                       (thunk (assign-type #'tag- (instantiate-type τ_val))))
+                      τ_val (match-lambda [(list) #'(==- tag-)])))))
              ; if it isn’t, define a constructor function, but preserve the original `struct`-defined
              ; id as a syntax property (to be used with Racket’s `match`)
              #'(splicing-local- [(struct- tag- (field ...) #:transparent
                                    #:reflection-name 'constructor.tag)
                                  (define- tag-/curried (curry- tag-))]
                  (define-syntax constructor.tag
-                   (data-constructor
-                    (make-variable-like-transformer
-                     (assign-type #'tag-/curried
-                                  (→/curried (property-proxy-value #'τ_arg-proxy) ...
-                                             τ)))
-                    τ (list (property-proxy-value #'τ_arg-proxy) ...)
-                    (λ (ids) #`(tag- . #,ids)))))))])
+                   (let ([τ_fn (generalize-type (→/curried (property-proxy-value #'τ_arg-proxy) ...
+                                                           τ_result))])
+                     (data-constructor
+                      (make-variable-like-transformer/thunk
+                       (thunk (assign-type #'tag-/curried (instantiate-type τ_fn))))
+                      τ_fn (λ (ids) #`(tag- . #,ids))))))))])
 
 (define-syntax-parser data
-  [(_ τ:id constructor:data-constructor-spec ...)
+  [(_ τ:type-constructor-spec constructor:data-constructor-spec ...)
+   #:with τ-arity (length (attribute τ.arg))
    #'(begin-
-       (define-base-type τ #:constructors (list #'constructor ...))
+       (define-base-type τ.tag
+         #:arity τ-arity
+         #:constructors (list #'constructor ...))
        (define-data-constructor τ constructor) ...)])
 
 (define-syntax-parser case
