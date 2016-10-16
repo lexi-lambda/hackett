@@ -13,9 +13,9 @@
   [true 1]
   [false 0])
 
-(let ([from-maybe (λ x (λ y (case y
-                              [(just v) v]
-                              [nothing x])))])
+(let ([from-maybe (λ (x y) (case y
+                             [(just v) v]
+                             [nothing x]))])
   (tuple4
    (from-maybe 0 (just 1))
    (from-maybe 0 nothing)

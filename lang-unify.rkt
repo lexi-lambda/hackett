@@ -337,12 +337,18 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; general typed forms
 
-(define-syntax-parser λ
+(define-syntax-parser λ1
   [(_ x:id e:expr)
    #:do [(define τv (fresh))
          (define/infer+erase [τ [x-] e-] #'e #:ctx (list (cons #'x τv)))]
    (assign-type #'(λ- (x-) e-)
                 (→ τv τ))])
+
+(define-syntax-parser λ
+  [(_ (x:id) e:expr)
+   #'(λ1 x e)]
+  [(_ (x:id xs:id ...) e:expr)
+   #'(λ1 x (λ (xs ...) e))])
 
 (define-syntax-parser hash-percent-app1
   [(_ fn arg)
