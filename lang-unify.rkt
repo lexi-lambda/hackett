@@ -342,7 +342,7 @@
    #:with substituted (apply-substitutions-to-types subst #'expanded)
    #'(#%module-begin- . substituted)])
 
-(define-syntax-parser let
+(define-syntax-parser let1
   [(_ [x:id val:expr] e:expr)
    #:do [(define/infer+erase [τ_val [] val-] #'val)
          (define subst (solve-constraints (collect-constraints #'val-)))
@@ -353,6 +353,14 @@
    (assign-type (syntax/loc this-syntax
                   (let- ([x- val-*]) e-))
                 τ)])
+
+(define-syntax-parser let
+  [(_ () e:expr)
+   #'e]
+  [(_ ([x:id val:expr] [xs:id vals:expr] ...) e:expr)
+   #'(let1 [x val]
+       (let ([xs vals] ...)
+         e))])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; primitive operators
