@@ -1,6 +1,6 @@
 #lang curly-fn racket/base
 
-(provide : λ let data case +
+(provide : λ let data case _ +
          → Integer String
          (rename-out [hash-percent-app #%app]
                      [hash-percent-datum #%datum]
@@ -14,7 +14,9 @@
                      racket/match
                      racket/syntax
                      syntax/id-table
+                     syntax/parse/class/local-value
                      syntax/parse/define
+                     syntax/parse/experimental/specialize
                      "util/stx.rkt")
          (for-meta 2 racket/base
                      racket/syntax
@@ -209,8 +211,11 @@
 
   ; Like assign-constraint, but accepts a list of pairs and produces a set of constraints instead of a
   ; single contraint.
-  (define (assign-constraints stx τ-pairs)
-    (syntax-property stx 'constraints (map #{τ~ (car %) (cdr %) stx} τ-pairs) #t))
+  (define (assign-constraints stx τ-pairs #:existing-constraints [existing-cs '()])
+    (syntax-property stx 'constraints
+                     (append (map #{τ~ (car %) (cdr %) stx} τ-pairs)
+                             existing-cs)
+                     #t))
 
   ; Returns a list of all constraints in a syntax object by recursively collecting the values of the
   ; 'constraint syntax property.
@@ -391,6 +396,12 @@
       [(list τ τs ...)
        (→ τ (apply →/curried τs))]))
 
+  ; like →/curried, but interprets (→ τ) as τ
+  (define →/curried*
+    (match-lambda*
+      [(list τ) τ]
+      [other (apply →/curried other)]))
+
   (define-syntax-class data-constructor-spec
     #:attributes [tag [arg 1] len nullary?]
     #:description #f
@@ -409,7 +420,97 @@
              #:attr nullary? #f])
 
   (struct data-constructor (macro base-type arg-types match-clause)
-    #:property prop:procedure 0))
+    #:property prop:procedure 0)
+
+  (define (data-constructor-type constructor)
+    (let ([base-type (data-constructor-base-type constructor)]
+          [arg-types (data-constructor-arg-types constructor)])
+      (apply →/curried* (append arg-types (list base-type)))))
+
+  (define (data-constructor-arity constructor)
+    (length (data-constructor-arg-types constructor)))
+
+  (define-syntax-class/specialize data-constructor-val
+    (local-value data-constructor? #:failure-message "not bound as a data constructor"))
+
+  (struct pat-base (stx) #:transparent)
+  (struct pat-var pat-base (id) #:transparent)
+  (struct pat-hole pat-base () #:transparent)
+  (struct pat-con pat-base (constructor pats) #:transparent)
+
+  (define-syntax-class pat
+    #:description "a pattern"
+    #:attributes [pat disappeared-uses]
+    #:literals [_]
+    [pattern {~and constructor:data-constructor-val ~!}
+             #:do [(define val (attribute constructor.local-value))
+                   (define arity (data-constructor-arity val))]
+             #:fail-unless (zero? arity)
+                           (~a "cannot match ‘" (syntax-e #'constructor) "’ as a value; it is a "
+                               "constructor with arity " arity)
+             #:attr pat (pat-con this-syntax val '())
+             #:attr disappeared-uses (list (syntax-local-introduce #'constructor))]
+    [pattern (constructor:data-constructor-val ~! arg:pat ...+)
+             #:do [(define val (attribute constructor.local-value))
+                   (define arity (data-constructor-arity val))]
+             #:fail-when (zero? arity)
+                         (~a "cannot match ‘" (syntax-e #'constructor) "’ as a constructor; it is a "
+                             "value and should not be enclosed with parentheses")
+             #:fail-when {(length (attribute arg)) . < . arity}
+                         (~a "not enough arguments provided for constructor ‘"
+                             (syntax-e #'constructor) "’, which has arity " arity)
+             #:fail-when {(length (attribute arg)) . > . arity}
+                         (~a "too many arguments provided for constructor ‘"
+                             (syntax-e #'constructor) "’, which has arity " arity)
+             #:attr pat (pat-con this-syntax (attribute constructor.local-value) (attribute arg.pat))
+             #:attr disappeared-uses (list* (syntax-local-introduce #'constructor)
+                                            (append* (attribute arg.disappeared-uses)))]
+    [pattern _
+             #:attr pat (pat-hole this-syntax)
+             #:attr disappeared-uses (list (syntax-local-introduce this-syntax))]
+    [pattern id:id
+             #:attr pat (pat-var this-syntax #'id)
+             #:attr disappeared-uses '()])
+
+  ; Given a pattern, calculates the set of bindings, the type the pattern will match against, and the
+  ; set of required constraints. Also creates a function that will produce a Racket `match` pattern
+  ; given a set of binding identifiers.
+  ;
+  ; pat? -> (listof (cons/c identifier? type?)) type? (listof constraint?)
+  ;         ((listof identifier?) -> syntax? (listof identifier?))
+  (define infer+erase-pattern
+    (match-lambda
+      [(pat-var _ id)
+       (let ([α (fresh)])
+         (values (list (cons id α)) α '()
+                 (match-lambda [(list* id rest) (values id rest)])))]
+      [(pat-hole _)
+       (let ([α (fresh)])
+         (values '() α '()
+                 (λ (ids) (values #'_ ids))))]
+      [(pat-con stx constructor pats)
+       (define-values [ctxs τs cs mk-pats] (infer+erase-patterns pats))
+       (let* ([α (fresh)]
+              [τ_fn (apply →/curried* (append τs (list α)))]
+              [τ_con (instantiate-type (data-constructor-type constructor))])
+         (values ctxs α (list* (τ~ τ_fn τ_con stx) cs)
+                 (λ (ids) (let-values ([(match-pats rest) (mk-pats ids)])
+                            (values ((data-constructor-match-clause constructor) match-pats)
+                                    rest)))))]))
+
+  ; Like infer+erase-pattern but for multiple patterns. Properly handles applying the `match` pattern
+  ; constructors of each pattern to the provided list of identifiers.
+  (define (infer+erase-patterns pats)
+    (define-values [ctxs τs cs mk-pats]
+      (for/lists [ctxs τs cs mk-pats]
+                 ([pat (in-list pats)])
+        (infer+erase-pattern pat)))
+    (values (append* ctxs) τs cs
+            (λ (ids) (for/fold ([match-pats '()]
+                                [rest ids])
+                               ([mk-pat (in-list mk-pats)])
+                       (let-values ([(match-pat rest*) (mk-pat rest)])
+                         (values (append match-pats (list match-pat)) rest*)))))))
 
 (define-syntax-parser define-data-constructor
   [(_ τ:id constructor:data-constructor-spec)
@@ -429,7 +530,7 @@
                  (define-syntax constructor.tag
                    (data-constructor (make-variable-like-transformer
                                       (assign-type #'tag- τ))
-                                     τ '() (λ (_) #'(==- tag-)))))
+                                     τ '() (match-lambda [(list) #'(==- tag-)]))))
              ; if it isn’t, define a constructor function, but preserve the original `struct`-defined
              ; id as a syntax property (to be used with Racket’s `match`)
              #'(splicing-local- [(struct- tag- (field ...) #:transparent
@@ -452,58 +553,28 @@
 
 (define-syntax-parser case
   [(_ val:expr {~describe "a pattern-matching clause"
-                          [pat:data-constructor-spec body:expr]} ...+)
-   ; ensure all provided patterns are actual data constructors
-   #:do [(define invalid-constructors
-           (filter-not #{data-constructor? (syntax-local-value % (thunk #f))}
-                       (attribute pat.tag)))]
-   #:fail-unless (empty? invalid-constructors)
-                 (if (= 1 (length invalid-constructors))
-                     (~a (syntax-e (first invalid-constructors))
-                         " is not bound to a data constructor")
-                     (~a (identifiers->english-list invalid-constructors)
-                         " are not bound to data constructors"))
+                          [pat:pat body:expr]} ...+)
+   ; expand the value and all the bodies
+   #:do [(define/infer+erase [τ_val [] val-] #'val)
+         (match-define-values [τ_pats τ_bodies {app append* cs} match-clauses]
+           (for/lists [τ_pats τ_bodies css match-clauses]
+                      ([pat-val (in-list (attribute pat.pat))]
+                       [body-stx (in-list (attribute body))])
+             (define-values [ctx τ_pat cs mk-match-pat] (infer+erase-pattern pat-val))
+             (define/infer+erase [τ_body [x- ...] body-] body-stx #:ctx ctx)
+             (match-define-values [match-pat (list)] (mk-match-pat (attribute x-)))
+             (values τ_pat τ_body cs #`[#,match-pat body-])))]
 
-   ; get the type we’re destructuring on
-   #:do [(define data-constructors (map syntax-local-value (attribute pat.tag)))
-         (define τ_required (data-constructor-base-type (first data-constructors)))
-         (define/infer+erase [τ_val [] val-] #'val)]
-   #:with [constructor:data-constructor-spec ...] (base-type-constructors τ_required)
-
-   ; assert that all of the tags are actually constructors of τ_val
-   #:do [(for ([pat-stx (in-list (attribute pat))]
-               [pat-tag-stx (in-list (attribute pat.tag))])
-           (unless (member pat-tag-stx (attribute constructor.tag) free-identifier=?)
-             (raise-syntax-error #f (~a "‘" (syntax-e pat-tag-stx) "’ is not a visible constructor of"
-                                        " ‘" (type->string τ_required) "’")
-                                 this-syntax pat-stx)))]
-
-   ; perform exhaustiveness checking
-   #:do [(define missing-tags (filter-not #{member % (attribute pat.tag) free-identifier=?}
-                                          (attribute constructor.tag)))]
-   #:fail-unless (empty? missing-tags)
-                 (~a "not all cases of type ‘" (type->string τ_required) "’ are accounted for "
-                     "(missing " (identifiers->english-list missing-tags) ")")
-
-   ; expand all the bodies
-   #:do [(define-values [τ_bodies match-clauses]
-           (for/lists [τ_bodies match-clauses]
-                      ([pat-arg-ids (in-list (attribute pat.arg))]
-                       [pat-arg-types (in-list (map data-constructor-arg-types data-constructors))]
-                       [body-stx (in-list (attribute body))]
-                       [make-match-clause (in-list (map data-constructor-match-clause
-                                                        data-constructors))])
-             (define-values [τ_body pat-arg-ids- body-stx-]
-               (infer+erase body-stx #:ctx (map cons pat-arg-ids pat-arg-types)))
-             (values τ_body #`(#,(make-match-clause pat-arg-ids-) #,body-stx-))))]
-
-   ; add constraints that ensure that the value being matched is of the correct type and that all
-   ; bodies produce the same type
-   (assign-constraints (assign-type (quasisyntax/loc this-syntax
-                                      (match- val- #,@match-clauses))
+   ; add constraints that ensure that the value being matched is consistent with the provided patterns
+   ; and that all clause bodies produce the same type
+   (assign-constraints (assign-type (syntax-property (quasisyntax/loc this-syntax
+                                                       (match- val- #,@match-clauses))
+                                                     'disappeared-use
+                                                     (attribute pat.disappeared-uses))
                                     (first τ_bodies))
-                       (list* (cons τ_val τ_required)
-                              (map #{cons (first τ_bodies) %} (rest τ_bodies))))])
+                       (append (map #{cons τ_val %} τ_pats)
+                               (map #{cons (first τ_bodies) %} (rest τ_bodies)))
+                       #:existing-constraints cs)])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; primitive operators
