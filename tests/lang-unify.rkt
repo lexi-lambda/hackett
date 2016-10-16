@@ -5,19 +5,13 @@
          syntax/parse)
 
 (define (get-type stx)
-  (syntax-parse (expand-syntax #`(module m "../lang-unify.rkt" #,stx))
+  (syntax-parse (expand-syntax #`(module m rascal/lang-unify #,stx))
     #:context 'typecheck
     #:literals [module #%plain-module-begin #%plain-app #%plain-lambda]
     [(module _ _
        (#%plain-module-begin
         _ (#%plain-app _ (#%plain-lambda () expr) _)))
      (syntax-property #'expr ':-string)]))
-
-(check-not-exn
- (thunk (expand-syntax #'(module m "../lang-unify.rkt"
-                           (let [id (λ x x)]
-                             (let [const (λ y (λ z z))]
-                               (const id)))))))
 
 (check-regexp-match
  #px"^\\(→ (g\\d+) \\1\\)$"
@@ -41,7 +35,7 @@
 
 (check-exn
  #px"could not unify Integer with \\(→ \\(→ Integer \\(→ Integer Integer\\)\\) g\\d+\\)"
- (thunk (expand-syntax #'(module m "../lang-unify.rkt"
+ (thunk (expand-syntax #'(module m rascal/lang-unify
                            (let [always-int (λ x 0)]
                              (let [foo (λ x (always-int x))]
                                ((foo 1) +)))))))

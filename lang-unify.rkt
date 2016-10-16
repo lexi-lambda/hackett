@@ -7,7 +7,9 @@
 
 (require (for-syntax racket/hash
                      syntax/id-table
+                     syntax/parse/define
                      "util/stx.rkt")
+         (for-meta 2 syntax/transformer)
          (except-in macrotypes/typecheck #%module-begin)
          (postfix-in - racket/base)
          (prefix-in kernel: '#%kernel)
@@ -16,12 +18,39 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; type constructors
 
-(define-type-constructor →
-  #:arity = 2
-  #:arg-variances (const (list covariant contravariant)))
+(begin-for-syntax
+  (struct ∀ (τvars τ) #:prefab)
+  (struct τ~ (a b src) #:prefab)
+  (struct base-type (id) #:prefab)
+  (struct τvar (id) #:prefab)
+  (struct τapp (τ arg) #:prefab))
 
-(define-type-constructor τ~ #:arity = 2)
+(define-syntax (∀ stx) (raise-syntax-error #f "∀ cannot be used as an expression" stx))
 
+(define-simple-macro (define-base-type τ:id {~optional {~seq #:arity arity:nat}
+                                                       #:defaults ([arity #'0])})
+  #:with τ-proc (generate-temporary #'τ)
+  #:with [τ_arg ...] (generate-temporaries (make-list (syntax-e #'arity) #f))
+  #:do [(define (make-nested-τapps base-stx)
+          (let loop ([acc base-stx]
+                     [vars (attribute τ_arg)])
+            (if (empty? vars) acc
+                (loop #`(τapp #,acc #,(first vars))
+                      (rest vars)))))]
+  #:with nested-τapps-pat (make-nested-τapps #'(base-type (? (λ (id) (free-identifier=? #'τ id)))))
+  #:with nested-τapps-constructor (make-nested-τapps #'(base-type #'τ))
+  (begin
+    (define-syntax τ (base-type #'τ))
+    (begin-for-syntax
+      (define (τ-proc τ_arg ...)
+        nested-τapps-constructor)
+      (define-match-expander τ
+        (syntax-parser
+          [(_ {~var τ_arg id} ...)
+           #'nested-τapps-pat])
+        (make-variable-like-transformer #'τ-proc)))))
+
+(define-base-type → #:arity 2)
 (define-base-type Integer)
 (define-base-type String)
 
@@ -29,55 +58,84 @@
 ;; types
 
 (begin-for-syntax
-  (define type->string
-    (syntax-parser
-      #:context 'type->string
-      #:literals [quote]
-      ['#s(var ~! α:id)
-       (symbol->string (syntax-e #'α))]
-      [(~→ τa τb)
-       (format "(→ ~a ~a)" (type->string #'τa) (type->string #'τb))]
-      ['#s(∀ [τv ...] τ)
-       (format "(∀ ~a ~a)" (map type->string (attribute τv)) (type->string #'τ))]
-      [(~τ~ τa τb)
-       (format "(τ~~ ~a ~a)" (type->string #'τa) (type->string #'τb))]
-      [~Integer "Integer"]
-      [~String "String"]
-      [:id (type->str this-syntax)]))
+  (define/match (type->string τ)
+    [((τvar α))
+     (symbol->string (syntax-e α))]
+    [((∀ αs τ))
+     (format "(∀ ~a ~a)" (map #{symbol->string (syntax-e %)} αs) (type->string τ))]
+    [((→ τa τb))
+     (format "(→ ~a ~a)" (type->string τa) (type->string τb))]
+    [((τ~ τa τb _))
+     (format "(τ~~ ~a ~a)" (type->string τa) (type->string τb))]
+    [((τapp τf τx))
+     (format "(~a ~a)" (type->string τf) (type->string τx))]
+    [((base-type id))
+     (symbol->string (syntax-e id))])
 
-  (let ([old-type=? (current-type=?)])
-    (current-type=?
-     (λ (τa τb)
-       (syntax-parse (list τa τb)
-         [(#s(var a:id) #s(var b:id))
-          (free-identifier=? #'a #'b)]
-         [(#s(var _) _) #f]
-         [(_ #s(var _)) #f]
-         [(_ _) (old-type=? τa τb)]))))
+  ; explicitly list all cases instead of having a fallback case to get better error messages when a
+  ; new type representation is added
+  (current-type=?
+   (match-lambda**
+    [((τvar a) (τvar b))
+     (free-identifier=? a b)]
+    [((τvar _) _) #f]
+    [(_ (τvar _)) #f]
+    [((base-type a) (base-type b))
+     (free-identifier=? a b)]
+    [((base-type _) _) #f]
+    [(_ (base-type _)) #f]
+    [((τapp τf τx) (τapp τg τy))
+     (and ((current-type=?) τf τg)
+          ((current-type=?) τx τy))]
+    [((τapp _ _) _) #f]
+    [(_ (τapp _ _)) #f]))
 
-  (let ([old-type-eval (current-type-eval)])
-    (current-type-eval
-     (syntax-parser
-       #:literals [quote]
-       ['#s(∀ τvs τ)
-        (old-type-eval #`#s(∀ τvs #,((current-type-eval) #'τ)))]
-       [_ (old-type-eval this-syntax)])))
+  (current-type-eval
+   (syntax-parser
+     #:context 'current-type-eval
+     #:literals [∀]
+     [τ:id
+      (syntax-local-value #'τ)]
+     [(∀ [α:id ...] τ)
+      (∀ (attribute α) ((current-type-eval) #'τ))]
+     [(τ a)
+      (τapp ((current-type-eval) #'τ)
+            ((current-type-eval) #'a))]
+     [(τ a as ...)
+      ((current-type-eval)
+       #'((τ a) as ...))]))
+
+  (define (assign-type stx τ)
+    (set-stx-prop/preserved stx ': τ))
+
+  (define-simple-macro (⊢ e {~datum :} τ)
+    (assign-type #`e τ))
+
+  (define-simple-macro (⊢* e {~datum :} τ)
+    (assign-type #`e ((current-type-eval) #`τ)))
 
   ; Generates a fresh type variable.
-  (define (fresh)
-    ((current-type-eval)
-     (mk-type #`#s(var #,(generate-temporary)))))
+  (define (fresh) (τvar (generate-temporary)))
 
-  (define (infer+erase stx #:ctx [ctx #'()])
+  (define (infer+erase stx #:ctx [ctx '()])
     (define wrapped-stx
-      (syntax-parse ctx
-        [([x:id : τ] ...)
-         #:with (x- ...) (for/list ([x-stx (in-list (attribute x))])
-                           (let ([tmp (generate-temporary x-stx)])
-                             (datum->syntax tmp (syntax-e tmp) x-stx)))
+      (match ctx
+        [(list (cons xs τs) ...)
+         (define/syntax-parse [x ...] xs)
+         (define/syntax-parse [x- ...]
+           (for/list ([x-stx (in-list xs)])
+             (let ([tmp (generate-temporary x-stx)])
+               (datum->syntax tmp (syntax-e tmp) x-stx))))
+         ; We can’t directly embed types into syntax, since they are literal data, and quoting them
+         ; messes up syntax objects inside of prefab structs. Instead, we can cheat by attaching a
+         ; syntax property containing the type to a syntax object, then pull it off using typeof
+         ; before calling instantiate-type.
+         (define/syntax-parse [τ: ...]
+           (for/list ([τ (in-list τs)])
+             (syntax-property #'prop-holder ': τ)))
          #`(λ- (x- ...)
                (let-syntax ([x (make-variable-like-transformer/thunk
-                                (λ () (assign-type #'x- (instantiate-type #'τ))))]
+                                (λ () (assign-type #'x- (instantiate-type (typeof #'τ:)))))]
                             ...)
                  #,stx))]))
     (define-values [τ xs- stx-]
@@ -87,37 +145,42 @@
            (kernel:let-values _
              (kernel:let-values _ body)))
          (values (typeof #'body) #'xs- #'body)]))
-    (list τ xs- stx-))
+    (values τ xs- stx-))
+
+  (define-simple-macro (define/infer+erase [τ:id xs-pat stx-pat] args ...)
+    #:with xs-tmp (generate-temporary #'xs-pat)
+    #:with stx-tmp (generate-temporary #'stx-pat)
+    (begin
+      (define-values [τ xs-tmp stx-tmp] (infer+erase args ...))
+      (define/syntax-parse xs-pat xs-tmp)
+      (define/syntax-parse stx-pat stx-tmp)))
 
   ; Given a type, replaces universally quantified type variables with fresh type variables.
   (define instantiate-type
-    (syntax-parser
-      #:literals [quote]
-      ['#s(∀ [α ...] τ)
+    (match-lambda
+      [(∀ αs τ)
        (apply-subst
         (make-immutable-free-id-table
-         (for/list ([var (in-list (attribute α))])
+         (for/list ([var (in-list αs)])
            (cons var (fresh))))
-        #'τ)]
-      [_ this-syntax]))
+        τ)]
+      [τ τ]))
 
   ; Given a type, finds all free type variables and universally quantifies them using ∀.
-  (define (generalize-type stx)
+  (define (generalize-type τ)
     (define collect-vars
-      (syntax-parser
-        #:context 'collect-vars
-        #:literals [quote]
-        ['#s(var α:id)
-         (list #'α)]
-        [(left . right)
-         (remove-duplicates (append (collect-vars #'left)
-                                    (collect-vars #'right))
+      (match-lambda
+        [(τvar α)
+         (list α)]
+        [(τapp τf τx)
+         (remove-duplicates (append (collect-vars τf)
+                                    (collect-vars τx))
                             free-identifier=?)]
-        [_ '()]))
-    (let ([free-vars (collect-vars stx)])
-      (if (empty? free-vars) stx
-          ((current-type-eval)
-           #`#s(∀ #,(collect-vars stx) #,stx))))))
+        [(base-type _)
+         '()]))
+    (let ([free-vars (collect-vars τ)])
+      (if (empty? free-vars) τ
+          (∀ free-vars τ)))))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; constraints & substitution
@@ -125,12 +188,8 @@
 (begin-for-syntax
   ; Attaches a constraint to a syntax object by associating a type with the 'constraint syntax
   ; property. Calls syntax-local-introduce and (current-type-eval) on the provided constraint.
-  (define (assign-constraint stx c)
-    (syntax-property stx
-                     'constraints
-                     (list (syntax-property (syntax-local-introduce ((current-type-eval) c))
-                                            'constraint-source stx #t))
-                     #t))
+  (define (assign-constraint stx τa τb)
+    (syntax-property stx 'constraints (list (τ~ τa τb stx)) #t))
 
   ; Returns a list of all constraints in a syntax object by recursively collecting the values of the
   ; 'constraint syntax property.
@@ -158,41 +217,33 @@
 
   ; Applies a subsitution set to a type or constraint by recursively replacing all substitutable type
   ; variables with their substitutions.
-  (define (apply-subst subst stx)
-    ((current-type-eval)
-     (let recur ([stx stx])
-       (syntax-parse stx
-         #:context 'apply-subst
-         #:literals [quote]
-         ['#s(var τv:id)
-          (free-id-table-ref subst #'τv stx)]
-         ['#s(∀ τvs τ)
-          #`#s(∀ τvs #,((current-type-eval)
-                        (recur #'τ)))]
-         [(~→ τa τb)
-          #`(→ #,(recur #'τa)
-               #,(recur #'τb))]
-         [(~τ~ τa τb)
-          (datum->syntax this-syntax
-                         (syntax-e #`(τ~ #,(recur #'τa)
-                                         #,(recur #'τb)))
-                         this-syntax this-syntax)]
-         [_ stx]))))
+  (define (apply-subst subst τ)
+    (let loop ([τ τ])
+      (match τ
+        [(τvar α)
+         (free-id-table-ref subst α τ)]
+        [(∀ αs τ)
+         (∀ αs (loop τ))]
+        [(τapp τf τx)
+         (τapp (loop τf) (loop τx))]
+        [(base-type _)
+         τ]
+        [(τ~ a b src)
+         (τ~ (loop a) (loop b) src)])))
 
   ; Attempts to unify the two provided types, reporting errors in terms of the provided source syntax
   ; object.
   (define (unify τa τb #:src src)
     (if ((current-type=?) τa τb)
-        (make-immutable-free-id-table)
-        (syntax-parse (list τa τb)
-          #:literals [quote]
-          [('#s(var τv:id) τ)
-           (bind-subst #'τv #'τ)]
-          [(τ '#s(var τv:id))
-           (bind-subst #'τv #'τ)]
-          [((~→ τa τb) (~→ τc τd))
-           (unify* (list (cons #'τa #'τc)
-                         (cons #'τb #'τd))
+        empty-subst
+        (match* (τa τb)
+          [((τvar α) τ)
+           (bind-subst α τ)]
+          [(τ (τvar α))
+           (bind-subst α τ)]
+          [((→ τa τb) (→ τc τd))
+           (unify* (list (cons τa τc)
+                         (cons τb τd))
                    #:src src)]
           [(_ _)
            (raise-syntax-error #f (format "could not unify ~a with ~a"
@@ -214,16 +265,14 @@
 
   ; Given a set of constraints, attempts to solve them with unification.
   (define (solve-constraints cs)
-    (let recur ([cs cs]
-                [subst (make-immutable-free-id-table)])
+    (let loop ([cs cs]
+               [subst empty-subst])
       (if (empty? cs) subst
-          (syntax-parse (first cs)
-            #:context 'solve-constraints
-            [(~τ~ τa τb)
-             (let ([subst* (unify #'τa #'τb
-                                  #:src (get-stx-prop/car this-syntax 'constraint-source))])
-               (recur (map #{apply-subst subst* %} (rest cs))
-                      (compose-substs subst* subst)))]))))
+          (match (first cs)
+            [(τ~ τa τb src)
+             (let ([subst* (unify τa τb #:src src)])
+               (loop (map #{apply-subst subst* %} (rest cs))
+                     (compose-substs subst* subst)))]))))
 
   ; Given a substitution set, recursively walks a syntax object and retroactively replaces ': syntax
   ; properties with their inferred types after unification. Also attaches a ':-string property, which
@@ -251,24 +300,24 @@
 
 (define-syntax-parser λ
   [(_ x:id e:expr)
-   #:with τv (fresh)
-   #:with [τ [x-] e-] (infer+erase #'e #:ctx #'([x : τv]))
+   #:do [(define τv (fresh))
+         (define/infer+erase [τ [x-] e-] #'e #:ctx (list (cons #'x τv)))]
    (⊢ (λ- (x-) e-) : (→ τv τ))])
 
 (define-syntax-parser hash-percent-app
   [(_ fn arg)
-   #:with τv (fresh)
-   #:with [τ_fn [] fn-] (infer+erase #'fn)
-   #:with [τ_arg [] arg-] (infer+erase #'arg)
+   #:do [(define τv (fresh))
+         (define/infer+erase [τ_fn [] fn-] #'fn)
+         (define/infer+erase [τ_arg [] arg-] #'arg)]
    (assign-constraint (⊢ #,(syntax/loc this-syntax
                              (#%app- fn- arg-)) : τv)
-                      #'{τ_fn . τ~ . (→ τ_arg τv)})])
+                      τ_fn (→ τ_arg τv))])
 
 (define-syntax-parser hash-percent-datum
   [(_ . n:integer)
-   (⊢ (#%datum- . n) : Integer)]
+   (⊢* (#%datum- . n) : Integer)]
   [(_ . n:str)
-   (⊢ (#%datum- . n) : String)]
+   (⊢* (#%datum- . n) : String)]
   [(_ . x)
    (type-error #:src #'x #:msg "Unsupported literal: ~v" #'x)])
 
@@ -284,12 +333,12 @@
 
 (define-syntax-parser let
   [(_ [x:id val:expr] e:expr)
-   #:with [τ_val [] val-] (infer+erase #'val)
-   #:do [(define subst (solve-constraints (collect-constraints #'val-)))]
-   #:with τ_substituted (apply-subst subst #'τ_val)
-   #:with τ_generalized (generalize-type #'τ_substituted)
+   #:do [(define/infer+erase [τ_val [] val-] #'val)
+         (define subst (solve-constraints (collect-constraints #'val-)))
+         (define τ_substituted (apply-subst subst τ_val))
+         (define τ_generalized (generalize-type τ_substituted))]
    #:with val-* (⊢ val- : τ_generalized)
-   #:with [τ [x-] e-] (infer+erase #'e #:ctx #'([x : τ_generalized]))
+   #:do [(define/infer+erase [τ [x-] e-] #'e #:ctx (list (cons #'x τ_generalized)))]
    (⊢ #,(syntax/loc this-syntax
           (let- ([x- val-*]) e-))
       : τ)])
@@ -299,4 +348,4 @@
 
 (define ((+/c a) b) (+- a b))
 (define-syntax + (make-variable-like-transformer
-                  (⊢ +/c : (→ Integer (→ Integer Integer)))))
+                  (⊢* +/c : (→ Integer (→ Integer Integer)))))
