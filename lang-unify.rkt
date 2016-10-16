@@ -451,7 +451,8 @@
        (define-data-constructor τ constructor) ...)])
 
 (define-syntax-parser case
-  [(_ val:expr [pat:data-constructor-spec body:expr] ...+)
+  [(_ val:expr {~describe "a pattern-matching clause"
+                          [pat:data-constructor-spec body:expr]} ...+)
    ; ensure all provided patterns are actual data constructors
    #:do [(define invalid-constructors
            (filter-not #{data-constructor? (syntax-local-value % (thunk #f))}
@@ -496,11 +497,13 @@
                (infer+erase body-stx #:ctx (map cons pat-arg-ids pat-arg-types)))
              (values τ_body #`(#,(make-match-clause pat-arg-ids-) #,body-stx-))))]
 
-   ; add constraints that ensure all bodies produce the same type
+   ; add constraints that ensure that the value being matched is of the correct type and that all
+   ; bodies produce the same type
    (assign-constraints (assign-type (quasisyntax/loc this-syntax
                                       (match- val- #,@match-clauses))
                                     (first τ_bodies))
-                       (map #{cons (first τ_bodies) %} (rest τ_bodies)))])
+                       (list* (cons τ_val τ_required)
+                              (map #{cons (first τ_bodies) %} (rest τ_bodies))))])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; primitive operators

@@ -1,4 +1,4 @@
-#lang racket/base
+#lang curly-fn racket/base
 
 (require racket/contract
          racket/format
