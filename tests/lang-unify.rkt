@@ -2,6 +2,7 @@
 
 (require racket/function
          rackunit
+         rackunit/spec
          syntax/parse)
 
 (define (get-type stx)
@@ -45,3 +46,13 @@
                            (let ([always-int (λ x 0)]
                                  [foo (λ x (always-int x))])
                              ((foo 1) +))))))
+
+(describe ":"
+  (it "annotates expressions with types"
+    (check-equal? (get-type #'(: 3 Integer)) "Integer")
+    (check-equal? (get-type #'(: "hello" String)) "String"))
+
+  (it "causes a type error if the annotation does not typecheck"
+    (check-exn
+     #px"could not unify Integer with String"
+     (thunk (get-type #'(: "hello" Integer))))))

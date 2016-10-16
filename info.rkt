@@ -7,4 +7,5 @@
     "curly-fn-lib"
     "turnstile"))
 (define build-deps
-  '("rackunit-lib"))
+  '("rackunit-lib"
+    "rackunit-spec"))

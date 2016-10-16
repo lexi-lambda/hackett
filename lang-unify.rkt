@@ -1,6 +1,7 @@
 #lang curly-fn racket/base
 
-(provide λ let +
+(provide : λ let +
+         → Integer String
          (rename-out [hash-percent-app #%app]
                      [hash-percent-datum #%datum]
                      [hash-percent-module-begin #%module-begin]))
@@ -101,7 +102,7 @@
 
   (define type-eval
     (syntax-parser
-      #:context 'current-type-eval
+      #:context 'type-eval
       #:literals [∀]
       [τ:id
        (syntax-local-value #'τ)]
@@ -111,8 +112,7 @@
        (τapp (type-eval #'τ)
              (type-eval #'a))]
       [(τ a as ...)
-       (type-eval
-        #'((τ a) as ...))]))
+       (type-eval #'((τ a) as ...))]))
 
   (define (typeof stx)
     (get-stx-prop/car stx ':))
@@ -361,6 +361,12 @@
    #'(let1 [x val]
        (let ([xs vals] ...)
          e))])
+
+(define-syntax-parser :
+  [(_ e:expr τ-expr)
+   #:do [(define τ (type-eval #'τ-expr))
+         (define/infer+erase [τ_inferred [] e-] #'e)]
+   (assign-constraint (assign-type #'e- τ) τ τ_inferred)])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; primitive operators
