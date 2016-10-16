@@ -109,9 +109,6 @@
     (set-stx-prop/preserved stx ': τ))
 
   (define-simple-macro (⊢ e {~datum :} τ)
-    (assign-type #`e τ))
-
-  (define-simple-macro (⊢* e {~datum :} τ)
     (assign-type #`e ((current-type-eval) #`τ)))
 
   ; Generates a fresh type variable.
@@ -302,22 +299,24 @@
   [(_ x:id e:expr)
    #:do [(define τv (fresh))
          (define/infer+erase [τ [x-] e-] #'e #:ctx (list (cons #'x τv)))]
-   (⊢ (λ- (x-) e-) : (→ τv τ))])
+   (assign-type #'(λ- (x-) e-)
+                (→ τv τ))])
 
 (define-syntax-parser hash-percent-app
   [(_ fn arg)
    #:do [(define τv (fresh))
          (define/infer+erase [τ_fn [] fn-] #'fn)
          (define/infer+erase [τ_arg [] arg-] #'arg)]
-   (assign-constraint (⊢ #,(syntax/loc this-syntax
-                             (#%app- fn- arg-)) : τv)
+   (assign-constraint (assign-type (syntax/loc this-syntax
+                                     (#%app- fn- arg-))
+                                   τv)
                       τ_fn (→ τ_arg τv))])
 
 (define-syntax-parser hash-percent-datum
   [(_ . n:integer)
-   (⊢* (#%datum- . n) : Integer)]
+   (⊢ (#%datum- . n) : Integer)]
   [(_ . n:str)
-   (⊢* (#%datum- . n) : String)]
+   (⊢ (#%datum- . n) : String)]
   [(_ . x)
    (type-error #:src #'x #:msg "Unsupported literal: ~v" #'x)])
 
@@ -337,15 +336,15 @@
          (define subst (solve-constraints (collect-constraints #'val-)))
          (define τ_substituted (apply-subst subst τ_val))
          (define τ_generalized (generalize-type τ_substituted))]
-   #:with val-* (⊢ val- : τ_generalized)
+   #:with val-* (assign-type #'val- τ_generalized)
    #:do [(define/infer+erase [τ [x-] e-] #'e #:ctx (list (cons #'x τ_generalized)))]
-   (⊢ #,(syntax/loc this-syntax
-          (let- ([x- val-*]) e-))
-      : τ)])
+   (assign-type (syntax/loc this-syntax
+                  (let- ([x- val-*]) e-))
+                τ)])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; primitive operators
 
 (define ((+/c a) b) (+- a b))
 (define-syntax + (make-variable-like-transformer
-                  (⊢* +/c : (→ Integer (→ Integer Integer)))))
+                  (⊢ +/c : (→ Integer (→ Integer Integer)))))
