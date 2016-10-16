@@ -344,7 +344,7 @@
    (assign-type #'(λ- (x-) e-)
                 (→ τv τ))])
 
-(define-syntax-parser hash-percent-app
+(define-syntax-parser hash-percent-app1
   [(_ fn arg)
    #:do [(define τv (fresh))
          (define/infer+erase [τ_fn [] fn-] #'fn)
@@ -353,6 +353,12 @@
                                      (#%app- fn- arg-))
                                    τv)
                       τ_fn (→ τ_arg τv))])
+
+(define-syntax-parser hash-percent-app
+  [(_ fn arg)
+   #'(hash-percent-app1 fn arg)]
+  [(_ fn arg args ...+)
+   #'(hash-percent-app (hash-percent-app fn arg) args ...)])
 
 (define-syntax-parser hash-percent-datum
   [(_ . n:integer)

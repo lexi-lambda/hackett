@@ -27,7 +27,7 @@
                (const id))))
 
 (check-equal? (get-type #'(let ([const (λ y (λ z z))])
-                            ((const 1) "hello")))
+                            (const 1 "hello")))
               "String")
 
 (check-equal? (get-type #'(let ([id (λ x x)])
@@ -45,7 +45,7 @@
  (thunk (expand-syntax #'(module m rascal/lang-unify
                            (let ([always-int (λ x 0)]
                                  [foo (λ x (always-int x))])
-                             ((foo 1) +))))))
+                             (foo 1 +))))))
 
 (describe ":"
   (it "annotates expressions with types"
