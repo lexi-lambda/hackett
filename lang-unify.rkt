@@ -1,7 +1,8 @@
 #lang curly-fn racket/base
 
-(provide : λ let data case _ +
+(provide : λ let data case _
          → Integer String
+         + - *
          (rename-out [hash-percent-app #%app]
                      [hash-percent-datum #%datum]
                      [hash-percent-module-begin #%module-begin]))
@@ -588,7 +589,7 @@
              #'(begin-
                  (define- tag-
                    (let- ()
-                     (struct- constructor.tag () #:transparent)
+                     (struct- constructor.tag ())
                      (constructor.tag)))
                  (define-syntax constructor.tag
                    (let ([τ_val (generalize-type τ_result)])
@@ -646,6 +647,13 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; primitive operators
 
+(define-simple-macro (define-primop id:id [e:expr {~datum :} τ])
+  (define-syntax id (make-variable-like-transformer (⊢ e : τ))))
+
 (define ((+/c a) b) (+- a b))
-(define-syntax + (make-variable-like-transformer
-                  (⊢ +/c : (→ Integer (→ Integer Integer)))))
+(define ((-/c a) b) (-- a b))
+(define ((*/c a) b) (*- a b))
+
+(define-primop + [+/c : (→ Integer (→ Integer Integer))])
+(define-primop - [-/c : (→ Integer (→ Integer Integer))])
+(define-primop * [*/c : (→ Integer (→ Integer Integer))])
