@@ -1,6 +1,6 @@
 #lang curly-fn racket/base
 
-(provide : λ let +
+(provide : λ let data case +
          → Integer String
          (rename-out [hash-percent-app #%app]
                      [hash-percent-datum #%datum]
@@ -8,7 +8,8 @@
 
 (require (for-syntax macrotypes/stx-utils
                      racket/base
-                     racket/hash
+                     racket/format
+                     racket/function
                      racket/list
                      racket/match
                      racket/syntax
@@ -21,7 +22,10 @@
          (only-in macrotypes/typecheck
                   postfix-in type-error
                   get-stx-prop/car)
-         (postfix-in - racket/base)
+         (postfix-in - (combine-in racket/base
+                                   racket/function
+                                   racket/match
+                                   racket/splicing))
          (prefix-in kernel: '#%kernel)
          syntax/parse/define)
 
@@ -31,15 +35,19 @@
 (begin-for-syntax
   (struct ∀ (τvars τ) #:prefab)
   (struct τ~ (a b src) #:prefab)
-  (struct base-type (id) #:prefab)
+  (struct base-type (id constructors) #:prefab)
   (struct τvar (id) #:prefab)
   (struct τapp (τ arg) #:prefab))
 
 (define-syntax (∀ stx) (raise-syntax-error #f "∀ cannot be used as an expression" stx))
 
-(define-simple-macro (define-base-type τ:id {~optional {~seq #:arity arity:nat}
-                                                       #:defaults ([arity #'0])})
-  #:with τ-proc (generate-temporary #'τ)
+(define-simple-macro (define-base-type τ:id
+                       {~or {~optional {~seq #:arity arity:nat}
+                                       #:defaults ([arity #'0])}
+                            {~optional {~seq #:constructors constructors:expr}
+                                       #:defaults ([constructors #'#f])}}
+                       ...)
+  #:with τ-value (generate-temporary #'τ)
   #:with [τ_arg ...] (generate-temporaries (make-list (syntax-e #'arity) #f))
   #:do [(define (make-nested-τapps base-stx)
           (let loop ([acc base-stx]
@@ -47,13 +55,17 @@
             (if (empty? vars) acc
                 (loop #`(τapp #,acc #,(first vars))
                       (rest vars)))))]
-  #:with nested-τapps-pat (make-nested-τapps #'(base-type (? (λ (id) (free-identifier=? #'τ id)))))
-  #:with nested-τapps-constructor (make-nested-τapps #'(base-type #'τ))
+  #:with nested-τapps-pat (make-nested-τapps #'(base-type (? (λ (id) (free-identifier=? #'τ id))) _))
+  #:with nested-τapps-constructor (make-nested-τapps #'(base-type #'τ constructors))
+  #:with value-definition
+         (if (zero? (syntax-e (attribute arity)))
+             #'(define τ-proc nested-τapps-constructor)
+             #'(define (τ-proc τ_arg ...)
+                 nested-τapps-constructor))
   (begin
-    (define-syntax τ (base-type #'τ))
+    (define-syntax τ (base-type #'τ constructors))
     (begin-for-syntax
-      (define (τ-proc τ_arg ...)
-        nested-τapps-constructor)
+      value-definition
       (define-match-expander τ
         (syntax-parser
           [(_ {~var τ_arg id} ...)
@@ -79,7 +91,7 @@
      (format "(τ~~ ~a ~a)" (type->string τa) (type->string τb))]
     [((τapp τf τx))
      (format "(~a ~a)" (type->string τf) (type->string τx))]
-    [((base-type id))
+    [((base-type id _))
      (symbol->string (syntax-e id))])
 
   ; explicitly list all cases instead of having a fallback case to get better error messages when a
@@ -90,10 +102,10 @@
       (free-identifier=? a b)]
      [((τvar _) _) #f]
      [(_ (τvar _)) #f]
-     [((base-type a) (base-type b))
+     [((base-type a _) (base-type b _))
       (free-identifier=? a b)]
-     [((base-type _) _) #f]
-     [(_ (base-type _)) #f]
+     [((base-type _ _) _) #f]
+     [(_ (base-type _ _)) #f]
      [((τapp τf τx) (τapp τg τy))
       (and (type=? τf τg)
            (type=? τx τy))]
@@ -135,16 +147,11 @@
            (for/list ([x-stx (in-list xs)])
              (let ([tmp (generate-temporary x-stx)])
                (datum->syntax tmp (syntax-e tmp) x-stx))))
-         ; We can’t directly embed types into syntax, since they are literal data, and quoting them
-         ; messes up syntax objects inside of prefab structs. Instead, we can cheat by attaching a
-         ; syntax property containing the type to a syntax object, then pull it off using typeof
-         ; before calling instantiate-type.
-         (define/syntax-parse [τ: ...]
-           (for/list ([τ (in-list τs)])
-             (syntax-property #'prop-holder ': τ)))
+         (define/syntax-parse [τ-proxy ...] (map property-proxy τs))
          #`(λ- (x- ...)
                (let-syntax ([x (make-variable-like-transformer/thunk
-                                (λ () (assign-type #'x- (instantiate-type (typeof #'τ:)))))]
+                                (λ () (assign-type #'x- (instantiate-type
+                                                         (property-proxy-value #'τ-proxy)))))]
                             ...)
                  #,stx))]))
     (define-values [τ xs- stx-]
@@ -185,7 +192,7 @@
          (remove-duplicates (append (collect-vars τf)
                                     (collect-vars τx))
                             free-identifier=?)]
-        [(base-type _)
+        [(base-type _ _)
          '()]))
     (let ([free-vars (collect-vars τ)])
       (if (empty? free-vars) τ
@@ -199,6 +206,11 @@
   ; property. Calls syntax-local-introduce and type-eval on the provided constraint.
   (define (assign-constraint stx τa τb)
     (syntax-property stx 'constraints (list (τ~ τa τb stx)) #t))
+
+  ; Like assign-constraint, but accepts a list of pairs and produces a set of constraints instead of a
+  ; single contraint.
+  (define (assign-constraints stx τ-pairs)
+    (syntax-property stx 'constraints (map #{τ~ (car %) (cdr %) stx} τ-pairs) #t))
 
   ; Returns a list of all constraints in a syntax object by recursively collecting the values of the
   ; 'constraint syntax property.
@@ -235,7 +247,7 @@
          (∀ αs (loop τ))]
         [(τapp τf τx)
          (τapp (loop τf) (loop τx))]
-        [(base-type _)
+        [(base-type _ _)
          τ]
         [(τ~ a b src)
          (τ~ (loop a) (loop b) src)])))
@@ -305,7 +317,7 @@
        stx))))
 
 ;; ---------------------------------------------------------------------------------------------------
-;; typed forms
+;; general typed forms
 
 (define-syntax-parser λ
   [(_ x:id e:expr)
@@ -367,6 +379,128 @@
    #:do [(define τ (type-eval #'τ-expr))
          (define/infer+erase [τ_inferred [] e-] #'e)]
    (assign-constraint (assign-type #'e- τ) τ τ_inferred)])
+
+;; ---------------------------------------------------------------------------------------------------
+;; ADTs
+
+(begin-for-syntax
+  (define →/curried
+    (match-lambda*
+      [(list τa τb)
+       (→ τa τb)]
+      [(list τ τs ...)
+       (→ τ (apply →/curried τs))]))
+
+  (define-syntax-class data-constructor-spec
+    #:attributes [tag [arg 1] len nullary?]
+    #:description #f
+    [pattern tag:id
+             #:attr [arg 1] '()
+             #:attr len 0
+             #:attr nullary? #t]
+    [pattern {~and norm (tag:id arg ...+)}
+             #:attr len (length (attribute arg))
+             #:attr nullary? #f]
+    [pattern {~and (tag:id)
+                   {~fail (~a "data constructors without arguments should not be enclosed in "
+                              "parentheses; perhaps you meant ‘" (syntax-e #'tag) "’?")}}
+             #:attr [arg 1] #f
+             #:attr len #f
+             #:attr nullary? #f])
+
+  (struct data-constructor (macro base-type arg-types match-clause)
+    #:property prop:procedure 0))
+
+(define-syntax-parser define-data-constructor
+  [(_ τ:id constructor:data-constructor-spec)
+   #:with tag- (generate-temporary #'constructor.tag)
+   #:with tag-/curried (generate-temporary #'constructor.tag)
+   #:with [τ_arg-proxy ...] (map #{property-proxy (type-eval %)} (attribute constructor.arg))
+   #:with [field ...] (generate-temporaries #'(constructor.arg ...))
+   #`(begin-
+       ; check if the constructor is nullary or not
+       #,(if (attribute constructor.nullary?)
+             ; if it is, just define a value
+             #'(begin-
+                 (define- tag-
+                   (let- ()
+                     (struct- constructor.tag () #:transparent)
+                     (constructor.tag)))
+                 (define-syntax constructor.tag
+                   (data-constructor (make-variable-like-transformer
+                                      (assign-type #'tag- τ))
+                                     τ '() (λ (_) #'(==- tag-)))))
+             ; if it isn’t, define a constructor function, but preserve the original `struct`-defined
+             ; id as a syntax property (to be used with Racket’s `match`)
+             #'(splicing-local- [(struct- tag- (field ...) #:transparent
+                                   #:reflection-name 'constructor.tag)
+                                 (define- tag-/curried (curry- tag-))]
+                 (define-syntax constructor.tag
+                   (data-constructor
+                    (make-variable-like-transformer
+                     (assign-type #'tag-/curried
+                                  (→/curried (property-proxy-value #'τ_arg-proxy) ...
+                                             τ)))
+                    τ (list (property-proxy-value #'τ_arg-proxy) ...)
+                    (λ (ids) #`(tag- . #,ids)))))))])
+
+(define-syntax-parser data
+  [(_ τ:id constructor:data-constructor-spec ...)
+   #'(begin-
+       (define-base-type τ #:constructors (list #'constructor ...))
+       (define-data-constructor τ constructor) ...)])
+
+(define-syntax-parser case
+  [(_ val:expr [pat:data-constructor-spec body:expr] ...+)
+   ; ensure all provided patterns are actual data constructors
+   #:do [(define invalid-constructors
+           (filter-not #{data-constructor? (syntax-local-value % (thunk #f))}
+                       (attribute pat.tag)))]
+   #:fail-unless (empty? invalid-constructors)
+                 (if (= 1 (length invalid-constructors))
+                     (~a (syntax-e (first invalid-constructors))
+                         " is not bound to a data constructor")
+                     (~a (identifiers->english-list invalid-constructors)
+                         " are not bound to data constructors"))
+
+   ; get the type we’re destructuring on
+   #:do [(define data-constructors (map syntax-local-value (attribute pat.tag)))
+         (define τ_required (data-constructor-base-type (first data-constructors)))
+         (define/infer+erase [τ_val [] val-] #'val)]
+   #:with [constructor:data-constructor-spec ...] (base-type-constructors τ_required)
+
+   ; assert that all of the tags are actually constructors of τ_val
+   #:do [(for ([pat-stx (in-list (attribute pat))]
+               [pat-tag-stx (in-list (attribute pat.tag))])
+           (unless (member pat-tag-stx (attribute constructor.tag) free-identifier=?)
+             (raise-syntax-error #f (~a "‘" (syntax-e pat-tag-stx) "’ is not a visible constructor of"
+                                        " ‘" (type->string τ_required) "’")
+                                 this-syntax pat-stx)))]
+
+   ; perform exhaustiveness checking
+   #:do [(define missing-tags (filter-not #{member % (attribute pat.tag) free-identifier=?}
+                                          (attribute constructor.tag)))]
+   #:fail-unless (empty? missing-tags)
+                 (~a "not all cases of type ‘" (type->string τ_required) "’ are accounted for "
+                     "(missing " (identifiers->english-list missing-tags) ")")
+
+   ; expand all the bodies
+   #:do [(define-values [τ_bodies match-clauses]
+           (for/lists [τ_bodies match-clauses]
+                      ([pat-arg-ids (in-list (attribute pat.arg))]
+                       [pat-arg-types (in-list (map data-constructor-arg-types data-constructors))]
+                       [body-stx (in-list (attribute body))]
+                       [make-match-clause (in-list (map data-constructor-match-clause
+                                                        data-constructors))])
+             (define-values [τ_body pat-arg-ids- body-stx-]
+               (infer+erase body-stx #:ctx (map cons pat-arg-ids pat-arg-types)))
+             (values τ_body #`(#,(make-match-clause pat-arg-ids-) #,body-stx-))))]
+
+   ; add constraints that ensure all bodies produce the same type
+   (assign-constraints (assign-type (quasisyntax/loc this-syntax
+                                      (match- val- #,@match-clauses))
+                                    (first τ_bodies))
+                       (map #{cons (first τ_bodies) %} (rest τ_bodies)))])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; primitive operators

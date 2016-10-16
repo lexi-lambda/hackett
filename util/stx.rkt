@@ -1,8 +1,10 @@
 #lang racket/base
 
 (require racket/contract
+         racket/format
          racket/list
          racket/match
+         racket/string
          syntax/id-table
          syntax/parse)
 
@@ -10,8 +12,11 @@
  (contract-out
   [make-variable-like-transformer/thunk ((-> syntax?) . -> . (syntax? . -> . syntax?))]
   [collect-properties (syntax? any/c . -> . list?)]
+  [identifiers->english-list ((listof identifier?) . -> . string?)]
   [free-id-table-union (immutable-free-id-table? immutable-free-id-table?
-                        . -> . immutable-free-id-table?)]))
+                        . -> . immutable-free-id-table?)]
+  [property-proxy (any/c . -> . syntax?)]
+  [property-proxy-value (syntax? . -> . any/c)]))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; general syntax object utilities
@@ -55,6 +60,15 @@
                (recur #'cdr))]
       [_ (get-properties this-syntax)])))
 
+; Renders a list of quoted identifiers to an English string, including an Oxford comma. Useful for
+; error messages.
+(define identifiers->english-list
+  (match-lambda
+    [(list id)  (~a "‘" (symbol->string (syntax-e id)) "’")]
+    [(list a b) (~a "‘" (symbol->string (syntax-e a)) "’ and ‘" (symbol->string (syntax-e b)) "’")]
+    [ids        (string-join (map #{symbol->string (syntax-e %)} ids) "’, ‘"
+                             #:before-last "’, and ‘" #:before-first "‘" #:after-last "’")]))
+
 ;; ---------------------------------------------------------------------------------------------------
 ;; free id tables
 
@@ -66,3 +80,21 @@
     (for ([(k v) (in-free-id-table a)])
       (free-id-table-set! t k v))
     (make-immutable-free-id-table t)))
+
+;; ---------------------------------------------------------------------------------------------------
+;; property proxies
+
+; Sometimes, it is useful to embed a value in a piece of syntax. Normally, this is easily achievable
+; using quasisyntax/unsyntax, but in the case of embedding prefab structs, the macroexpander will
+; mess with their contents. Specifically, if a prefab struct contains a syntax object, then the prefab
+; struct is embedded in a piece of syntax, the macroexpander will “flatten” it such that the syntax
+; information is lost.
+;
+; An easy way around this is to attach the value to a syntax property, which the macroexpander will
+; not touch. These are some very simple helper functions for making that intent explicit.
+
+(define (property-proxy val)
+  (syntax-property #'proxy 'proxy-value val))
+
+(define (property-proxy-value stx)
+  (syntax-property stx 'proxy-value))
