@@ -1,7 +1,7 @@
 #lang curly-fn racket/base
 
-(provide : λ let data case _
-         → Integer String
+(provide : λ let letrec data case _
+         ∀ → Integer String
          + - *
          (rename-out [hash-percent-app #%app]
                      [hash-percent-datum #%datum]
@@ -32,6 +32,10 @@
                                    racket/splicing))
          (prefix-in kernel: '#%kernel)
          syntax/parse/define)
+
+(module+ internal
+  (provide (for-syntax solve-constraints τ~ → τvar τvar-id)
+           define-base-type))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; module reader
@@ -119,7 +123,12 @@
       (and (type=? τf τg)
            (type=? τx τy))]
      [((τapp _ _) _) #f]
-     [(_ (τapp _ _)) #f]))
+     [(_ (τapp _ _)) #f]
+     [({and τa (∀ αs _)} {and τb (∀ βs _)})
+      (and (= (length αs) (length βs))
+           (let ([τvars (map fresh αs)])
+             (type=? (instantiate-type-with τa τvars)
+                     (instantiate-type-with τb τvars))))]))
 
   (define current-type-var-environment
     (make-parameter (make-immutable-free-id-table)))
@@ -139,7 +148,9 @@
            (or (free-id-table-ref (current-type-var-environment) #'τ #f)
                (syntax-local-value #'τ))]
           [(∀ [α:id ...] τ)
-           (∀ (attribute α) (loop #'τ))]
+           #:do [(define α-types (map fresh (attribute α)))
+                 (define α-ids (map τvar-id α-types))]
+           (∀ α-ids (type-eval #'τ #:ctx (map cons (attribute α) α-types)))]
           [(τ a)
            (τapp (loop #'τ)
                  (loop #'a))]
@@ -184,13 +195,47 @@
          (values (typeof #'body) #'xs- #'body)]))
     (values τ xs- stx-))
 
-  (define-simple-macro (define/infer+erase [τ:id xs-pat stx-pat] args ...)
+  (define-simple-macro (define/infer+erase [τ xs-pat stx-pat] args ...)
     #:with xs-tmp (generate-temporary #'xs-pat)
     #:with stx-tmp (generate-temporary #'stx-pat)
     (begin
-      (define-values [τ xs-tmp stx-tmp] (infer+erase args ...))
+      (match-define-values [τ xs-tmp stx-tmp] (infer+erase args ...))
       (define/syntax-parse xs-pat xs-tmp)
       (define/syntax-parse stx-pat stx-tmp)))
+
+  ; like infer+erase, but over a list of stxs
+  (define (infers+erase stxs #:ctx [ctx '()])
+    (define wrapped-stx
+      (match ctx
+        [(list (cons xs τs) ...)
+         (define/syntax-parse [x ...] xs)
+         (define/syntax-parse [x- ...]
+           (for/list ([x-stx (in-list xs)])
+             (let ([tmp (generate-temporary x-stx)])
+               (datum->syntax tmp (syntax-e tmp) x-stx))))
+         (define/syntax-parse [τ-proxy ...] (map property-proxy τs))
+         #`(λ- (x- ...)
+               (let-syntax ([x (make-variable-like-transformer/thunk
+                                (λ () (assign-type #'x- (instantiate-type
+                                                         (property-proxy-value #'τ-proxy)))))]
+                            ...)
+                 #,@stxs))]))
+    (define-values [τs xs- stxs-]
+      (syntax-parse (local-expand wrapped-stx 'expression null)
+        #:literals [kernel:lambda kernel:let-values]
+        [(kernel:lambda xs-
+           (kernel:let-values _
+             (kernel:let-values _ bodies ...)))
+         (values (map typeof (attribute bodies)) #'xs- (attribute bodies))]))
+    (values τs xs- stxs-))
+
+  (define-simple-macro (define/infers+erase [τs xs-pat stxs-pat] args ...)
+    #:with xs-tmp (generate-temporary #'xs-pat)
+    #:with stxs-tmp (generate-temporary #'stxs-pat)
+    (begin
+      (match-define-values [τs xs-tmp stxs-tmp] (infers+erase args ...))
+      (define/syntax-parse xs-pat xs-tmp)
+      (define/syntax-parse stxs-pat stxs-tmp)))
 
   ; Given a type, replaces universally quantified type variables with fresh type variables.
   (define instantiate-type
@@ -199,9 +244,27 @@
        (apply-subst
         (make-immutable-free-id-table
          (for/list ([var (in-list αs)])
-           (cons var (fresh))))
+           (cons var (fresh var))))
         τ)]
       [τ τ]))
+
+  ; Instantiates a type with a particular set of type variables. It is the responsibility of the
+  ; caller to ensure the provided type variables are unique.
+  (define (instantiate-type-with τ τvars)
+    (match τ
+      [(∀ αs τ)
+       (unless (= (length αs) (length τvars))
+         (raise-arguments-error 'instantiate-type-with
+                                (~a "the number of provided type variables does not match the number "
+                                    "of quantified type variables in the provided type")
+                                "τ" τ
+                                "τvars" τvars))
+       (apply-subst
+        (make-immutable-free-id-table
+         (for/list ([α (in-list αs)]
+                    [τvar (in-list τvars)])
+           (cons α τvar)))
+        τ)]))
 
   ; Given a type, finds all free type variables and universally quantifies them using ∀.
   (define (generalize-type τ)
@@ -306,7 +369,7 @@
               [subst* (unify* (map cons (map #{apply-subst subst %} τas)
                                         (map #{apply-subst subst %} τbs))
                               #:src src)])
-         (compose-substs subst subst*))]))
+         (compose-substs subst* subst))]))
 
   ; Given a set of constraints, attempts to solve them with unification.
   (define (solve-constraints cs)
@@ -415,6 +478,33 @@
    #:do [(define τ (type-eval #'τ-expr))
          (define/infer+erase [τ_inferred [] e-] #'e)]
    (assign-constraint (assign-type #'e- τ) τ τ_inferred)])
+
+(define-syntax-parser letrec
+  #:literals [:]
+  [(_ ([x:id : τ-ann val:expr] ...) body:expr)
+   #:do [(define τs_ann (map type-eval (attribute τ-ann)))
+         (define/infers+erase [{list* τ_body τs_inferred} [x- ...] [body- val- ...]]
+           (cons #'body (attribute val))
+           #:ctx (map cons (attribute x) τs_ann))
+         (define subst (solve-constraints (collect-constraints #'(val- ...))))
+         (match-define {list* τ_body_substituted τs_substituted}
+           (map #{apply-subst subst %} (list* τ_body τs_inferred)))
+         (define τs_generalized (map generalize-type τs_substituted))
+         (define τ_invalid (for/or ([x-id (in-list (attribute x))]
+                                    [τ_ann (in-list τs_ann)]
+                                    [τ_generalized (in-list τs_generalized)])
+                             (and (not (type=? τ_ann τ_generalized))
+                                  (list x-id τ_ann τ_generalized))))]
+   #:fail-when τ_invalid
+               (~a "the inferred type of ‘" (syntax-e (first τ_invalid)) "’ does not match the "
+                   "provided type annotation\n"
+                   "  annotated: " (type->string (second τ_invalid)) "\n"
+                   "  inferred: " (type->string (third τ_invalid)))
+   #:with [val-generalized ...] (map assign-type (attribute val-) τs_generalized)
+   (assign-constraints (assign-type (syntax/loc this-syntax
+                                      (letrec- ([x- val-generalized] ...) body-))
+                                    τ_body_substituted)
+                       (map cons τs_ann τs_generalized))])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; ADTs

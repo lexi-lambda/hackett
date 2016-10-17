@@ -1,5 +1,7 @@
 #lang rascal
 
+#|
+
 (data Bool true false)
 
 (data (Maybe a)
@@ -21,3 +23,21 @@
    (from-maybe 0 nothing)
    (from-maybe "" (just "hello"))
    (from-maybe "" nothing)))
+
+|#
+
+(data (List a)
+      (cons a (List a))
+      nil)
+
+(letrec ([flip : (∀ [a b c] (→ (→ a (→ b c))
+                               (→ b (→ a c))))
+               (λ (f x y) (f y x))]
+         [foldl : (∀ [b a] (→ (→ b (→ a b)) (→ b (→ (List a) b))))
+                (λ (f acc lst)
+                  (case lst
+                    [nil acc]
+                    [(cons x xs) (foldl f (f acc x) xs)]))]
+         [reverse : (∀ [a] (→ (List a) (List a)))
+                  (foldl (flip cons) nil)])
+  (reverse (cons 1 (cons 2 nil))))
