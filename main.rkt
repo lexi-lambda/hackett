@@ -171,29 +171,9 @@
     (τvar (generate-temporary base)))
 
   (define (infer+erase stx #:ctx [ctx '()])
-    (define wrapped-stx
-      (match ctx
-        [(list (cons xs τs) ...)
-         (define/syntax-parse [x ...] xs)
-         (define/syntax-parse [x- ...]
-           (for/list ([x-stx (in-list xs)])
-             (let ([tmp (generate-temporary x-stx)])
-               (datum->syntax tmp (syntax-e tmp) x-stx))))
-         (define/syntax-parse [τ-proxy ...] (map property-proxy τs))
-         #`(λ- (x- ...)
-               (let-syntax ([x (make-variable-like-transformer/thunk
-                                (λ () (assign-type #'x- (instantiate-type
-                                                         (property-proxy-value #'τ-proxy)))))]
-                            ...)
-                 #,stx))]))
-    (define-values [τ xs- stx-]
-      (syntax-parse (local-expand wrapped-stx 'expression null)
-        #:literals [kernel:lambda kernel:let-values]
-        [(kernel:lambda xs-
-           (kernel:let-values _
-             (kernel:let-values _ body)))
-         (values (typeof #'body) #'xs- #'body)]))
-    (values τ xs- stx-))
+    (define-values [τs xs- stxs-]
+      (infers+erase (list stx) #:ctx ctx))
+    (values (first τs) xs- (first stxs-)))
 
   (define-simple-macro (define/infer+erase [τ xs-pat stx-pat] args ...)
     #:with xs-tmp (generate-temporary #'xs-pat)
