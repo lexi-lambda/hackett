@@ -170,11 +170,13 @@
   (define (fresh [base 'g])
     (τvar (generate-temporary base)))
 
+  ; Like infers+erase, but for a single syntax object instead of a list.
   (define (infer+erase stx #:ctx [ctx '()])
     (define-values [τs xs- stxs-]
       (infers+erase (list stx) #:ctx ctx))
     (values (first τs) xs- (first stxs-)))
 
+  ; Like define/infers+erase, but with the single syntax object behavior of infer+erase.
   (define-simple-macro (define/infer+erase [τ xs-pat stx-pat] args ...)
     #:with xs-tmp (generate-temporary #'xs-pat)
     #:with stx-tmp (generate-temporary #'stx-pat)
@@ -183,32 +185,76 @@
       (define/syntax-parse xs-pat xs-tmp)
       (define/syntax-parse stx-pat stx-tmp)))
 
-  ; like infer+erase, but over a list of stxs
+  ; The main inference function. Expands all of stxs within the context of ctx. This function does
+  ; three main things:
+  ;
+  ;  1. It invokes local-expand on each of the syntax objects provided to it. Before calling
+  ;     local-expand, it binds each of the identifiers in ctx to a syntax transformer that expands
+  ;     to a reference to a fresh location, with the type provided in ctx attached as a syntax
+  ;     property.
+  ;
+  ;  2. After expansion, it collects the types of the resulting syntax objects into a list.
+  ;     Additionally, it collects the identifiers used to create fresh locations into a list, which
+  ;     must be put in scope by the caller of infers+erase so that they are accessible by the bodies.
+  ;
+  ;     These three things (expanded syntax objects, result types, and fresh identifiers) are returned
+  ;     from infers+erase as three return values, in the following order:
+  ;
+  ;       (values types fresh-ids expanded-stxs)
+  ;
+  ;  3. Finally, infers+erase also automatically attaches disappeared-use and disappeared-binding
+  ;     syntax properties as necessary in order to cooperate with Check Syntax. (This is necessary
+  ;     since the identifiers used in the source syntax are erased and replaced with the generated
+  ;     fresh locations mentioned earlier.)
+  ;
+  ;    (listof syntax?)
+  ;    (listof (cons/c identifier? type?))
+  ; -> (values (listof type?)
+  ;            (listof identifier?)
+  ;            (listof syntax?))
   (define (infers+erase stxs #:ctx [ctx '()])
-    (define wrapped-stx
+    (define-values [wrapped-stx disappeared-bindings]
       (match ctx
         [(list (cons xs τs) ...)
          (define/syntax-parse [x ...] xs)
          (define/syntax-parse [x- ...]
            (for/list ([x-stx (in-list xs)])
              (let ([tmp (generate-temporary x-stx)])
-               (datum->syntax tmp (syntax-e tmp) x-stx))))
+               (propagate-original-for-check-syntax
+                (syntax-local-introduce x-stx)
+                (datum->syntax tmp (syntax-e tmp) x-stx x-stx)))))
+         (define/syntax-parse [x-introduced ...] (map syntax-local-introduce (attribute x-)))
          (define/syntax-parse [τ-proxy ...] (map property-proxy τs))
-         #`(λ- (x- ...)
-               (let-syntax ([x (make-variable-like-transformer/thunk
-                                (λ () (assign-type #'x- (instantiate-type
-                                                         (property-proxy-value #'τ-proxy)))))]
-                            ...)
-                 #,@stxs))]))
+         (values
+          #`(λ- (x- ...)
+                (let-syntax ([x (make-variable-like-transformer/thunk
+                                 (λ (id) (syntax-property
+                                          (assign-type #'x- (instantiate-type
+                                                             (property-proxy-value #'τ-proxy)))
+                                          'disappeared-use
+                                          (list (propagate-original-for-check-syntax
+                                                 (syntax-local-introduce id)
+                                                 (datum->syntax #'x-introduced
+                                                                (syntax-e #'x-introduced)
+                                                                id id))))))]
+                             ...)
+                  #,@stxs))
+          (attribute x-))]))
     (define-values [τs xs- stxs-]
       (syntax-parse (local-expand wrapped-stx 'expression null)
         #:literals [kernel:lambda kernel:let-values]
         [(kernel:lambda xs-
            (kernel:let-values _
              (kernel:let-values _ bodies ...)))
-         (values (map typeof (attribute bodies)) #'xs- (attribute bodies))]))
+         (values (map typeof (attribute bodies)) #'xs-
+                 (map #{syntax-property % 'disappeared-binding disappeared-bindings}
+                      (attribute bodies)))]))
     (values τs xs- stxs-))
 
+  ; A helper macro for making it easier to consume the results of infers+erase. Since infers+erase
+  ; produces three values, two of which are syntax, it is useful to bind the syntax values to pattern
+  ; variables that cooperate with `syntax`, which this macro automatically does. Additionally, it
+  ; binds the single value result, the types, in a position that accepts `match` patterns.
   (define-simple-macro (define/infers+erase [τs xs-pat stxs-pat] args ...)
     #:with xs-tmp (generate-temporary #'xs-pat)
     #:with stxs-tmp (generate-temporary #'stxs-pat)

@@ -1,6 +1,6 @@
 #lang rascal
 
-#|
+;#|
 
 (data Bool true false)
 
@@ -24,7 +24,9 @@
    (from-maybe "" (just "hello"))
    (from-maybe "" nothing)))
 
-|#
+;|#
+
+;#|
 
 (data (List a)
       (cons a (List a))
@@ -41,3 +43,5 @@
          [reverse : (∀ [a] (→ (List a) (List a)))
                   (foldl (flip cons) nil)])
   (reverse (cons 1 (cons 2 nil))))
+
+;|#

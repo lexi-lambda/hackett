@@ -10,9 +10,14 @@
 
 (provide
  (contract-out
-  [make-variable-like-transformer/thunk ((-> syntax?) . -> . (syntax? . -> . syntax?))]
+  [make-variable-like-transformer/thunk ((or/c (-> syntax?)
+                                               (syntax? . -> . syntax?))
+                                         . -> . (syntax? . -> . syntax?))]
   [collect-properties (syntax? any/c . -> . list?)]
   [identifiers->english-list ((listof identifier?) . -> . string?)]
+  [original-for-check-syntax (syntax? . -> . syntax?)]
+  [original-for-check-syntax? (syntax? . -> . boolean?)]
+  [propagate-original-for-check-syntax (syntax? syntax? . -> . syntax?)]
   [free-id-table-union (immutable-free-id-table? immutable-free-id-table?
                         . -> . immutable-free-id-table?)]
   [property-proxy (any/c . -> . syntax?)]
@@ -28,7 +33,9 @@
     (syntax-case stx ()
       [id
        (identifier? #'id)
-       (ref-stx)]
+       (if (procedure-arity-includes? ref-stx 1)
+           (ref-stx #'id)
+           (ref-stx))]
       [(id . args)
        (let ([stx* (list* '#%app #'id (cdr (syntax-e stx)))])
          (datum->syntax stx stx* stx stx))])))
@@ -68,6 +75,25 @@
     [(list a b) (~a "‘" (symbol->string (syntax-e a)) "’ and ‘" (symbol->string (syntax-e b)) "’")]
     [ids        (string-join (map #{symbol->string (syntax-e %)} ids) "’, ‘"
                              #:before-last "’, and ‘" #:before-first "‘" #:after-last "’")]))
+
+; Marks an identifier as original with the property that Check Syntax understands.
+(define (original-for-check-syntax stx)
+  (syntax-property stx 'original-for-check-syntax #t))
+
+; Checks if an identifier is considered original by Check Syntax. Note that if the identifier has been
+; provided to a syntax transformer, it has a macro-introduction scope on it, so you must call
+; syntax-local-introduce first to get a completely accurate answer.
+(define (original-for-check-syntax? stx)
+  (or (syntax-original? stx)
+      (syntax-property stx 'original-for-check-syntax)))
+
+; Marks an identifier as original for check syntax if the provided piece of syntax is considered
+; original by check syntax. The same caveat about macro-introduction scopes applies to the src-stx
+; argument of this function as mentioned for original-for-check-syntax?.
+(define (propagate-original-for-check-syntax src-stx result-stx)
+  (if (original-for-check-syntax? src-stx)
+      (original-for-check-syntax result-stx)
+      result-stx))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; free id tables
