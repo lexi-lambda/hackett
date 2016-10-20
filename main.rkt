@@ -112,6 +112,14 @@
               ([(id τ) (in-dict ctx)])
       (free-id-table-set env id τ)))
 
+  (define type-free-vars
+    (match-lambda
+      [(τvar α) (list α)]
+      [(base-type _ _) '()]
+      [(τapp τa τb) (remove-duplicates (append (type-free-vars τa)
+                                               (type-free-vars τb))
+                                       free-identifier=?)]))
+
   (define (type-eval stx #:ctx [ctx '()])
     (parameterize ([current-type-var-environment (extend-type-var-environment ctx)])
       (let loop ([stx stx])
@@ -123,8 +131,13 @@
                (syntax-local-value #'τ))]
           [(∀ [α:id ...] τ)
            #:do [(define α-types (map fresh (attribute α)))
-                 (define α-ids (map τvar-id α-types))]
-           (∀ α-ids (type-eval #'τ #:ctx (map cons (attribute α) α-types)))]
+                 (define α-ids (map τvar-id α-types))
+                 (define τ* (type-eval #'τ #:ctx (map cons (attribute α) α-types)))
+                 ; call type-free-vars to get the order the type variables appear in τ; this assures
+                 ; they will have a canonical order, which allows type=? to work more easily
+                 (define α-ids* (filter #{member % α-ids free-identifier=?}
+                                        (type-free-vars τ*)))]
+           (∀ α-ids* τ*)]
           [(τ a)
            (τapp (loop #'τ)
                  (loop #'a))]
@@ -268,17 +281,7 @@
 
   ; Given a type, finds all free type variables and universally quantifies them using ∀.
   (define (generalize-type τ)
-    (define collect-vars
-      (match-lambda
-        [(τvar α)
-         (list α)]
-        [(τapp τf τx)
-         (remove-duplicates (append (collect-vars τf)
-                                    (collect-vars τx))
-                            free-identifier=?)]
-        [(base-type _ _)
-         '()]))
-    (let ([free-vars (collect-vars τ)])
+    (let ([free-vars (type-free-vars τ)])
       (if (empty? free-vars) τ
           (∀ free-vars τ)))))
 
@@ -742,7 +745,7 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; primitive operators
 
-(define-simple-macro (define-primop id:id [e:expr {~datum :} τ])
+(define-simple-macro (define-primop id:id [e:expr {~literal :} τ])
   (define-syntax id (make-variable-like-transformer (⊢ e : τ))))
 
 (define ((+/c a) b) (+- a b))

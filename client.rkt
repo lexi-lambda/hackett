@@ -35,7 +35,7 @@
 (letrec ([flip : (∀ [a b c] (→ (→ a (→ b c))
                                (→ b (→ a c))))
                (λ (f x y) (f y x))]
-         [foldl : (∀ [b a] (→ (→ b (→ a b)) (→ b (→ (List a) b))))
+         [foldl : (∀ [a b] (→ (→ b (→ a b)) (→ b (→ (List a) b))))
                 (λ (f acc lst)
                   (case lst
                     [nil acc]
