@@ -35,8 +35,8 @@ Here’s what some Rascal code *might* eventually look like:
 #lang rascal
 
 (data (Maybe a)
-  Nothing
-  (Just a))
+  nothing
+  (just a))
 
 (def x : Int
   (let ([y 3]
@@ -44,12 +44,12 @@ Here’s what some Rascal code *might* eventually look like:
     {y + z}))
 
 (class (Show a)
-  [show {Int -> a -> String}])
+  [show : {Int -> a -> String}])
 
-(instance (Show a) => (Show (Maybe a))
+(instance forall [a] [(Show a)] => (Show (Maybe a))
   (def+ show
-    [Nothing  -> "Nothing"]
-    [(Just x) -> {"Just " <> (show x)}]))
+    [nothing  -> "nothing"]
+    [(just x) -> {"just " <> (show x)}]))
 ```
 
 ## Trying Rascal
