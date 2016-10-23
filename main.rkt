@@ -4,7 +4,7 @@
 
 (require (multi-in rascal/private [adt base]))
 
-(provide : λ let letrec data case _ class instance ⇒
+(provide : def λ let letrec data case _ class instance ⇒
          ∀ → Integer String
          + - * show/Integer string-append
          (rename-out [hash-percent-app #%app]

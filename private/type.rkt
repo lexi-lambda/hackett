@@ -187,43 +187,47 @@
 ;            (listof identifier?)
 ;            (listof syntax?))
 (define (infers+erase stxs #:ctx [ctx '()])
-  (define-values [wrapped-stx disappeared-bindings]
-    (match ctx
-      [(list (cons xs τs) ...)
-       (define/syntax-parse [x ...] xs)
-       (define/syntax-parse [x- ...]
-         (for/list ([x-stx (in-list xs)])
-           (let ([tmp (generate-temporary x-stx)])
-             (propagate-original-for-check-syntax
-              (syntax-local-introduce x-stx)
-              (datum->syntax tmp (syntax-e tmp) x-stx x-stx)))))
-       (define/syntax-parse [x-introduced ...] (map syntax-local-introduce (attribute x-)))
-       (define/syntax-parse [τ-proxy ...] (map property-proxy τs))
-       (values
-        #`(λ (x- ...)
-            (let-syntax ([x (make-variable-like-transformer/thunk
-                             (λ (id) (syntax-property
-                                      (assign-type #'x- (instantiate-type
-                                                         (property-proxy-value #'τ-proxy)))
-                                      'disappeared-use
-                                      (list (propagate-original-for-check-syntax
-                                             (syntax-local-introduce id)
-                                             (datum->syntax #'x-introduced
-                                                            (syntax-e #'x-introduced)
-                                                            id id))))))]
-                         ...)
-              #,@stxs))
-        (attribute x-))]))
-  (define-values [τs xs- stxs-]
-    (syntax-parse (local-expand wrapped-stx 'expression null)
-      #:literals [kernel:lambda kernel:let-values]
-      [(kernel:lambda xs-
-                      (kernel:let-values _
-                                         (kernel:let-values _ bodies ...)))
-       (values (map typeof (attribute bodies)) #'xs-
-               (map #{syntax-property % 'disappeared-binding disappeared-bindings}
-                    (attribute bodies)))]))
-  (values τs xs- stxs-))
+  (cond
+    [(empty? stxs)
+     (values '() '() '())]
+    [else
+     (define-values [wrapped-stx disappeared-bindings]
+       (match ctx
+         [(list (cons xs τs) ...)
+          (define/syntax-parse [x ...] xs)
+          (define/syntax-parse [x- ...]
+            (for/list ([x-stx (in-list xs)])
+              (let ([tmp (generate-temporary x-stx)])
+                (propagate-original-for-check-syntax
+                 (syntax-local-introduce x-stx)
+                 (datum->syntax tmp (syntax-e tmp) x-stx x-stx)))))
+          (define/syntax-parse [x-introduced ...] (map syntax-local-introduce (attribute x-)))
+          (define/syntax-parse [τ-proxy ...] (map property-proxy τs))
+          (values
+           #`(λ (x- ...)
+               (let-syntax ([x (make-variable-like-transformer/thunk
+                                (λ (id) (syntax-property
+                                         (assign-type #'x- (instantiate-type
+                                                            (property-proxy-value #'τ-proxy)))
+                                         'disappeared-use
+                                         (list (propagate-original-for-check-syntax
+                                                (syntax-local-introduce id)
+                                                (datum->syntax #'x-introduced
+                                                               (syntax-e #'x-introduced)
+                                                               id id))))))]
+                            ...)
+                 #,@stxs))
+           (attribute x-))]))
+     (define-values [τs xs- stxs-]
+       (syntax-parse (local-expand wrapped-stx 'expression null)
+         #:literals [kernel:lambda kernel:let-values]
+         [(kernel:lambda xs-
+                         (kernel:let-values _
+                                            (kernel:let-values _ bodies ...)))
+          (values (map typeof (attribute bodies)) #'xs-
+                  (map #{syntax-property % 'disappeared-binding disappeared-bindings}
+                       (attribute bodies)))]))
+     (values τs xs- stxs-)]))
 
 ; A helper macro for making it easier to consume the results of infers+erase. Since infers+erase
 ; produces three values, two of which are syntax, it is useful to bind the syntax values to pattern

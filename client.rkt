@@ -1,6 +1,37 @@
 #lang rascal
 
 (data Unit unit)
+(data Bool true false)
+(data (Maybe a) (just a) nothing)
+
+(def const : (∀ [a b] (⇒ [] (→ a (→ b a))))
+  (λ (x y) x))
+
+(class (Semigroup a)
+  [<> : (→ a (→ a a))])
+
+(instance (Semigroup String)
+  [<> string-append])
+
+(class (Show a)
+  [show : (→ a String)])
+
+(instance (Show Unit) [show (const "unit")])
+(instance (Show Bool)
+  [show (λ (x) (case x
+                 [true "true"]
+                 [false "false"]))])
+(instance (∀ [a] (⇒ [(Show a)] (Show (Maybe a))))
+  [show (λ (x) (case x
+                 [(just v) {{"(just " . <> . (show v)} . <> . ")"}]
+                 [nothing "nothing"]))])
+
+(def main : (⇒ [] String)
+  (show true))
+
+#|
+
+(data Unit unit)
 
 (data Bool
   true
@@ -68,3 +99,5 @@
 #;(letrec ([main : (→ Integer String)
                (λ (x) (show (+ x 1)))])
   main)
+
+|#

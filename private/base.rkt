@@ -4,7 +4,9 @@
 
 (require (for-syntax (multi-in racket [base dict format function list match splicing syntax])
                      (multi-in rascal [private/type util/stx])
-                     (multi-in syntax/parse [class/local-value define experimental/specialize])
+                     (multi-in syntax/parse [class/local-value define
+                                             experimental/specialize experimental/template])
+                     (only-in srfi/1 list-index)
                      macrotypes/stx-utils
                      point-free
                      syntax/id-table)
@@ -100,6 +102,55 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; general typed forms
 
+(begin-for-syntax
+  ; (listof identifier?) (listof type?) (listof syntax?)
+  ; -> (or/c (list 'failure identifier? type? type?)
+  ;          (list 'success (listof type?) (listof identifier?) (listof syntax?))
+  (define (typecheck-annotated-bindings xs τs_annotated exprs #:body [body #f])
+    ; run the typechecker
+    (define-values [τs_inferred xs- exprs- τ_body body-]
+      (let ([ctx (map cons xs τs_annotated)])
+        (if body
+            (let-values ([(τs xs- vals-) (infers+erase (cons body exprs) #:ctx ctx)])
+              (values (rest τs) xs- (rest vals-) (first τs) (first vals-)))
+            (let-values ([(τs xs- vals-) (infers+erase exprs #:ctx ctx)])
+              (values τs xs- vals- #f #f)))))
+
+    ; solve constraints and apply the resulting substitutions
+    (define subst (solve-constraints (collect-constraints (datum->syntax #f exprs-))))
+    (define τs_substituted (map #{apply-subst subst %} τs_inferred))
+    (define τ_body_substituted (and~> τ_body #{apply-subst subst %}))
+
+    ; collect predicates and apply the substitutions to those, too, then typecheck them
+    (define predicatess (map collect-predicates exprs-))
+    (define substituted-predicatess (map #{map #{apply-subst subst %} %} predicatess))
+    (define reduced-predicatess
+      (for/list ([predicates (in-list substituted-predicatess)])
+        (reduce-context predicates)))
+
+    ; generalize the resulting types and check if the annotations match or not
+    (define τs_generalized (map generalize-type (map ⇒ reduced-predicatess τs_substituted)))
+    (define invalid (for/or ([x-id (in-list xs)]
+                             [τ_ann (in-list τs_annotated)]
+                             [τ_generalized (in-list τs_generalized)])
+                      (and (not (unify/one-way/qualified (instantiate-type τ_generalized)
+                                                         (instantiate-type τ_ann)))
+                           (list 'failure x-id τ_ann τ_generalized))))
+    (or invalid
+        ; upon success, apply the results to the original syntax and return everything
+        (let ([vals-generalized
+               (for/list ([expr- (in-list exprs-)]
+                          [τ (in-list τs_generalized)]
+                          [preds (in-list reduced-predicatess)])
+                 (~> (apply-substitutions-to-types subst expr-)
+                     #{erase-typeclasses % preds}
+                     #{assign-type % τ}))])
+          (if body
+              (list 'success τs_generalized xs- vals-generalized τ_body_substituted body-)
+              (list 'success τs_generalized xs- vals-generalized))))))
+
+(define-syntax (def stx) (raise-syntax-error #f "can only be used at the top level of a module" stx))
+
 (define-syntax-parser λ1
   [(_ x:id e:expr)
    #:do [(define τv (fresh))
@@ -142,14 +193,45 @@
    (type-error #:src #'x #:msg "Unsupported literal: ~v" #'x)])
 
 (define-syntax-parser hash-percent-module-begin
-  #:literals [#%plain-module-begin-]
-  [(_ . body)
-   #:with (#%plain-module-begin- . expanded)
-          (local-expand #'(#%plain-module-begin- . body)
-                        'module-begin null)
-   #:do [(define subst (solve-constraints (collect-constraints #'expanded)))]
-   #:with substituted (apply-substitutions-to-types subst #'expanded)
-   #'(#%module-begin- . substituted)])
+  #:literals [def]
+  [(_ {~seq {~or {~seq {~seq {~and definition (def . _)} ...+}
+                       {~seq {~and other-form {~not (def . _)}} ...}}
+                 {~seq {~seq {~and definition (def . _)} ...}
+                       {~seq {~and other-form {~not (def . _)}} ...+}}}}
+      ...)
+   (template
+    (#%plain-module-begin-
+     (?@ (top-level-definitions definition ...)
+         other-form ...)
+     ...))])
+
+(define-syntax-parser top-level-definitions
+  #:literals [: def]
+  [(_ (def x:id : τ-ann expr) ...)
+   #:do [(define typecheck-result
+           (typecheck-annotated-bindings (attribute x)
+                                         (map type-eval (attribute τ-ann))
+                                         (attribute expr)))]
+   #:fail-when (and (eq? 'failure (first typecheck-result))
+                    (second typecheck-result))
+               (~a "the inferred type of ‘" (syntax-e (second typecheck-result)) "’ does not match "
+                   "the provided type annotation\n"
+                   "  annotated: " (type->string (third typecheck-result)) "\n"
+                   "  inferred: " (type->string (fourth typecheck-result)))
+   #:do [(match-define {list _ τs xs- vals-} typecheck-result)]
+   #:with [[τ-proxy ...] [x- ...] [val- ...]] (list (map property-proxy τs) xs- vals-)
+   #:with [main-submodule ...]
+          (let ([n (list-index #{eq? 'main (syntax-e %)} (attribute x))])
+            (if n
+                #`((module+- main (println- #,(list-ref (attribute x-) n))))
+                #'()))
+   #'(begin-
+      (define- x- val-) ...
+      (define-syntax x
+        (make-variable-like-transformer/thunk
+         (λ (stx) (assign-type #'x- (instantiate-type (property-proxy-value #'τ-proxy))))))
+      ...
+      main-submodule ...)])
 
 (define-syntax-parser let1
   [(_ [x:id val:expr] e:expr)
@@ -177,53 +259,6 @@
          (define/infer+erase [τ_inferred [] e-] #'e)]
    (assign-constraint (assign-type #'e- τ) τ τ_inferred)])
 
-(begin-for-syntax
-  ; (listof identifier?) (listof type?) (listof syntax?)
-  ; -> (or/c (list 'failure identifier? type? type?)
-  ;          (list 'success (listof identifier?) (listof syntax?))
-  (define (typecheck-annotated-bindings xs τs_annotated exprs #:body [body #f])
-    ; run the typechecker
-    (define-values [τs_inferred xs- exprs- τ_body body-]
-      (let ([ctx (map cons xs τs_annotated)])
-        (if body
-            (let-values ([(τs xs- vals-) (infers+erase (cons body exprs) #:ctx ctx)])
-              (values (rest τs) xs- (rest vals-) (first τs) (first vals-)))
-            (let-values ([(τs xs- vals-) (infers+erase exprs #:ctx ctx)])
-              (values τs xs- vals- #f #f)))))
-
-    ; solve constraints and apply the resulting substitutions
-    (define subst (solve-constraints (collect-constraints (datum->syntax #f exprs-))))
-    (define τs_substituted (map #{apply-subst subst %} τs_inferred))
-    (define τ_body_substituted (and~> τ_body #{apply-subst subst %}))
-
-    ; collect predicates and apply the substitutions to those, too, then typecheck them
-    (define predicatess (map collect-predicates exprs-))
-    (define substituted-predicatess (map #{map #{apply-subst subst %} %} predicatess))
-    (define reduced-predicatess
-      (for/list ([predicates (in-list substituted-predicatess)])
-        (reduce-context predicates)))
-
-    ; generalize the resulting types and check if the annotations match or not
-    (define τs_generalized (map generalize-type (map ⇒ reduced-predicatess τs_substituted)))
-    (define invalid (for/or ([x-id (in-list xs)]
-                             [τ_ann (in-list τs_annotated)]
-                             [τ_generalized (in-list τs_generalized)])
-                      (and (not (unify/one-way/qualified (instantiate-type τ_generalized)
-                                                         (instantiate-type τ_ann)))
-                           (list 'failure x-id τ_ann τ_generalized))))
-    (or invalid
-        ; upon success, apply the results to the original syntax and return everything
-        (let ([vals-generalized
-               (for/list ([expr- (in-list exprs-)]
-                          [τ (in-list τs_generalized)]
-                          [preds (in-list reduced-predicatess)])
-                 (~> (apply-substitutions-to-types subst expr-)
-                     #{erase-typeclasses % preds}
-                     #{assign-type % τ}))])
-          (if body
-              (list 'success xs- vals-generalized τ_body_substituted body-)
-              (list 'success xs- vals-generalized))))))
-
 (define-syntax-parser letrec
   #:literals [:]
   [(_ ([x:id : τ-ann val:expr] ...) body:expr)
@@ -238,7 +273,7 @@
                    "the provided type annotation\n"
                    "  annotated: " (type->string (third typecheck-result)) "\n"
                    "  inferred: " (type->string (fourth typecheck-result)))
-   #:do [(match-define {list _ xs- vals- τ_body body-} typecheck-result)]
+   #:do [(match-define {list _ _ xs- vals- τ_body body-} typecheck-result)]
    #:with [[x- ...] [val- ...] body-] (list xs- vals- body-)
    (assign-type (syntax/loc this-syntax
                   (letrec- ([x- val-] ...) body-))
