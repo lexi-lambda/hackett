@@ -9,12 +9,14 @@
                                 get-stx-prop/car
                                 set-stx-prop/preserved))
          (multi-in racket [dict format list match syntax])
-         (multi-in syntax [id-table parse/define])
+         (multi-in syntax [id-set id-table parse/define])
          rascal/util/stx
          syntax/parse
+         "classrep.rkt"
          "typerep.rkt")
 
 (provide (all-defined-out)
+         (all-from-out "classrep.rkt")
          (all-from-out "typerep.rkt"))
 
 ;; ---------------------------------------------------------------------------------------------------
@@ -45,6 +47,10 @@
    (format "(∀ ~a ~a)" (map #{symbol->string (syntax-e %)} αs) (type->string τ))]
   [((τ~ τa τb _))
    (format "(τ~~ ~a ~a)" (type->string τa) (type->string τb))]
+  [((⇒ context τ))
+   (format "(⇒ ~a ~a)" (map type->string context) (type->string τ))]
+  [((has-class (class id _ _ _) τ))
+   (format "(~a ~a)" (syntax-e id) (type->string τ))]
   [({app applied-base-type-id {? values {app custom-type-printer {? values printer}}}})
    (printer τ)]
   [((τapp τf τx))
@@ -73,7 +79,25 @@
     (and (= (length αs) (length βs))
          (let ([τvars (map fresh αs)])
            (type=? (instantiate-type-with τa τvars)
-                   (instantiate-type-with τb τvars))))]))
+                   (instantiate-type-with τb τvars))))]
+   [((⇒ ctx-a τa) (⇒ ctx-b τb))
+    (and (context=? ctx-a ctx-b)
+         (type=? τa τb))]
+   [((⇒ _ _) _) #f]
+   [(_ (⇒ _ _)) #f]
+   [((has-class ca τa) (has-class cb τb))
+    (and (equal? ca cb)
+         (type=? τa τb))]
+   [((has-class _ _) _) #f]
+   [(_ (has-class _ _)) #f]))
+
+(define (context=? a b)
+  (and (= (length a) (length b))
+       (for/and ([pred (in-list a)])
+         (member pred b type=?))
+       #t))
+
+(define-custom-hash-types type-table type=?)
 
 (define current-type-var-environment
   (make-parameter (make-immutable-free-id-table)))
@@ -85,6 +109,12 @@
 
 (define type-free-vars
   (match-lambda
+    [(⇒ ctx τ)
+     (remove-duplicates (append (append-map type-free-vars ctx)
+                                (type-free-vars τ))
+                        free-identifier=?)]
+    [(has-class _ τ)
+     (type-free-vars τ)]
     [(τvar α) (list α)]
     [(base-type _ _) '()]
     [(τapp τa τb) (remove-duplicates (append (type-free-vars τa)
@@ -95,7 +125,20 @@
   (get-stx-prop/car stx ':))
 
 (define (assign-type stx τ)
-  (set-stx-prop/preserved stx ': τ))
+  (match τ
+    [(⇒ preds τ)
+     (assign-predicates (assign-type stx τ) preds)]
+    [τ
+     (set-stx-prop/preserved stx ': τ)]))
+
+(define (assign-predicates stx preds)
+  (set-stx-prop/preserved stx 'predicates preds))
+
+(define (get-predicates stx)
+  (syntax-property stx 'predicates))
+
+(define (collect-predicates stx)
+  (collect-properties stx 'predicates))
 
 ; Generates a fresh type variable.
 (define (fresh [base 'g])
@@ -230,6 +273,112 @@
         (∀ free-vars τ))))
 
 ;; ---------------------------------------------------------------------------------------------------
+;; typeclasses
+
+(define (make-class id method-table method-types-quantified-id)
+  (class id method-table method-types-quantified-id (make-mutable-type-table)))
+
+; Gets the method table for a class, but with all of the types specialized for a particular instance.
+; For example, for (Show Bool), this would produce a table like this:
+;
+;   show : (∀ [] (⇒ [] (→ Bool String)))
+;
+; For instances with additional predicates, those predicates will be moved into the resulting types.
+; For example, the table for (Show (Maybe a)) would look like this:
+;
+;   show : (∀ [α] (⇒ [(Show α)] (→ (Maybe α) String)))
+;
+; For this reason, the provided τ_instance should be the full type scheme rather than a plain type.
+(define (class-method-table/instantiate class τ_instance)
+  (match-let* ([(∀ αs_instance (⇒ preds_instance τ_instance)) τ_instance]
+               [method-table (class-method-table class)]
+               [quantified-id (class-method-types-quantified-id class)])
+    (define instantiate-class-method
+      (match-lambda
+        [(∀ αs (⇒ preds τ))
+         (let* (; first, remove the class predicate (e.g. (Show a) if the class is Show)
+                [type-without-class-pred
+                 (⇒ (append (remove (has-class class (τvar quantified-id)) preds type=?)
+                            preds_instance)
+                    τ)]
+                ; next, instantiate the type variable with the provided instance
+                [instantiated-type
+                 (instantiate-type-with (∀ (list quantified-id) type-without-class-pred)
+                                        (list τ_instance))]
+                ; finally, remove the type variable from the quantified list
+                [type-without-quantified-id
+                 (∀ (append (remove quantified-id αs free-identifier=?)
+                            αs_instance)
+                    instantiated-type)])
+           type-without-quantified-id)]))
+    (make-immutable-free-id-table
+     (for/list ([(id τ) (in-free-id-table method-table)])
+       (cons id (instantiate-class-method τ))))))
+
+(define (register-class-instance! class τ instance #:src src)
+  (let ([instances (class-instances class)])
+    (for ([τold (in-dict-keys instances)])
+      (assert-no-instance-overlap! τ τold #:src src))
+    (dict-set! instances τ instance)))
+
+(define (assert-no-instance-overlap! τnew τold #:src src)
+  (or (with-handlers ([exn:fail:syntax? void])
+        (unify τnew τold #:src src)
+        #f)
+      (raise-syntax-error #f (~a "instance " (type->string τnew) " overlaps "
+                                 "with " (type->string τold))
+                          src)))
+
+; Given a class constraint, finds an instance that matches, then returns a list of additional
+; constraints that need to be satisfied. For a simple instance, like (Show Bool), this will return an
+; empty list, but for more complex ones, like (∀ [α] (⇒ [(Show α)] (Maybe α))), it will return the
+; list of required constraints.
+(define (matching-instance-context pred)
+  (match-let* ([(has-class class τ) pred]
+               [instances (class-instances class)])
+    (for/or ([instance (in-dict-keys instances)])
+      (match-let* ([(⇒ ctx* τ*) (instantiate-type instance)]
+                   [subst (unify/one-way τ* τ)])
+        (and subst (map #{apply-subst subst %} ctx*))))))
+
+; Given a list of has-class predicates and a single has-class predicate, determines if the latter can
+; be deduced if all of the former are true.
+(define (entails? ctx pred)
+  (or (and (member pred ctx type=?) #t)
+      (let ([new-preds (matching-instance-context pred)])
+        (and new-preds (andmap #{entails? ctx %} new-preds)))))
+
+(define pred-head-normal-form?
+  (match-lambda
+    [(has-class _ τ)
+     (let loop ([τ τ])
+       (match τ
+         [(τvar _)       #t]
+         [(? base-type?) #f]
+         [(τapp τ _)     (loop τ)]))]))
+
+(define (pred->head-normal-form pred)
+  (if (pred-head-normal-form? pred)
+      (list pred)
+      (let ([new-preds (matching-instance-context pred)])
+        (unless new-preds
+          (raise-syntax-error 'pred->head-normal-form (~a "could not deduce " (type->string pred))))
+        (append-map pred->head-normal-form new-preds))))
+
+(define (simplify-context ctx)
+  (let loop ([ctx ctx]
+             [preserved '()])
+    (if (empty? ctx) preserved
+        (let ([pred (first ctx)]
+              [ctx* (rest ctx)])
+          (if (entails? (append preserved ctx*) pred)
+              (loop ctx* preserved)
+              (loop ctx* (cons pred preserved)))))))
+
+(define (reduce-context ctx)
+  (simplify-context (append-map pred->head-normal-form ctx)))
+
+;; ---------------------------------------------------------------------------------------------------
 ;; constraints & substitution
 
 ; Attaches a constraint to a syntax object by associating a type with the 'constraint syntax
@@ -269,6 +418,16 @@
       (cons k (apply-subst a v))))
    a))
 
+; Performs a symmetric merge of two substitution sets, ensuring that the substitutions agree for all
+; duplicate keys. If they do not, merge-substs returns #f. (Used by unify/one-way.)
+(define (merge-substs a b)
+  (and (for/and ([k (in-free-id-set
+                     (free-id-set-intersect (immutable-free-id-set (free-id-table-keys a))
+                                            (immutable-free-id-set (free-id-table-keys b))))])
+         (type=? (free-id-table-ref a k)
+                 (free-id-table-ref b k)))
+       (free-id-table-union a b)))
+
 ; Applies a subsitution set to a type or constraint by recursively replacing all substitutable type
 ; variables with their substitutions.
 (define (apply-subst subst τ)
@@ -278,6 +437,10 @@
        (free-id-table-ref subst α τ)]
       [(∀ αs τ)
        (∀ αs (loop τ))]
+      [(⇒ ctx τ)
+       (⇒ (map loop ctx) (loop τ))]
+      [(has-class class τ)
+       (has-class class (loop τ))]
       [(τapp τf τx)
        (τapp (loop τf) (loop τx))]
       [(base-type _ _)
@@ -291,6 +454,10 @@
   (if (type=? τa τb)
       empty-subst
       (match* (τa τb)
+        [((⇒ _ τa) τb)
+         (unify τa τb #:src src)]
+        [(τa (⇒ _ τb))
+         (unify τa τb #:src src)]
         [((τvar α) τ)
          (bind-subst α τ)]
         [(τ (τvar α))
@@ -317,6 +484,27 @@
                             #:src src)])
        (compose-substs subst* subst))]))
 
+; Attempts to unify the first type with the second one, leaving the second type unchanged. Unlike
+; unify, if unify/one-way fails, it returns #f. (Used by entailment.)
+(define (unify/one-way τa τb)
+  (if (type=? τa τb)
+      empty-subst
+      (match* (τa τb)
+        [((τapp τa τb) (τapp τc τd))
+         (let ([subst-a (unify/one-way τa τc)]
+               [subst-b (unify/one-way τb τd)])
+           (and subst-a subst-b
+                (merge-substs subst-a subst-b)))]
+        [((τvar α) τ)
+         (bind-subst α τ)]
+        [(_ _) #f])))
+
+(define unify/one-way/qualified
+  (match-lambda**
+   [((⇒ preds-a τa) (⇒ preds-b τb))
+    ; TODO: check that preds-a is not too weak
+    (unify/one-way τa τb)]))
+
 ; Given a set of constraints, attempts to solve them with unification.
 (define (solve-constraints cs)
   (let loop ([cs cs]
@@ -333,12 +521,19 @@
 ; contains the final value of ': converted to a string using type->string, which is useful for
 ; debugging.
 (define (apply-substitutions-to-types subst stx)
-  (define (perform-substitution stx)
+  (define (perform-substitution/: stx)
     (if (syntax-property stx ':)
         (let ([new-type (apply-subst subst (get-stx-prop/car stx ':))])
           (syntax-property (syntax-property stx ': new-type #t)
                            ':-string (type->string new-type)))
         stx))
+  (define (perform-substitution/preds stx)
+    (if (syntax-property stx 'predicates)
+        (let ([new-preds (map #{apply-subst subst %} (syntax-property stx 'predicates))])
+          (syntax-property stx 'predicates new-preds #t))
+        stx))
+  (define (perform-substitution stx)
+    (perform-substitution/preds (perform-substitution/: stx)))
   (let recur ([stx stx])
     (syntax-rearm
      (syntax-parse (syntax-disarm stx (current-code-inspector))
