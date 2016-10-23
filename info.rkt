@@ -5,6 +5,7 @@
 (define deps
   '("base"
     "curly-fn-lib"
+    "point-free"
     "syntax-classes-lib"
     "turnstile"))
 (define build-deps
