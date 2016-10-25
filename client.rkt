@@ -4,7 +4,7 @@
 (data Bool true false)
 (data (Maybe a) (just a) nothing)
 
-(def const : (∀ [a b] (⇒ [] (→ a (→ b a))))
+(def const : (∀ [a b] (→ a (→ b a)))
   (λ (x y) x))
 
 (class (Semigroup a)
@@ -26,8 +26,8 @@
                  [(just v) {{"(just " . <> . (show v)} . <> . ")"}]
                  [nothing "nothing"]))])
 
-(def main : (⇒ [] String)
-  (show true))
+(def main : String
+  (show (just (just (just true)))))
 
 #|
 

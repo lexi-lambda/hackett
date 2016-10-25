@@ -104,9 +104,10 @@
 
 (begin-for-syntax
   ; (listof identifier?) (listof type?) (listof syntax?)
-  ; -> (or/c (list 'failure identifier? type? type?)
-  ;          (list 'success (listof type?) (listof identifier?) (listof syntax?))
-  (define (typecheck-annotated-bindings xs τs_annotated exprs #:body [body #f])
+  ; -> (or/c (list (listof type?) (listof identifier?) (listof syntax?))
+  (define (typecheck-annotated-bindings xs τs_annotated exprs
+                                        #:body [body #f]
+                                        #:existing-dict-mapping [dict-mapping '()])
     ; run the typechecker
     (define-values [τs_inferred xs- exprs- τ_body body-]
       (let ([ctx (map cons xs τs_annotated)])
@@ -117,9 +118,24 @@
               (values τs xs- vals- #f #f)))))
 
     ; solve constraints and apply the resulting substitutions
-    (define subst (solve-constraints (collect-constraints (datum->syntax #f exprs-))))
+    (define-values [annotation-constraints annotation-substs]
+      (for/lists [constraints substs]
+                 ([τ_annotated (in-list τs_annotated)]
+                  [τ_inferred (in-list τs_inferred)]
+                  [expr (in-list exprs)])
+        (match-let*-values ([(τ_normalized) (type->normalized-scheme τ_annotated)]
+                            ; TODO: actually validate that the preds in annotations are valid
+                            [((⇒ _ τ) subst) (instantiate-type/subst τ_normalized)])
+          (values (τ~ τ τ_inferred expr) subst))))
+    (define subst (solve-constraints (append (collect-constraints (datum->syntax #f exprs-))
+                                             annotation-constraints)))
     (define τs_substituted (map #{apply-subst subst %} τs_inferred))
     (define τ_body_substituted (and~> τ_body #{apply-subst subst %}))
+    (define dict-mappings-substituted
+      (for/list ([annotation-subst (in-list annotation-substs)])
+        (for/list ([mapping (in-list dict-mapping)])
+          (cons (apply-subst subst (apply-subst annotation-subst (car mapping)))
+                (cdr mapping)))))
 
     ; collect predicates and apply the substitutions to those, too, then typecheck them
     (define predicatess (map collect-predicates exprs-))
@@ -128,26 +144,19 @@
       (for/list ([predicates (in-list substituted-predicatess)])
         (reduce-context predicates)))
 
-    ; generalize the resulting types and check if the annotations match or not
+    ; generalize the resulting types, apply the results to the original syntax and return everything
     (define τs_generalized (map generalize-type (map ⇒ reduced-predicatess τs_substituted)))
-    (define invalid (for/or ([x-id (in-list xs)]
-                             [τ_ann (in-list τs_annotated)]
-                             [τ_generalized (in-list τs_generalized)])
-                      (and (not (unify/one-way/qualified (instantiate-type τ_generalized)
-                                                         (instantiate-type τ_ann)))
-                           (list 'failure x-id τ_ann τ_generalized))))
-    (or invalid
-        ; upon success, apply the results to the original syntax and return everything
-        (let ([vals-generalized
-               (for/list ([expr- (in-list exprs-)]
-                          [τ (in-list τs_generalized)]
-                          [preds (in-list reduced-predicatess)])
-                 (~> (apply-substitutions-to-types subst expr-)
-                     #{erase-typeclasses % preds}
-                     #{assign-type % τ}))])
-          (if body
-              (list 'success τs_generalized xs- vals-generalized τ_body_substituted body-)
-              (list 'success τs_generalized xs- vals-generalized))))))
+    (let ([vals-generalized
+           (for/list ([expr- (in-list exprs-)]
+                      [τ (in-list τs_generalized)]
+                      [preds (in-list reduced-predicatess)]
+                      [dict-mapping (in-list dict-mappings-substituted)])
+             (~> (apply-substitutions-to-types subst expr-)
+                 #{erase-typeclasses % preds #:existing-dict-mapping dict-mapping}
+                 #{assign-type % τ}))])
+      (if body
+          (list τs_generalized xs- vals-generalized τ_body_substituted body-)
+          (list τs_generalized xs- vals-generalized)))))
 
 (define-syntax (def stx) (raise-syntax-error #f "can only be used at the top level of a module" stx))
 
@@ -208,17 +217,10 @@
 (define-syntax-parser top-level-definitions
   #:literals [: def]
   [(_ (def x:id : τ-ann expr) ...)
-   #:do [(define typecheck-result
+   #:do [(match-define {list τs xs- vals-}
            (typecheck-annotated-bindings (attribute x)
                                          (map type-eval (attribute τ-ann))
                                          (attribute expr)))]
-   #:fail-when (and (eq? 'failure (first typecheck-result))
-                    (second typecheck-result))
-               (~a "the inferred type of ‘" (syntax-e (second typecheck-result)) "’ does not match "
-                   "the provided type annotation\n"
-                   "  annotated: " (type->string (third typecheck-result)) "\n"
-                   "  inferred: " (type->string (fourth typecheck-result)))
-   #:do [(match-define {list _ τs xs- vals-} typecheck-result)]
    #:with [[τ-proxy ...] [x- ...] [val- ...]] (list (map property-proxy τs) xs- vals-)
    #:with [main-submodule ...]
           (let ([n (list-index #{eq? 'main (syntax-e %)} (attribute x))])
@@ -262,18 +264,11 @@
 (define-syntax-parser letrec
   #:literals [:]
   [(_ ([x:id : τ-ann val:expr] ...) body:expr)
-   #:do [(define typecheck-result
+   #:do [(match-define {list _ xs- vals- τ_body body-}
            (typecheck-annotated-bindings (attribute x)
                                          (map type-eval (attribute τ-ann))
                                          (attribute val)
                                          #:body #'body))]
-   #:fail-when (and (eq? 'failure (first typecheck-result))
-                    (second typecheck-result))
-               (~a "the inferred type of ‘" (syntax-e (second typecheck-result)) "’ does not match "
-                   "the provided type annotation\n"
-                   "  annotated: " (type->string (third typecheck-result)) "\n"
-                   "  inferred: " (type->string (fourth typecheck-result)))
-   #:do [(match-define {list _ _ xs- vals- τ_body body-} typecheck-result)]
    #:with [[x- ...] [val- ...] body-] (list xs- vals- body-)
    (assign-type (syntax/loc this-syntax
                   (letrec- ([x- val-] ...) body-))
@@ -296,40 +291,7 @@
       [{and τ (⇒ _ _)}
        (∀ '[] τ)]
       [τ
-       (∀ '[] (⇒ '[] τ))]))
-
-  (define (erase-typeclasses stx preds)
-    (define dict-ids (generate-temporaries preds))
-    (for/fold ([stx (insert-dictionary-uses stx (map cons preds dict-ids))])
-              ([dict-id (in-list (reverse dict-ids))])
-      #`(λ- (#,dict-id) #,stx)))
-
-  (define (insert-dictionary-uses stx dict-mapping)
-    (define (make-dictionary-application stx preds)
-      (for/fold ([stx stx])
-                ([pred (in-list preds)])
-        (if (τvar? (has-class-τ pred))
-            (let ([mapping (assoc pred dict-mapping type=?)])
-              (unless mapping
-                (error 'insert-dictionary-uses
-                       "internal error: no dictionary for ~a\n  in mapping: ~a"
-                       (type->string pred) dict-mapping))
-              #`(#,stx #,(cdr mapping)))
-            (let* ([instances (class-instances (has-class-class pred))]
-                   [instance (dict-ref instances (type->normalized-scheme (has-class-τ pred)))]
-                   [dict-id (instance-dict-id instance)])
-              #`(#,stx #,dict-id)))))
-    (let loop ([stx stx])
-      (syntax-parse stx
-        #:context 'replace-method-stubs
-        [_
-         #:do [(define preds (get-predicates this-syntax))]
-         #:when preds
-         preds
-         (make-dictionary-application this-syntax preds)]
-        [(a . b)
-         (datum->syntax this-syntax (cons (loop #'a) (loop #'b)) this-syntax this-syntax)]
-        [_ this-syntax]))))
+       (∀ '[] (⇒ '[] τ))])))
 
 (define-syntax-parser class
   #:literals [:]
@@ -383,26 +345,33 @@
    #:with dict-id (generate-temporary 'dict)
    #:with [specialized-method ...] (generate-temporaries (attribute method))
    #:do [(define class (attribute spec.class))
+
+         (match-define (∀ _ (⇒ dict-preds _)) (attribute spec.type))
+         (define dict-pred-ids (generate-temporaries dict-preds))
+         (define dict-mapping (map cons dict-preds dict-pred-ids))
+
          (define method-table (class-method-table/instantiate class (attribute spec.type)))
          (define τs_methods (map #{free-id-table-ref method-table %} (attribute method)))
-         (define typecheck-result (typecheck-annotated-bindings (attribute specialized-method)
-                                                                τs_methods
-                                                                (attribute impl)))]
-   #:fail-when (eq? 'failure (first typecheck-result))
-               (match-let ([(list _ id expected inferred) typecheck-result])
-                 (~a "the inferred type of ‘" (syntax-e id) "’ does not match the "
-                     "expected type\n"
-                     "  expected: " (type->string expected) "\n"
-                     "  inferred: " (type->string inferred)))
-   (register-class-instance! (attribute spec.class)
-                             (attribute spec.type)
-                             (instance (syntax-local-introduce #'dict-id))
-                             #:src this-syntax)
+         (match-define {list _ _ impls-}
+           (typecheck-annotated-bindings (attribute specialized-method)
+                                         τs_methods
+                                         (attribute impl)
+                                         #:existing-dict-mapping dict-mapping))]
+   #:with [impl- ...] impls-
+   #:do [(register-class-instance! (attribute spec.class)
+                                   (attribute spec.type)
+                                   (instance (syntax-local-introduce #'dict-id))
+                                   #:src this-syntax)
+         (define (app/dict-preds stx)
+           (for/fold ([stx stx])
+                     ([pred-id (in-list dict-pred-ids)])
+             #`(#,stx #,pred-id)))]
+   #:with [specialized-method-sig ...] (map app/dict-preds (attribute specialized-method))
    #`(begin-
-       (define- specialized-method impl) ...
-       (define- dict-id
+       (define- specialized-method-sig impl-) ...
+       (define- #,(app/dict-preds #'dict-id)
          (make-immutable-free-id-table
-          (list (cons #'method specialized-method) ...))))])
+          (list (cons #'method specialized-method-sig) ...))))])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; primitive operators

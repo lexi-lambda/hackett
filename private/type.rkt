@@ -10,6 +10,7 @@
                                 set-stx-prop/preserved))
          (multi-in racket [dict format list match syntax])
          (multi-in syntax [id-set id-table parse/define])
+         point-free
          rascal/util/stx
          syntax/parse
          "classrep.rkt"
@@ -241,16 +242,19 @@
     (define/syntax-parse xs-pat xs-tmp)
     (define/syntax-parse stxs-pat stxs-tmp)))
 
-; Given a type, replaces universally quantified type variables with fresh type variables.
-(define instantiate-type
+(define instantiate-type/subst
   (match-lambda
     [(∀ αs τ)
-     (apply-subst
-      (make-immutable-free-id-table
-       (for/list ([var (in-list αs)])
-         (cons var (fresh var))))
-      τ)]
-    [τ τ]))
+     (let ([subst (make-immutable-free-id-table
+                   (for/list ([var (in-list αs)])
+                     (cons var (fresh var))))])
+       (values (apply-subst subst τ) subst))]
+    [τ (values τ empty-subst)]))
+
+; Given a type, replaces universally quantified type variables with fresh type variables.
+(define (instantiate-type τ)
+  (match-define-values [τ_inst _] (instantiate-type/subst τ))
+  τ_inst)
 
 ; Instantiates a type with a particular set of type variables. It is the responsibility of the
 ; caller to ensure the provided type variables are unique.
@@ -288,7 +292,7 @@
 ;   show : (∀ [] (⇒ [] (→ Bool String)))
 ;
 ; For instances with additional predicates, those predicates will be moved into the resulting types.
-; For example, the table for (Show (Maybe a)) would look like this:
+; For example, the table for (Show (Maybe α)) would look like this:
 ;
 ;   show : (∀ [α] (⇒ [(Show α)] (→ (Maybe α) String)))
 ;
@@ -337,13 +341,17 @@
 ; constraints that need to be satisfied. For a simple instance, like (Show Bool), this will return an
 ; empty list, but for more complex ones, like (∀ [α] (⇒ [(Show α)] (Maybe α))), it will return the
 ; list of required constraints.
-(define (matching-instance-context pred)
+(define (pred->instance+preds pred)
   (match-let* ([(has-class class τ) pred]
                [instances (class-instances class)])
-    (for/or ([instance (in-dict-keys instances)])
-      (match-let* ([(⇒ ctx* τ*) (instantiate-type instance)]
+    (for/or ([(instance-τ instance) (in-dict instances)])
+      (match-let* ([(⇒ ctx* τ*) (instantiate-type instance-τ)]
                    [subst (unify/one-way τ* τ)])
-        (and subst (map #{apply-subst subst %} ctx*))))))
+        (and subst (list instance (map #{apply-subst subst %} ctx*)))))))
+
+; Like pred->instance+preds, but only returns the additional constraints.
+(define (matching-instance-context pred)
+  (and~> (pred->instance+preds pred) second))
 
 ; Given a list of has-class predicates and a single has-class predicate, determines if the latter can
 ; be deduced if all of the former are true.
@@ -381,6 +389,51 @@
 
 (define (reduce-context ctx)
   (simplify-context (append-map pred->head-normal-form ctx)))
+
+; Given a piece of syntax with a set of typeclass constraints, wrap it such that it accepts typeclass
+; dictionaries and passes them to invocations that need them.
+(define (erase-typeclasses stx preds #:existing-dict-mapping [dict-mapping '()])
+  (let* ([existing-preds (map car dict-mapping)]
+         ; only demand fresh dictionaries for preds not in the existing dict-mapping
+         [missing-preds (filter-not #{member % existing-preds type=?} preds)]
+         [dict-ids (generate-temporaries missing-preds)]
+         ; combine the new id mapping and the existing id mapping
+         [total-dict-mapping (append dict-mapping (map cons missing-preds dict-ids))]
+         ; replace constrained application with application that will supply dictionaries
+         [stx* (insert-dictionary-uses stx total-dict-mapping)])
+    ; wrap the piece of syntax with lambdas as necessary
+    (for/fold ([stx stx*])
+              ([dict-id (in-list (reverse dict-ids))])
+      #`(λ (#,dict-id) #,stx))))
+
+(define (insert-dictionary-uses stx dict-mapping)
+  (define (make-dictionary-application stx preds)
+    (let loop ([stx stx]
+               [preds preds])
+      (if (empty? preds) stx
+          (match-let ([{list* pred preds} preds])
+            (if (τvar? (has-class-τ pred))
+                (let ([mapping (assoc pred dict-mapping type=?)])
+                  (unless mapping
+                    (error 'insert-dictionary-uses
+                           "internal error: no dictionary for ~a\n  in mapping: ~a"
+                           (type->string pred) dict-mapping))
+                  (loop #`(#,stx #,(cdr mapping)) preds))
+                (match-let* ([{list instance preds*} (pred->instance+preds pred)]
+                             [dict-id (instance-dict-id instance)]
+                             [dict-stx (loop dict-id preds*)])
+                  (loop #`(#,stx #,dict-stx) preds)))))))
+  (let loop ([stx stx])
+    (syntax-parse stx
+      #:context 'replace-method-stubs
+      [_
+       #:do [(define preds (get-predicates this-syntax))]
+       #:when preds
+       preds
+       (make-dictionary-application this-syntax preds)]
+      [(a . b)
+       (datum->syntax this-syntax (cons (loop #'a) (loop #'b)) this-syntax this-syntax)]
+      [_ this-syntax])))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; constraints & substitution
@@ -502,12 +555,6 @@
         [((τvar α) τ)
          (bind-subst α τ)]
         [(_ _) #f])))
-
-(define unify/one-way/qualified
-  (match-lambda**
-   [((⇒ preds-a τa) (⇒ preds-b τb))
-    ; TODO: check that preds-a is not too weak
-    (unify/one-way τa τb)]))
 
 ; Given a set of constraints, attempts to solve them with unification.
 (define (solve-constraints cs)
