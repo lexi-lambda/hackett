@@ -87,9 +87,9 @@
                  (define α-ids* (filter #{member % α-ids free-identifier=?}
                                         (type-free-vars τ*)))]
            (∀ α-ids* τ*)]
-          [(⇒ [(class:local-value/class τ_pred) ...] τ)
+          [(⇒ [(class-id:local-value/class τ_pred) ...] τ)
            #:do [(define τ_preds (map loop (attribute τ_pred)))]
-           (⇒ (map has-class (attribute class.local-value) τ_preds) (loop #'τ))]
+           (⇒ (map has-class (attribute class-id) τ_preds) (loop #'τ))]
           [(τ a)
            (τapp (loop #'τ)
                  (loop #'a))]
@@ -296,32 +296,35 @@
 (define-syntax-parser class
   #:literals [:]
   [(_ (id:id α:id) [method:id : τ_method-ann] ...)
-   #:do [(define τvar (fresh #'α))
-         (define τs_methods (map #{type-eval % #:ctx (list (cons #'α τvar))}
-                                 (attribute τ_method-ann)))]
-   #:with [method-impl ...] (generate-temporaries (attribute method))
-   #:do [; create the class representation itself and its method types
-         (define method-table (make-free-id-table))
-         (define class (make-class #'id method-table (τvar-id τvar)))
-         (define τs_methods*
-           (for/list ([τ_method (in-list τs_methods)])
-             ; extend the existing list of quantified vars and preds
-             (match-let ([(∀ αs (⇒ ctx τ)) (type->normalized-scheme τ_method)])
-               (∀ (cons (τvar-id τvar) αs)
-                  (⇒ (cons (has-class class τvar) ctx) τ)))))
-         (for ([method-id (in-list (attribute method))]
-               [τ_method (in-list τs_methods*)])
-           (free-id-table-set! method-table method-id τ_method))]
-   #:with class-proxy (property-proxy class)
-   #:with [τ_method-proxy ...] (map property-proxy τs_methods*)
+   #:do [(define τvar (fresh #'α))]
+   #:with α* (τvar-id τvar)
    #'(begin-
-       (define-syntax id (property-proxy-value #'class-proxy))
-       (define- (method-impl dict) (free-id-table-ref dict #'method)) ...
+       (define-syntax id (make-class #'id (make-free-id-table) #'α*))
+       (define-class-method! (id α α*) method τ_method-ann) ...)])
+
+(define-syntax-parser define-class-method!
+  [(_ (class-id:local-value/class α:id α*:id) method:id τ_method-ann)
+   #:do [; create the method type
+         (define class-var (τvar #'α*))
+         (define τ_method (type-eval #'τ_method-ann #:ctx (list (cons #'α class-var))))
+         (define τ_method*
+           ; extend the existing list of quantified vars and preds
+           (match-let ([(∀ αs (⇒ ctx τ)) (type->normalized-scheme τ_method)])
+             (∀ (cons #'α* αs)
+                (⇒ (cons (has-class #'class-id class-var) ctx) τ))))
+
+         ; register the class method in the table
+         (define class (attribute class-id.local-value))
+         (define method-table (class-method-table class))
+         (free-id-table-set! method-table #'method τ_method*)]
+   #:with method-impl (generate-temporary #'method)
+   #:with τ_method-proxy (property-proxy τ_method*)
+   #'(begin-
+       (define- (method-impl dict) (free-id-table-ref dict #'method))
        (define-syntax method
          (make-variable-like-transformer/thunk
           (λ (stx) (assign-type (syntax/loc stx method-impl)
-                                (instantiate-type (property-proxy-value #'τ_method-proxy))))))
-       ...)])
+                                (instantiate-type (property-proxy-value #'τ_method-proxy)))))))])
 
 (begin-for-syntax
   (define-syntax-class instance-spec

@@ -50,7 +50,7 @@
    (format "(τ~~ ~a ~a)" (type->string τa) (type->string τb))]
   [((⇒ context τ))
    (format "(⇒ ~a ~a)" (map type->string context) (type->string τ))]
-  [((has-class (class id _ _ _) τ))
+  [((has-class (app syntax-local-value (class id _ _ _)) τ))
    (format "(~a ~a)" (syntax-e id) (type->string τ))]
   [({app applied-base-type-id {? values {app custom-type-printer {? values printer}}}})
    (printer τ)]
@@ -87,7 +87,7 @@
    [((⇒ _ _) _) #f]
    [(_ (⇒ _ _)) #f]
    [((has-class ca τa) (has-class cb τb))
-    (and (equal? ca cb)
+    (and (free-identifier=? ca cb)
          (type=? τa τb))]
    [((has-class _ _) _) #f]
    [(_ (has-class _ _)) #f]))
@@ -306,7 +306,7 @@
         [(∀ αs (⇒ preds τ))
          (let* (; first, remove the class predicate (e.g. (Show a) if the class is Show)
                 [type-without-class-pred
-                 (⇒ (append (remove (has-class class (τvar quantified-id)) preds type=?)
+                 (⇒ (append (remove (has-class (class-id class) (τvar quantified-id)) preds type=?)
                             preds_instance)
                     τ)]
                 ; next, instantiate the type variable with the provided instance
@@ -342,7 +342,8 @@
 ; empty list, but for more complex ones, like (∀ [α] (⇒ [(Show α)] (Maybe α))), it will return the
 ; list of required constraints.
 (define (pred->instance+preds pred)
-  (match-let* ([(has-class class τ) pred]
+  (match-let* ([(has-class class-id τ) pred]
+               [class (syntax-local-value class-id)]
                [instances (class-instances class)])
     (for/or ([(instance-τ instance) (in-dict instances)])
       (match-let* ([(⇒ ctx* τ*) (instantiate-type instance-τ)]

@@ -120,7 +120,7 @@
 ; not touch. These are some very simple helper functions for making that intent explicit.
 
 (define (property-proxy val)
-  (syntax-property #'proxy 'proxy-value val))
+  (syntax-property #'proxy 'proxy-value val #t))
 
 (define (property-proxy-value stx)
   (syntax-property stx 'proxy-value))

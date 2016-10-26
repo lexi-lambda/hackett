@@ -1,0 +1,141 @@
+#lang rascal
+
+(provide (all-defined-out))
+
+(data Unit unit)
+
+;; ---------------------------------------------------------------------------------------------------
+
+(def flip : (∀ [a b c] (→ (→ a (→ b c))
+                          (→ b (→ a c))))
+  (λ (f x y) (f y x)))
+
+(def id : (∀ [a] (→ a a))
+  (λ (x) x))
+
+(def const : (∀ [a b] (→ a (→ b b)))
+  (λ (y x) x))
+
+;; ---------------------------------------------------------------------------------------------------
+
+(class (Functor f)
+  [map : (∀ [a b] (→ (→ a b) (→ (f a) (f b))))])
+
+(def <$> : (∀ [a b f] (⇒ [(Functor f)] (→ (→ a b) (→ (f a) (f b)))))
+  map)
+
+(def $> : (∀ [a b f] (⇒ [(Functor f)] (→ b (→ (f a) (f b)))))
+  (λ (x) (map (const x))))
+
+(class (Applicative f)
+  [pure : (∀ [a] (→ a (f a)))]
+  [<*> : (∀ [a b] (→ (f (→ a b)) (→ (f a) (f b))))])
+
+(def *> : (∀ [a b f] (⇒ [(Applicative f)] (→ (f a) (→ (f b) (f b)))))
+  (λ (fa fb) {{(pure (λ (_ x) x)) . <*> . fa} . <*> . fb}))
+
+(def <* : (∀ [a b f] (⇒ [(Applicative f)] (→ (f a) (→ (f b) (f a)))))
+  (λ (fa fb) {{(pure (λ (x _) x)) . <*> . fa} . <*> . fb}))
+
+(class (Monad m)
+  [join : (∀ [a] (→ (m (m a)) (m a)))])
+
+(def =<< : (∀ [a b m] (⇒ [(Functor m) (Monad m)]
+                         (→ (→ a (m b)) (→ (m a) (m b)))))
+  (λ (f m) (join (map f m))))
+
+(def >>= : (∀ [a b m] (⇒ [(Functor m) (Monad m)]
+                         (→ (m a) (→ (→ a (m b)) (m b)))))
+  (flip =<<))
+
+(def ap : (∀ [a b m] (⇒ [(Applicative m) (Monad m)] (→ (m (→ a b)) (→ (m a) (m b)))))
+  (λ (mf mx)
+    {mf . >>= . (λ (f) {mx . >>= . (λ (x) (pure (f x)))})}))
+
+;; ---------------------------------------------------------------------------------------------------
+
+(data Bool true false)
+
+(def not : (→ Bool Bool)
+  (λ (x) (case x [true false]
+                 [false true])))
+
+;; ---------------------------------------------------------------------------------------------------
+
+(data (Maybe a)
+  (just a)
+  nothing)
+
+(def maybe : (∀ [a b] (→ b (→ (→ a b) (→ (Maybe a) b))))
+  (λ (x f m)
+    (case m
+      [(just v) (f v)]
+      [nothing  x])))
+
+(instance (Functor Maybe)
+  [map (λ (f m) (case m
+                  [(just x) (just (f x))]
+                  [nothing  nothing]))])
+
+(instance (Applicative Maybe)
+  [pure just]
+  [<*> (λ (mf ma)
+         (case mf
+           [(just f) (case ma
+                       [(just a) (just (f a))]
+                       [nothing  nothing])]
+           [nothing  nothing]))])
+
+(instance (Monad Maybe)
+  [join (λ (m) (case m
+                 [(just (just x)) (just x)]
+                 [_               nothing]))])
+
+;; ---------------------------------------------------------------------------------------------------
+
+(data (Either a b)
+  (left a)
+  (right b))
+
+(def either : (∀ [a b c] (→ (→ a c) (→ (→ b c) (→ (Either a b) c))))
+  (λ (f g e) (case e
+               [(right x) (f x)]
+               [(left x)  (g x)])))
+
+(instance (∀ [e] (Functor (Either e)))
+  [map (λ (f e) (case e
+                  [(right x) (right (f x))]
+                  [(left x)  (left x)]))])
+
+(instance (∀ [e] (Applicative (Either e)))
+  [pure right]
+  [<*> (λ (ef ea)
+         (case ef
+           [(right f) (case ea
+                       [(right a) (right (f a))]
+                       [(left e)  (left e)])]
+           [(left e)  (left e)]))])
+
+(instance (∀ [e] (Monad (Either e)))
+  [join (λ (e) (case e
+                 [(right (right x)) (right x)]
+                 [(right (left e))  (left e)]
+                 [(left e)          (left e)]))])
+
+;; ---------------------------------------------------------------------------------------------------
+
+(data (List a)
+  (cons a (List a))
+  nil)
+
+(def foldl : (∀ [a b] (→ (→ b (→ a b)) (→ b (→ (List a) b))))
+  (λ (f acc lst)
+    (case lst
+      [nil acc]
+      [(cons x xs) (foldl f (f acc x) xs)])))
+
+(def reverse : (∀ [a] (→ (List a) (List a)))
+  (foldl (flip cons) nil))
+
+(instance (Functor List)
+  [map (λ (f) (foldl (λ (acc x) (cons (f x) acc)) nil))])
