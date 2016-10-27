@@ -1,6 +1,6 @@
 #lang info
 
-(define collection "rascal")
+(define collection 'multi)
 
 (define deps
   '("base"
@@ -10,5 +10,4 @@
     "syntax-classes-lib"
     "turnstile"))
 (define build-deps
-  '("rackunit-lib"
-    "rackunit-spec"))
+  '())
