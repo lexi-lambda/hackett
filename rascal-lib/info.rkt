@@ -3,7 +3,7 @@
 (define collection 'multi)
 
 (define deps
-  '("base"
+  '(["base" #:version "6.5"]
     "curly-fn-lib"
     "point-free"
     "srfi-lite-lib"

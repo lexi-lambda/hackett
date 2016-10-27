@@ -1,0 +1,25 @@
+language: c
+
+env:
+  global:
+    - RACKET_DIR: '~/racket'
+  matrix:
+    - RACKET_VERSION: 6.5
+    - RACKET_VERSION: 6.6
+    - RACKET_VERSION: 6.7
+    - RACKET_VERSION: HEAD
+
+before_install:
+  - git clone https://github.com/greghendershott/travis-racket.git
+  - cat travis-racket/install-racket.sh | bash
+  - export PATH="${RACKET_DIR}/bin:${PATH}"
+
+install:
+  - raco pkg install --installation --auto --link
+      $TRAVIS_BUILD_DIR/rascal-lib
+      $TRAVIS_BUILD_DIR/rascal-test
+  - raco pkg install --installation --auto cover cover-coveralls
+
+script:
+  - raco test -ep rascal-lib rascal-test
+  - raco cover -bf coveralls -d $TRAVIS_BUILD_DIR/coverage -p rascal-lib rascal-test

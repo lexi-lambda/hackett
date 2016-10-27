@@ -1,4 +1,4 @@
-# Rascal
+# Rascal [![Build Status](https://travis-ci.org/lexi-lambda/rascal.svg?branch=travis-ci)](https://travis-ci.org/lexi-lambda/rascal)
 
 Rascal is an attempt to implement a Haskell-like language with support for Racket’s macro system, built using the techniques described in the paper [*Type Systems as Macros*][types-as-macros]. It is currently *extremely* work-in-progress.
 
@@ -7,11 +7,11 @@ Here are some of the features that Rascal supports **right now**:
   - Parametric polymorphism
   - Algebraic datatypes (ADTs)
   - Hindley-Milner type inference
+  - Typeclasses
   - Type-aware/type-directed macros
 
 Here are some of the features that I am currently working on:
 
-  - Typeclasses
   - Kindchecking
   - Exhaustiveness checking
   - Type inference for recursive definitions
