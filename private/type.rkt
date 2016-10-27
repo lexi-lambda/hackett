@@ -203,13 +203,12 @@
                  (syntax-local-introduce x-stx)
                  (datum->syntax tmp (syntax-e tmp) x-stx x-stx)))))
           (define/syntax-parse [x-introduced ...] (map syntax-local-introduce (attribute x-)))
-          (define/syntax-parse [τ-proxy ...] (map property-proxy τs))
+          (define/syntax-parse [τ-expr ...] (map preservable-property->expression τs))
           (values
            #`(λ (x- ...)
                (let-syntax ([x (make-variable-like-transformer/thunk
                                 (λ (id) (syntax-property
-                                         (assign-type #'x- (instantiate-type
-                                                            (property-proxy-value #'τ-proxy)))
+                                         (assign-type #'x- (instantiate-type τ-expr))
                                          'disappeared-use
                                          (list (propagate-original-for-check-syntax
                                                 (syntax-local-introduce id)

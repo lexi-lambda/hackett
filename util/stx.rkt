@@ -20,8 +20,7 @@
   [propagate-original-for-check-syntax (syntax? syntax? . -> . syntax?)]
   [free-id-table-union (immutable-free-id-table? immutable-free-id-table?
                         . -> . immutable-free-id-table?)]
-  [property-proxy (any/c . -> . syntax?)]
-  [property-proxy-value (syntax? . -> . any/c)]))
+  [preservable-property->expression (any/c . -> . syntax?)]))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; general syntax object utilities
@@ -108,7 +107,7 @@
     (make-immutable-free-id-table t)))
 
 ;; ---------------------------------------------------------------------------------------------------
-;; property proxies
+;; preservable property expressions
 
 ; Sometimes, it is useful to embed a value in a piece of syntax. Normally, this is easily achievable
 ; using quasisyntax/unsyntax, but in the case of embedding prefab structs, the macroexpander will
@@ -116,11 +115,25 @@
 ; struct is embedded in a piece of syntax, the macroexpander will “flatten” it such that the syntax
 ; information is lost.
 ;
-; An easy way around this is to attach the value to a syntax property, which the macroexpander will
-; not touch. These are some very simple helper functions for making that intent explicit.
+; A hacky way around this is to convert values to expressions that evaluate to themselves, then embed
+; those into the resulting syntax instead of the values directly.
 
-(define (property-proxy val)
-  (syntax-property #'proxy 'proxy-value val #t))
-
-(define (property-proxy-value stx)
-  (syntax-property stx 'proxy-value))
+(define preservable-property->expression
+  (match-lambda
+    [(and (app prefab-struct-key (? values prefab-key))
+          (app struct->vector (vector _ fields ...)))
+     #`(make-prefab-struct '#,prefab-key #,@(map preservable-property->expression fields))]
+    [(? list? lst)
+     #`(list #,@(map preservable-property->expression lst))]
+    [(cons a b)
+     #`(cons #,(preservable-property->expression a)
+             #,(preservable-property->expression b))]
+    [(? syntax? stx)
+     #`(quote-syntax #,stx)]
+    [(and (or (? boolean?) (? symbol?) (? number?) (? char?) (? string?) (? bytes?) (? regexp?))
+          datum)
+     #`(quote #,datum)]
+    [other
+     (error 'preservable-property->expression
+            "disallowed value within preserved syntax property\n  value: ~e"
+            other)]))

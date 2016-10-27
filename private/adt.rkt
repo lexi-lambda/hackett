@@ -163,11 +163,11 @@
    #:with tag-/curried (generate-temporary #'constructor.tag)
    #:do [(define αs (map fresh (attribute τ.arg)))
          (define type-ctx (map cons (attribute τ.arg) αs))]
-   #:with [α-proxy ...] (map property-proxy αs)
-   #:with [τ_arg-proxy ...] (map #{property-proxy (type-eval % #:ctx type-ctx)}
-                                 (attribute constructor.arg))
+   #:with [α-expr ...] (map preservable-property->expression αs)
+   #:with [τ_arg-expr ...] (map #{preservable-property->expression (type-eval % #:ctx type-ctx)}
+                                (attribute constructor.arg))
    #:with τ_result (if (attribute τ.nullary?) #'τ.tag
-                       #'(τ.tag (property-proxy-value #'α-proxy) ...))
+                       #'(τ.tag α-expr ...))
    #:with [field ...] (generate-temporaries #'(constructor.arg ...))
    #`(begin-
        ; check if the constructor is nullary or not
@@ -190,8 +190,7 @@
                                    #:reflection-name 'constructor.tag)
                                  (define- tag-/curried (curry- tag-))]
                  (define-syntax constructor.tag
-                   (let ([τ_fn (generalize-type (→/curried (property-proxy-value #'τ_arg-proxy) ...
-                                                           τ_result))])
+                   (let ([τ_fn (generalize-type (→/curried τ_arg-expr ... τ_result))])
                      (data-constructor
                       (make-variable-like-transformer/thunk
                        (thunk (assign-type #'tag-/curried (instantiate-type τ_fn))))

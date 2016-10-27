@@ -221,7 +221,8 @@
            (typecheck-annotated-bindings (attribute x)
                                          (map type-eval (attribute τ-ann))
                                          (attribute expr)))]
-   #:with [[τ-proxy ...] [x- ...] [val- ...]] (list (map property-proxy τs) xs- vals-)
+   #:with [[τ-expr ...] [x- ...] [val- ...]]
+          (list (map preservable-property->expression τs) xs- vals-)
    #:with [main-submodule ...]
           (let ([n (list-index #{eq? 'main (syntax-e %)} (attribute x))])
             (if n
@@ -231,7 +232,7 @@
       (define- x- val-) ...
       (define-syntax x
         (make-variable-like-transformer/thunk
-         (λ (stx) (assign-type #'x- (instantiate-type (property-proxy-value #'τ-proxy))))))
+         (λ (stx) (assign-type #'x- (instantiate-type τ-expr)))))
       ...
       main-submodule ...)])
 
@@ -318,13 +319,13 @@
          (define method-table (class-method-table class))
          (free-id-table-set! method-table #'method τ_method*)]
    #:with method-impl (generate-temporary #'method)
-   #:with τ_method-proxy (property-proxy τ_method*)
+   #:with τ_method-expr (preservable-property->expression τ_method*)
    #'(begin-
        (define- (method-impl dict) (free-id-table-ref dict #'method))
        (define-syntax method
          (make-variable-like-transformer/thunk
           (λ (stx) (assign-type (syntax/loc stx method-impl)
-                                (instantiate-type (property-proxy-value #'τ_method-proxy)))))))])
+                                (instantiate-type τ_method-expr))))))])
 
 (begin-for-syntax
   (define-syntax-class instance-spec
