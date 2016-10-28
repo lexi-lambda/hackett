@@ -348,34 +348,58 @@
   [(_ spec:instance-spec [method:id impl] ...)
    #:with dict-id (generate-temporary 'dict)
    #:with [specialized-method ...] (generate-temporaries (attribute method))
-   #:do [(define class (attribute spec.class))
-
-         (match-define (∀ _ (⇒ dict-preds _)) (attribute spec.type))
-         (define dict-pred-ids (generate-temporaries dict-preds))
-         (define dict-mapping (map cons dict-preds dict-pred-ids))
-
-         (define method-table (class-method-table/instantiate class (attribute spec.type)))
-         (define τs_methods (map #{free-id-table-ref method-table %} (attribute method)))
-         (match-define {list _ _ impls-}
-           (typecheck-annotated-bindings (attribute specialized-method)
-                                         τs_methods
-                                         (attribute impl)
-                                         #:existing-dict-mapping dict-mapping))]
-   #:with [impl- ...] impls-
-   #:do [(register-class-instance! (attribute spec.class)
-                                   (attribute spec.type)
-                                   (instance (syntax-local-introduce #'dict-id))
-                                   #:src this-syntax)
-         (define (app/dict-preds stx)
+   #:do [(match-define (∀ _ (⇒ dict-preds _)) (attribute spec.type))
+         (define dict-pred-ids (generate-temporaries dict-preds))]
+   #:do [(define (app/dict-preds stx)
            (for/fold ([stx stx])
                      ([pred-id (in-list dict-pred-ids)])
              #`(#,stx #,pred-id)))]
    #:with [specialized-method-sig ...] (map app/dict-preds (attribute specialized-method))
    #`(begin-
-       (define- specialized-method-sig impl-) ...
+       ; register the class in a begin-for-syntax block so that the side-effect is re-executed for
+       ; importing modules
+       (begin-for-syntax-
+         (syntax-parse (quote-syntax spec)
+           [spec*:instance-spec
+            (let ([class (attribute spec*.class)])
+              (register-class-instance! class
+                                        (attribute spec*.type)
+                                        (instance #'dict-id)
+                                        #:src (quote-syntax #,this-syntax)))]))
+
+       ; define the instance method implementations themselves
+       (define-instance-method spec method specialized-method impl) ...
+       ; define a dictionary and store references to the instance methods
        (define- #,(app/dict-preds #'dict-id)
          (make-immutable-free-id-table
-          (list (cons #'method specialized-method-sig) ...))))])
+          (list- (cons- #'method specialized-method-sig) ...))))])
+
+(define-syntax-parser define-instance-method
+  [(_ spec:instance-spec method:id specialized-method:id impl)
+   #:do [(define class (attribute spec.class))
+
+         ; generate ids and a mapping for the dictionaries in the instance context
+         (match-define (∀ _ (⇒ dict-preds _)) (attribute spec.type))
+         (define dict-pred-ids (generate-temporaries dict-preds))
+         (define dict-mapping (map cons dict-preds dict-pred-ids))
+
+         ; actually do the typechecking against the type signature from the class
+         (define method-table (class-method-table/instantiate class (attribute spec.type)))
+         (define τ_method (free-id-table-ref method-table #'method))
+         (match-define {list _ _ {list impl-}}
+           (typecheck-annotated-bindings (list #'specialized-method)
+                                         (list τ_method)
+                                         (list #'impl)
+                                         #:existing-dict-mapping dict-mapping))
+
+         ; bind the dictionary ids from the instance context
+         (define (app/dict-preds stx)
+           (for/fold ([stx stx])
+                     ([pred-id (in-list dict-pred-ids)])
+             #`(#,stx #,pred-id)))]
+   #:with impl- impl-
+   #:with specialized-method-sig (app/dict-preds #'specialized-method)
+   #'(define- specialized-method-sig impl-)])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; primitive operators

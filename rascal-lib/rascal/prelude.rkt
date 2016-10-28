@@ -13,8 +13,22 @@
 (def id : (∀ [a] (→ a a))
   (λ (x) x))
 
-(def const : (∀ [a b] (→ a (→ b b)))
-  (λ (y x) x))
+(def const : (∀ [a b] (→ a (→ b a)))
+  (λ (y x) y))
+
+;; ---------------------------------------------------------------------------------------------------
+
+(class (Show a)
+  [show : (→ a String)])
+
+(instance (Show String)
+  [show id])
+
+(instance (Show Integer)
+  [show show/Integer])
+
+(instance (Show Unit)
+  [show (const "unit")])
 
 ;; ---------------------------------------------------------------------------------------------------
 
@@ -56,6 +70,11 @@
 
 (data Bool true false)
 
+(instance (Show Bool)
+  [show (λ (x) (case x
+                 [true "true"]
+                 [false "false"]))])
+
 (def not : (→ Bool Bool)
   (λ (x) (case x [true false]
                  [false true])))
@@ -65,6 +84,11 @@
 (data (Maybe a)
   (just a)
   nothing)
+
+(instance (∀ [a] (⇒ [(Show a)] (Show (Maybe a))))
+  [show (λ (x) (case x
+                 [(just v) (string-append "(just " (string-append (show v) ")"))]
+                 [nothing "nothing"]))])
 
 (def maybe : (∀ [a b] (→ b (→ (→ a b) (→ (Maybe a) b))))
   (λ (x f m)
@@ -97,6 +121,11 @@
   (left a)
   (right b))
 
+(instance (∀ [a b] (⇒ [(Show a) (Show b)] (Show (Either a b))))
+  [show (λ (x) (case x
+                 [(left v) (string-append "(left " (string-append (show v) ")"))]
+                 [(right v) (string-append "(right " (string-append (show v) ")"))]))])
+
 (def either : (∀ [a b c] (→ (→ a c) (→ (→ b c) (→ (Either a b) c))))
   (λ (f g e) (case e
                [(right x) (f x)]
@@ -127,6 +156,12 @@
 (data (List a)
   (cons a (List a))
   nil)
+
+(instance (∀ [a] (⇒ [(Show a)] (Show (List a))))
+  [show (λ (x) (case x
+                 [(cons v vs) (string-append
+                               "(cons " (string-append (show v) (string-append (show vs) ")")))]
+                 [nil "nil"]))])
 
 (def foldl : (∀ [a b] (→ (→ b (→ a b)) (→ b (→ (List a) b))))
   (λ (f acc lst)
