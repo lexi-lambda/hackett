@@ -46,7 +46,7 @@ Here’s what some Rascal code *might* eventually look like:
 (class (Show a)
   [show : {Int -> a -> String}])
 
-(instance forall [a] [(Show a)] => (Show (Maybe a))
+(instance (forall [a] (Show a) => (Show (Maybe a)))
   (def+ show
     [nothing  -> "nothing"]
     [(just x) -> {"just " <> (show x)}]))

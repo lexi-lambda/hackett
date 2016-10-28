@@ -6,20 +6,20 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
-(def flip : (∀ [a b c] (→ (→ a (→ b c))
-                          (→ b (→ a c))))
+(def flip : (forall [a b c] (-> (-> a (-> b c))
+                                (-> b (-> a c))))
   (λ (f x y) (f y x)))
 
-(def id : (∀ [a] (→ a a))
+(def id : (forall [a] (-> a a))
   (λ (x) x))
 
-(def const : (∀ [a b] (→ a (→ b a)))
+(def const : (forall [a b] (-> a (-> b a)))
   (λ (y x) y))
 
 ;; ---------------------------------------------------------------------------------------------------
 
 (class (Show a)
-  [show : (→ a String)])
+  [show : (-> a String)])
 
 (instance (Show String)
   [show id])
@@ -33,36 +33,36 @@
 ;; ---------------------------------------------------------------------------------------------------
 
 (class (Functor f)
-  [map : (∀ [a b] (→ (→ a b) (→ (f a) (f b))))])
+  [map : (forall [a b] (-> (-> a b) (-> (f a) (f b))))])
 
-(def <$> : (∀ [a b f] (⇒ [(Functor f)] (→ (→ a b) (→ (f a) (f b)))))
+(def <$> : (forall [a b f] (=> [(Functor f)] (-> (-> a b) (-> (f a) (f b)))))
   map)
 
-(def $> : (∀ [a b f] (⇒ [(Functor f)] (→ b (→ (f a) (f b)))))
+(def $> : (forall [a b f] (=> [(Functor f)] (-> b (-> (f a) (f b)))))
   (λ (x) (map (const x))))
 
 (class (Applicative f)
-  [pure : (∀ [a] (→ a (f a)))]
-  [<*> : (∀ [a b] (→ (f (→ a b)) (→ (f a) (f b))))])
+  [pure : (forall [a] (-> a (f a)))]
+  [<*> : (forall [a b] (-> (f (-> a b)) (-> (f a) (f b))))])
 
-(def *> : (∀ [a b f] (⇒ [(Applicative f)] (→ (f a) (→ (f b) (f b)))))
+(def *> : (forall [a b f] (=> [(Applicative f)] (-> (f a) (-> (f b) (f b)))))
   (λ (fa fb) {{(pure (λ (_ x) x)) . <*> . fa} . <*> . fb}))
 
-(def <* : (∀ [a b f] (⇒ [(Applicative f)] (→ (f a) (→ (f b) (f a)))))
+(def <* : (forall [a b f] (=> [(Applicative f)] (-> (f a) (-> (f b) (f a)))))
   (λ (fa fb) {{(pure (λ (x _) x)) . <*> . fa} . <*> . fb}))
 
 (class (Monad m)
-  [join : (∀ [a] (→ (m (m a)) (m a)))])
+  [join : (forall [a] (-> (m (m a)) (m a)))])
 
-(def =<< : (∀ [a b m] (⇒ [(Functor m) (Monad m)]
-                         (→ (→ a (m b)) (→ (m a) (m b)))))
+(def =<< : (forall [a b m] (=> [(Functor m) (Monad m)]
+                               (-> (-> a (m b)) (-> (m a) (m b)))))
   (λ (f m) (join (map f m))))
 
-(def >>= : (∀ [a b m] (⇒ [(Functor m) (Monad m)]
-                         (→ (m a) (→ (→ a (m b)) (m b)))))
+(def >>= : (forall [a b m] (=> [(Functor m) (Monad m)]
+                               (-> (m a) (-> (-> a (m b)) (m b)))))
   (flip =<<))
 
-(def ap : (∀ [a b m] (⇒ [(Applicative m) (Monad m)] (→ (m (→ a b)) (→ (m a) (m b)))))
+(def ap : (forall [a b m] (=> [(Applicative m) (Monad m)] (-> (m (-> a b)) (-> (m a) (m b)))))
   (λ (mf mx)
     {mf . >>= . (λ (f) {mx . >>= . (λ (x) (pure (f x)))})}))
 
@@ -75,9 +75,9 @@
                  [true "true"]
                  [false "false"]))])
 
-(def not : (→ Bool Bool)
+(def not : (-> Bool Bool)
   (λ (x) (case x [true false]
-                 [false true])))
+           [false true])))
 
 ;; ---------------------------------------------------------------------------------------------------
 
@@ -85,12 +85,12 @@
   (just a)
   nothing)
 
-(instance (∀ [a] (⇒ [(Show a)] (Show (Maybe a))))
+(instance (forall [a] (=> [(Show a)] (Show (Maybe a))))
   [show (λ (x) (case x
                  [(just v) (string-append "(just " (string-append (show v) ")"))]
                  [nothing "nothing"]))])
 
-(def maybe : (∀ [a b] (→ b (→ (→ a b) (→ (Maybe a) b))))
+(def maybe : (forall [a b] (-> b (-> (-> a b) (-> (Maybe a) b))))
   (λ (x f m)
     (case m
       [(just v) (f v)]
@@ -121,31 +121,31 @@
   (left a)
   (right b))
 
-(instance (∀ [a b] (⇒ [(Show a) (Show b)] (Show (Either a b))))
+(instance (forall [a b] (=> [(Show a) (Show b)] (Show (Either a b))))
   [show (λ (x) (case x
                  [(left v) (string-append "(left " (string-append (show v) ")"))]
                  [(right v) (string-append "(right " (string-append (show v) ")"))]))])
 
-(def either : (∀ [a b c] (→ (→ a c) (→ (→ b c) (→ (Either a b) c))))
+(def either : (forall [a b c] (-> (-> a c) (-> (-> b c) (-> (Either a b) c))))
   (λ (f g e) (case e
                [(right x) (f x)]
                [(left x)  (g x)])))
 
-(instance (∀ [e] (Functor (Either e)))
+(instance (forall [e] (Functor (Either e)))
   [map (λ (f e) (case e
                   [(right x) (right (f x))]
                   [(left x)  (left x)]))])
 
-(instance (∀ [e] (Applicative (Either e)))
+(instance (forall [e] (Applicative (Either e)))
   [pure right]
   [<*> (λ (ef ea)
          (case ef
            [(right f) (case ea
-                       [(right a) (right (f a))]
-                       [(left e)  (left e)])]
+                        [(right a) (right (f a))]
+                        [(left e)  (left e)])]
            [(left e)  (left e)]))])
 
-(instance (∀ [e] (Monad (Either e)))
+(instance (forall [e] (Monad (Either e)))
   [join (λ (e) (case e
                  [(right (right x)) (right x)]
                  [(right (left e))  (left e)]
@@ -157,19 +157,19 @@
   (cons a (List a))
   nil)
 
-(instance (∀ [a] (⇒ [(Show a)] (Show (List a))))
+(instance (forall [a] (=> [(Show a)] (Show (List a))))
   [show (λ (x) (case x
                  [(cons v vs) (string-append
                                "(cons " (string-append (show v) (string-append (show vs) ")")))]
                  [nil "nil"]))])
 
-(def foldl : (∀ [a b] (→ (→ b (→ a b)) (→ b (→ (List a) b))))
+(def foldl : (forall [a b] (-> (-> b (-> a b)) (-> b (-> (List a) b))))
   (λ (f acc lst)
     (case lst
       [nil acc]
       [(cons x xs) (foldl f (f acc x) xs)])))
 
-(def reverse : (∀ [a] (→ (List a) (List a)))
+(def reverse : (forall [a] (-> (List a) (List a)))
   (foldl (flip cons) nil))
 
 (instance (Functor List)
