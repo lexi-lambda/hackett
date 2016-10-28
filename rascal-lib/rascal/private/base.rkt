@@ -78,18 +78,24 @@
           [τ:id
            (or (free-id-table-ref (current-type-var-environment) #'τ #f)
                (syntax-local-value #'τ))]
-          [(∀ [α:id ...] τ)
-           #:do [(define α-types (map fresh (attribute α)))
+          [(∀ ~! [α:id ...] {~optional {~seq (class-id:local-value/class τ_pred) ... ⇒}
+                                       #:defaults ([[class-id 1] '()]
+                                                   [[τ_pred   1] '()])}
+              τ)
+           #:do [; handle ∀
+                 (define α-types (map fresh (attribute α)))
                  (define α-ids (map τvar-id α-types))
-                 (define τ* (type-eval #'τ #:ctx (map cons (attribute α) α-types)))
+                 (define ctx (map cons (attribute α) α-types))
+                 (define τ* (type-eval #'τ #:ctx ctx))
                  ; call type-free-vars to get the order the type variables appear in τ; this assures
                  ; they will have a canonical order, which allows type=? to work more easily
                  (define α-ids* (filter #{member % α-ids free-identifier=?}
-                                        (type-free-vars τ*)))]
-           (∀ α-ids* τ*)]
-          [(⇒ [(class-id:local-value/class τ_pred) ...] τ)
-           #:do [(define τ_preds (map loop (attribute τ_pred)))]
-           (⇒ (map has-class (attribute class-id) τ_preds) (loop #'τ))]
+                                        (type-free-vars τ*)))
+
+                 ; handle ⇒
+                 (define τ_preds (map #{type-eval % #:ctx ctx} (attribute τ_pred)))
+                 (define preds (map has-class (attribute class-id) τ_preds))]
+           (∀ α-ids* (⇒ preds τ*))]
           [(τ a)
            (τapp (loop #'τ)
                  (loop #'a))]
@@ -331,18 +337,15 @@
   (define-syntax-class instance-spec
     #:attributes [class type]
     #:literals [∀ ⇒]
-    [pattern (∀ αs (⇒ ~! preds (id:local-value/class τ)))
+    [pattern (∀ αs pred ... ⇒ ~! (id:local-value/class τ))
              #:attr class (attribute id.local-value)
-             #:attr type (type-eval #'(∀ αs (⇒ preds τ)))]
-    [pattern (⇒ ~! preds (id:local-value/class τ))
-             #:attr class (attribute id.local-value)
-             #:attr type (type-eval #'(∀ [] (⇒ preds τ)))]
+             #:attr type (type-eval #'(∀ αs pred ... ⇒ τ))]
     [pattern (∀ ~! αs (id:local-value/class τ))
              #:attr class (attribute id.local-value)
-             #:attr type (type-eval #'(∀ αs (⇒ [] τ)))]
+             #:attr type (type->normalized-scheme (type-eval #'(∀ αs τ)))]
     [pattern (id:local-value/class τ)
              #:attr class (attribute id.local-value)
-             #:attr type (type-eval #'(∀ [] (⇒ [] τ)))]))
+             #:attr type (type->normalized-scheme (type-eval #'(∀ [] τ)))]))
 
 (define-syntax-parser instance
   [(_ spec:instance-spec [method:id impl] ...)

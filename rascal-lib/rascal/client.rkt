@@ -21,7 +21,7 @@
   [show (λ (x) (case x
                  [true "true"]
                  [false "false"]))])
-(instance (∀ [a] (⇒ [(Show a)] (Show (Maybe a))))
+(instance (∀ [a] (Show a) ⇒ (Show (Maybe a)))
   [show (λ (x) (case x
                  [(just v) {{"(just " . <> . (show v)} . <> . ")"}]
                  [nothing "nothing"]))])
