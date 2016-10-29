@@ -318,15 +318,19 @@
            ; extend the existing list of quantified vars and preds
            (match-let ([(∀ αs (⇒ ctx τ)) (type->normalized-scheme τ_method)])
              (∀ (cons #'α* αs)
-                (⇒ (cons (has-class #'class-id class-var) ctx) τ))))
-
-         ; register the class method in the table
-         (define class (attribute class-id.local-value))
-         (define method-table (class-method-table class))
-         (free-id-table-set! method-table #'method τ_method*)]
+                (⇒ (cons (has-class #'class-id class-var) ctx) τ))))]
    #:with method-impl (generate-temporary #'method)
    #:with τ_method-expr (preservable-property->expression τ_method*)
    #'(begin-
+       ; register the class method in the table in a begin-for-syntax block so that the side-effect is
+       ; re-executed for importing modules
+       (begin-for-syntax-
+         (syntax-parse (quote-syntax class-id)
+           [class-id*:local-value/class
+            (let* ([class (attribute class-id*.local-value)]
+                   [method-table (class-method-table class)])
+              (free-id-table-set! method-table #'method τ_method-expr))]))
+       ; define the method and the implementation that will defer to a dictionary
        (define- (method-impl dict) (free-id-table-ref dict #'method))
        (define-syntax method
          (make-variable-like-transformer/thunk
@@ -403,22 +407,3 @@
    #:with impl- impl-
    #:with specialized-method-sig (app/dict-preds #'specialized-method)
    #'(define- specialized-method-sig impl-)])
-
-;; ---------------------------------------------------------------------------------------------------
-;; primitive operators
-
-(define-simple-macro (define-primop id:id [e:expr {~literal :} τ])
-  (define-syntax id (make-variable-like-transformer (⊢ e : τ))))
-
-(define ((+/c a) b) (+- a b))
-(define ((-/c a) b) (-- a b))
-(define ((*/c a) b) (*- a b))
-
-(define-primop + [+/c : (→ Integer (→ Integer Integer))])
-(define-primop - [-/c : (→ Integer (→ Integer Integer))])
-(define-primop * [*/c : (→ Integer (→ Integer Integer))])
-(define-primop show/Integer [~a- : (→ Integer String)])
-
-(define ((string-append/c a) b) (string-append- a b))
-
-(define-primop string-append [string-append/c : (→ String (→ String String))])

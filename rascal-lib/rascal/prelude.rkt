@@ -1,6 +1,10 @@
 #lang rascal
 
-(provide (all-defined-out))
+(require (only-in rascal/private/prim show/Integer)
+         rascal/semigroup)
+
+(provide (all-defined-out)
+         (all-from-out rascal/semigroup))
 
 (data Unit unit)
 
@@ -85,7 +89,7 @@
 
 (instance (forall [a] (Show a) => (Show (Maybe a)))
   [show (λ (x) (case x
-                 [(just v) (string-append "(just " (string-append (show v) ")"))]
+                 [(just v) {"(just " . <> . {(show v) . <> . ")"}}]
                  [nothing "nothing"]))])
 
 (def maybe : (forall [a b] (-> b (-> (-> a b) (-> (Maybe a) b))))
@@ -121,8 +125,8 @@
 
 (instance (forall [a b] (Show a) (Show b) => (Show (Either a b)))
   [show (λ (x) (case x
-                 [(left v) (string-append "(left " (string-append (show v) ")"))]
-                 [(right v) (string-append "(right " (string-append (show v) ")"))]))])
+                 [(left v) {"(left " . <> . {(show v) . <> . ")"}}]
+                 [(right v) {"(right " . <> . {(show v) . <> . ")"}}]))])
 
 (def either : (forall [a b c] (-> (-> a c) (-> (-> b c) (-> (Either a b) c))))
   (λ (f g e) (case e
@@ -157,8 +161,7 @@
 
 (instance (forall [a] (Show a) => (Show (List a)))
   [show (λ (x) (case x
-                 [(cons v vs) (string-append
-                               "(cons " (string-append (show v) (string-append (show vs) ")")))]
+                 [(cons v vs) {"(cons " . <> . {(show v) . <> . {(show vs) . <> . ")"}}}]
                  [nil "nil"]))])
 
 (def foldl : (forall [a b] (-> (-> b (-> a b)) (-> b (-> (List a) b))))
@@ -166,6 +169,15 @@
     (case lst
       [nil acc]
       [(cons x xs) (foldl f (f acc x) xs)])))
+
+(def foldr : (forall [a b] (-> (-> a (-> b b)) (-> b (-> (List a) b))))
+  (λ (f acc lst)
+    (case lst
+      [nil acc]
+      [(cons x xs) (f x (foldr f acc xs))])))
+
+(instance (forall [a] (Semigroup (List a)))
+  [append (λ (xs ys) (foldr cons ys xs))])
 
 (def reverse : (forall [a] (-> (List a) (List a)))
   (foldl (flip cons) nil))

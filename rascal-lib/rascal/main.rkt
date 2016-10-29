@@ -2,12 +2,13 @@
 
 (require racket/require)
 
-(require (multi-in rascal/private [adt base]))
+(require (except-in (multi-in rascal/private [adt base prim]) class)
+         rascal/private/provide)
 
-(provide require provide all-defined-out
+(provide require provide rename only-in all-from-out all-defined-out
          : def λ let letrec data case _ class instance
          ∀ ⇒ → Integer String
-         + - * show/Integer string-append
+         + - *
          (rename-out [λ lambda]
                      [⇒ =>]
                      [∀ forall]
