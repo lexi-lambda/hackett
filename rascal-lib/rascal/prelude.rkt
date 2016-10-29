@@ -1,7 +1,10 @@
 #lang rascal
 
-(require (only-in rascal/private/prim show/Integer)
-         rascal/semigroup)
+(require (only-in racket/base for-syntax)
+         (for-syntax racket/base)
+         (only-in rascal/private/prim show/Integer)
+         rascal/semigroup
+         syntax/parse/define)
 
 (provide (all-defined-out)
          (all-from-out rascal/semigroup))
@@ -64,9 +67,22 @@
 (def >>= : (forall [a b m] (Functor m) (Monad m) => (-> (m a) (-> (-> a (m b)) (m b))))
   (flip =<<))
 
+(define-syntax-parser do
+  #:literals [: <- def]
+  [(_ e:expr)
+   #'e]
+  [(_ [x:id <- ~! e:expr] rest ...+)
+   #'{e . >>= . (λ (x) (do rest ...))}]
+  [(_ (def ~! x:id : τ:expr e:expr) ...+ rest ...+)
+   #'(letrec ([x : τ e] ...)
+       (do rest ...))]
+  [(_ e:expr rest ...+)
+   #'{e . *> . (do rest ...)}])
+
 (def ap : (forall [a b m] (Applicative m) (Monad m) => (-> (m (-> a b)) (-> (m a) (m b))))
-  (λ (mf mx)
-    {mf . >>= . (λ (f) {mx . >>= . (λ (x) (pure (f x)))})}))
+  (λ (mf mx) (do [f <- mf]
+                 [x <- mx]
+                 (pure (f x)))))
 
 ;; ---------------------------------------------------------------------------------------------------
 

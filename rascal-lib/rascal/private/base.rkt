@@ -24,8 +24,16 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; type constructors
 
-(define-syntax (∀ stx) (raise-syntax-error #f "∀ cannot be used as an expression" stx))
-(define-syntax (⇒ stx) (raise-syntax-error #f "⇒ cannot be used as an expression" stx))
+(begin-for-syntax
+  (define (literal-transformer stx)
+    (let ([id (syntax-parse stx
+                [(id:id . _) #'id]
+                [id:id       #'id])])
+      (raise-syntax-error #f "cannot be used as an expression" id))))
+
+(define-syntax ∀ literal-transformer)
+(define-syntax ⇒ literal-transformer)
+(define-syntax ← literal-transformer)
 
 (define-syntax-parser define-base-type
   [(_ τ:id

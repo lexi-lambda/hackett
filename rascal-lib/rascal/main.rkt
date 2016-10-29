@@ -7,12 +7,13 @@
 
 (provide require provide rename only-in all-from-out all-defined-out
          : def λ let letrec data case _ class instance
-         ∀ ⇒ → Integer String
+         ∀ ⇒ → ← Integer String
          + - *
          (rename-out [λ lambda]
                      [⇒ =>]
                      [∀ forall]
                      [→ ->]
+                     [← <-]
                      [hash-percent-app #%app]
                      [hash-percent-datum #%datum]
                      [hash-percent-module-begin #%module-begin]))
