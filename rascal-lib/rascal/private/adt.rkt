@@ -9,7 +9,8 @@
          rascal/private/base
          syntax/parse/define)
 
-(provide data case)
+(provide (for-syntax data-constructor-spec)
+         data case)
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; ADTs

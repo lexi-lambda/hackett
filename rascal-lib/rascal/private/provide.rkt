@@ -5,10 +5,11 @@
                      racket/require-transform
                      syntax/id-table)
          racket/splicing
+         (rename-in rascal/private/adt [data define-data])
          (rename-in rascal/private/base [class define-class])
          syntax/parse/define)
 
-(provide class rename)
+(provide class data rename)
 
 (begin-for-syntax
   (define (make-renaming-transformer id-stx)
@@ -31,6 +32,23 @@
            #:with [method-id ...] (free-id-table-keys (class-method-table class))
            (expand-export #'(combine-out class-id method-id ...) modes)]))))
 
+  (struct data-transformer ()
+    #:property prop:procedure
+    (let ([transformer (make-renaming-transformer #'define-data)])
+      (λ (_ stx) (transformer stx)))
+    #:property prop:provide-transformer
+    (λ (_)
+      (λ (stx modes)
+        (syntax-parse stx
+          [(_ type-id:id)
+           #:do [(define type (type-eval #'type-id))]
+           #:fail-when (and (not (base-type? type)) #'type-id)
+                       "not defined as a datatype"
+           #:fail-when (and (not (list? (base-type-constructors type))))
+                       "type does not have visible constructors"
+           #:with [constructor:data-constructor-spec ...] (base-type-constructors type)
+           (expand-export #'(combine-out type-id constructor.tag ...) modes)]))))
+
   (struct rename-in/out ()
     #:property prop:require-transformer
     (λ (_)
@@ -45,4 +63,5 @@
            (expand-export #'(rename-out [in-id out-id] ...) modes)])))))
 
 (define-syntax class (class-transformer))
+(define-syntax data (data-transformer))
 (define-syntax rename (rename-in/out))

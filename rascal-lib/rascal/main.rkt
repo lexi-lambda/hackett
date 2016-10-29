@@ -2,7 +2,7 @@
 
 (require racket/require)
 
-(require (except-in (multi-in rascal/private [adt base prim]) class)
+(require (except-in (multi-in rascal/private [adt base prim]) class data)
          rascal/private/provide)
 
 (provide require provide rename only-in all-from-out all-defined-out
