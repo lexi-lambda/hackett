@@ -1,4 +1,4 @@
-#lang rascal
+#lang rascal/private/kernel
 
 (require (only-in racket/base for-syntax))
 

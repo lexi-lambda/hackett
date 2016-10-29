@@ -4,16 +4,15 @@
          (only-in racket/require multi-in))
 
 (require (for-syntax racket/base)
-         (multi-in rascal [function monad semigroup])
+         (multi-in rascal [data/unit function monad semigroup])
          (only-in rascal/private/prim show/Integer)
          syntax/parse/define)
 
 (provide (all-defined-out)
+         (all-from-out rascal/data/unit)
          (all-from-out rascal/function)
          (all-from-out rascal/monad)
          (all-from-out rascal/semigroup))
-
-(data Unit unit)
 
 ;; ---------------------------------------------------------------------------------------------------
 

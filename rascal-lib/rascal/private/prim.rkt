@@ -6,7 +6,9 @@
                      syntax/parse)
          (only-in macrotypes/typecheck postfix-in)
          (postfix-in - racket/base)
-         rascal/private/base)
+         rascal/data/unit
+         rascal/private/base
+         rascal/private/prim/io)
 
 ;; ---------------------------------------------------------------------------------------------------
 
@@ -29,12 +31,14 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
-(provide (typed-out
+(provide IO
+         (typed-out
           [+ : (→ Integer (→ Integer Integer))]
           [- : (→ Integer (→ Integer Integer))]
           [* : (→ Integer (→ Integer Integer))]
           [show/Integer : (→ Integer String)]
-          [append/String : (→ String (→ String String))]))
+          [append/String : (→ String (→ String String))]
+          [display : (→ String (IO Unit))]))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Integer
@@ -49,3 +53,11 @@
 ;; String
 
 (define ((append/String a) b) (string-append- a b))
+
+;; ---------------------------------------------------------------------------------------------------
+;; IO
+
+(define (display str)
+  (io (λ- (rw)
+        (display- str)
+        (tuple2 rw unit))))

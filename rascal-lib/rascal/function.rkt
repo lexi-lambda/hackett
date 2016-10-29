@@ -1,4 +1,4 @@
-#lang rascal
+#lang rascal/private/kernel
 
 (provide id const flip)
 

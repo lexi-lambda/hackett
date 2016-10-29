@@ -2,25 +2,10 @@
 
 (require racket/require)
 
-(require (except-in (multi-in rascal/private [adt base prim]) class data)
-         rascal/private/provide)
+(require (multi-in rascal/private [kernel prim]))
 
-(provide require provide rename only-in all-from-out all-defined-out
-         : def λ let letrec data case _ class instance
-         ∀ ⇒ → ← Integer String
-         + - *
-         (rename-out [λ lambda]
-                     [⇒ =>]
-                     [∀ forall]
-                     [→ ->]
-                     [← <-]
-                     [hash-percent-app #%app]
-                     [hash-percent-datum #%datum]
-                     [hash-percent-module-begin #%module-begin]))
-
-(module+ internal
-  (provide (for-syntax solve-constraints τ~ → τvar τvar-id)
-           define-base-type))
+(provide (all-from-out rascal/private/kernel)
+         + - *)
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; module reader
