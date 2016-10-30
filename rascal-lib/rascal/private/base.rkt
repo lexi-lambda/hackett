@@ -237,18 +237,12 @@
                                          (attribute expr)))]
    #:with [[τ-expr ...] [x- ...] [val- ...]]
           (list (map preservable-property->expression τs) xs- vals-)
-   #:with [main-submodule ...]
-          (let ([n (list-index #{eq? 'main (syntax-e %)} (attribute x))])
-            (if n
-                #`((module+- main (println- #,(list-ref (attribute x-) n))))
-                #'()))
    #'(begin-
       (define- x- val-) ...
       (define-syntax x
         (make-variable-like-transformer/thunk
          (λ (stx) (assign-type #'x- (instantiate-type τ-expr)))))
-      ...
-      main-submodule ...)])
+      ...)])
 
 (define-syntax-parser let1
   [(_ [x:id val:expr] e:expr)

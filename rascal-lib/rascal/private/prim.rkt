@@ -1,14 +1,16 @@
 #lang racket/base
 
 (require (for-syntax racket/base
+                     racket/match
                      racket/provide-transform
                      rascal/util/stx
-                     syntax/parse)
+                     racket/syntax)
          (only-in macrotypes/typecheck postfix-in)
          (postfix-in - racket/base)
          rascal/data/unit
          rascal/private/base
-         rascal/private/prim/io)
+         rascal/private/prim/io
+         syntax/parse/define)
 
 ;; ---------------------------------------------------------------------------------------------------
 
@@ -31,14 +33,14 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
-(provide IO
+(provide IO main
          (typed-out
           [+ : (→ Integer (→ Integer Integer))]
           [- : (→ Integer (→ Integer Integer))]
           [* : (→ Integer (→ Integer Integer))]
           [show/Integer : (→ Integer String)]
           [append/String : (→ String (→ String String))]
-          [display : (→ String (IO Unit))]))
+          [print! : (→ String (IO Unit))]))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Integer
@@ -57,7 +59,17 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; IO
 
-(define (display str)
+(define-syntax-parser main
+  [(_ e:expr)
+   #:do [(match-define {list _ _ {list e-}}
+           (typecheck-annotated-bindings (list (generate-temporary))
+                                         (list (type-eval #'(∀ [a] (IO a))))
+                                         (list #'e)))]
+   #:with e- e-
+   #'(module+ main
+       (void- (unsafe-run-io! e-)))])
+
+(define (print! str)
   (io (λ- (rw)
         (display- str)
         (tuple2 rw unit))))
