@@ -2,12 +2,12 @@
 
 (require racket/require)
 
-(require (multi-in rascal [base prelude]))
+(require (multi-in rascal/private [kernel prim]))
 
-(provide (all-from-out rascal/base)
-         (all-from-out rascal/prelude))
+(provide (all-from-out rascal/private/kernel)
+         + - *)
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; module reader
 
-(module reader syntax/module-reader rascal)
+(module reader syntax/module-reader rascal/base)

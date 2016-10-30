@@ -1,4 +1,4 @@
-#lang rascal
+#lang rascal/base
 
 (require (only-in racket/base for-syntax)
          (only-in racket/require multi-in))

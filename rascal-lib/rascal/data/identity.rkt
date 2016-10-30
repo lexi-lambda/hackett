@@ -1,4 +1,4 @@
-#lang rascal
+#lang rascal/base
 
 (require rascal/monad)
 
