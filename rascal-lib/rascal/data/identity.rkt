@@ -7,7 +7,7 @@
 (data (Identity a)
   (identity a))
 
-(def run-identity : (forall [a] {(Identity a) . -> . a})
+(def run-identity : (forall [a] {(Identity a) -> a})
   (λ (x) (case x [(identity v) v])))
 
 (instance (Functor Identity)

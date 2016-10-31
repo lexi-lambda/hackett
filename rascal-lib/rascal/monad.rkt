@@ -28,10 +28,10 @@
   [<*> : (forall [a b] (-> (f (-> a b)) (-> (f a) (f b))))])
 
 (def *> : (forall [a b f] (Applicative f) => (-> (f a) (-> (f b) (f b))))
-  (λ (fa fb) {{(pure (λ (_ x) x)) . <*> . fa} . <*> . fb}))
+  (λ (fa fb) {(pure (λ (_ x) x)) <*> fa <*> fb}))
 
 (def <* : (forall [a b f] (Applicative f) => (-> (f a) (-> (f b) (f a))))
-  (λ (fa fb) {{(pure (λ (x _) x)) . <*> . fa} . <*> . fb}))
+  (λ (fa fb) {(pure (λ (x _) x)) <*> fa <*> fb}))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Monad
@@ -50,12 +50,12 @@
   [(_ e:expr)
    #'e]
   [(_ [x:id <- ~! e:expr] rest ...+)
-   #'{e . >>= . (λ (x) (do rest ...))}]
+   #'{e >>= (λ (x) (do rest ...))}]
   [(_ (def ~! x:id : τ:expr e:expr) ...+ rest ...+)
    #'(letrec ([x : τ e] ...)
        (do rest ...))]
   [(_ e:expr rest ...+)
-   #'{e . *> . (do rest ...)}])
+   #'{e *> (do rest ...)}])
 
 (def ap : (forall [a b m] (Applicative m) (Monad m) => (-> (m (-> a b)) (-> (m a) (m b))))
   (λ (mf mx) (do [f <- mf]

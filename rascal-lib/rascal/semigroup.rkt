@@ -6,7 +6,7 @@
          (rename [append <>]))
 
 (class (Semigroup a)
-  [append : {a . -> . {a . -> . a}}])
+  [append : {a -> {a -> a}}])
 
 (instance (Semigroup String)
   [append append/String])

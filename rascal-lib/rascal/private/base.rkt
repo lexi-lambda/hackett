@@ -4,7 +4,7 @@
 
 (require (for-syntax (multi-in racket [base dict format function list match splicing syntax])
                      (multi-in rascal/private [type util/stx])
-                     (multi-in syntax/parse [class/local-value define
+                     (multi-in syntax/parse [class/local-value class/paren-shape define
                                              experimental/specialize experimental/template])
                      (only-in srfi/1 list-index)
                      macrotypes/stx-utils
@@ -83,6 +83,13 @@
         (syntax-parse stx
           #:context 'type-eval
           #:literals [∀ ⇒]
+          ; infix application (curly braces)
+          [{~braces a op b {~seq ops bs} ...+}
+           (loop (template
+                  {{a op b} (?@ ops bs) ...}))]
+          [{~braces ~! a op b}
+           (loop #'((op a) b))]
+          ; normal type evaluation
           [τ:id
            (or (free-id-table-ref (current-type-var-environment) #'τ #f)
                (syntax-local-value #'τ))]
@@ -198,6 +205,14 @@
                       τ_fn (→ τ_arg τv))])
 
 (define-syntax-parser hash-percent-app
+  ; infix application (curly braces)
+  [{~braces app a op b {~seq ops bs} ...+}
+   (template
+    {app {app a op b} (?@ ops bs) ...})]
+  [{~braces ~! app a op b}
+   (syntax-property #'(app (app op a) b)
+                    'paren-shape #f)]
+  ; prefix application
   [(_ fn arg)
    (syntax/loc this-syntax
      (hash-percent-app1 fn arg))]

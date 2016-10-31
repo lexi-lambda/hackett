@@ -8,9 +8,9 @@
 
 (data Real-World real-world)
 (data (Tuple2 a b) (tuple2 a b))
-(data (IO a) (io {Real-World . -> . (Tuple2 Real-World a)}))
+(data (IO a) (io {Real-World -> (Tuple2 Real-World a)}))
 
-(def unsafe-run-io! : (forall [a] {(IO a) . -> . a})
+(def unsafe-run-io! : (forall [a] {(IO a) -> a})
   (λ (mf) (case mf
             [(io f) (case (f real-world)
                       [(tuple2 _ x) x])])))

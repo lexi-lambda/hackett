@@ -10,4 +10,6 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; module reader
 
-(module reader syntax/module-reader rascal)
+(module reader syntax/module-reader rascal
+  #:wrapper1 with-rascal-reader-parameterization
+  (require rascal/private/reader))

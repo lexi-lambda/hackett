@@ -7,7 +7,7 @@
     "curly-fn-lib"
     "point-free"
     "srfi-lite-lib"
-    "syntax-classes-lib"
+    ["syntax-classes-lib" #:version "1.1"]
     "turnstile"))
 (define build-deps
   '())

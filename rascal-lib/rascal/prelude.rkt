@@ -21,7 +21,7 @@
   [show : (-> a String)])
 
 (instance (Show String)
-  [show (λ (x) {"\"" . <> . {x . <> . "\""}})])
+  [show (λ (x) {"\"" <> x <> "\""})])
 
 (instance (Show Integer)
   [show show/Integer])
@@ -29,11 +29,11 @@
 (instance (Show Unit)
   [show (const "unit")])
 
-(def println! : {String . -> . (IO Unit)}
+(def println! : {String -> (IO Unit)}
   (λ (x) (do (print! x)
              (print! "\n"))))
 
-(def show! : (forall [a] (Show a) => {a . -> . (IO Unit)})
+(def show! : (forall [a] (Show a) => {a -> (IO Unit)})
   (λ (x) (println! (show x))))
 
 ;; ---------------------------------------------------------------------------------------------------
@@ -57,7 +57,7 @@
 
 (instance (forall [a] (Show a) => (Show (Maybe a)))
   [show (λ (x) (case x
-                 [(just v) {"(just " . <> . {(show v) . <> . ")"}}]
+                 [(just v) {"(just " <> (show v) <> ")"}]
                  [nothing "nothing"]))])
 
 (def maybe : (forall [a b] (-> b (-> (-> a b) (-> (Maybe a) b))))
@@ -93,8 +93,8 @@
 
 (instance (forall [a b] (Show a) (Show b) => (Show (Either a b)))
   [show (λ (x) (case x
-                 [(left v) {"(left " . <> . {(show v) . <> . ")"}}]
-                 [(right v) {"(right " . <> . {(show v) . <> . ")"}}]))])
+                 [(left v) {"(left " <> (show v) <> ")"}]
+                 [(right v) {"(right " <> {(show v) <> ")"}}]))])
 
 (def either : (forall [a b c] (-> (-> a c) (-> (-> b c) (-> (Either a b) c))))
   (λ (f g e) (case e
@@ -129,7 +129,7 @@
 
 (instance (forall [a] (Show a) => (Show (List a)))
   [show (λ (x) (case x
-                 [(cons v vs) {"(cons " . <> . {(show v) . <> . {" " . <> . {(show vs) . <> . ")"}}}}]
+                 [(cons v vs) {"(cons " <> (show v) <> " " <> (show vs) <> ")"}]
                  [nil "nil"]))])
 
 (def foldl : (forall [a b] (-> (-> b (-> a b)) (-> b (-> (List a) b))))
