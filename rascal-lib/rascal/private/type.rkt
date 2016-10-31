@@ -11,7 +11,7 @@
          (multi-in racket [dict format list match syntax])
          (multi-in syntax [id-set id-table parse/define])
          point-free
-         rascal/util/stx
+         rascal/private/util/stx
          syntax/parse
          "classrep.rkt"
          "typerep.rkt")

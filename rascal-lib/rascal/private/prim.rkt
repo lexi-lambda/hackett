@@ -3,8 +3,8 @@
 (require (for-syntax racket/base
                      racket/match
                      racket/provide-transform
-                     rascal/util/stx
-                     racket/syntax)
+                     racket/syntax
+                     rascal/private/util/stx)
          (only-in macrotypes/typecheck postfix-in)
          (postfix-in - racket/base)
          rascal/data/unit

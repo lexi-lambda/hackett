@@ -4,7 +4,7 @@
 
 (require (for-syntax (multi-in racket [base function format list match syntax])
                      (multi-in syntax/parse [class/local-value experimental/specialize])
-                     rascal/util/stx)
+                     rascal/private/util/stx)
          (postfix-in - (multi-in racket [base function match splicing]))
          rascal/private/base
          syntax/parse/define)

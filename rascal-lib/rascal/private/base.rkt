@@ -3,7 +3,7 @@
 (require racket/require)
 
 (require (for-syntax (multi-in racket [base dict format function list match splicing syntax])
-                     (multi-in rascal [private/type util/stx])
+                     (multi-in rascal/private [type util/stx])
                      (multi-in syntax/parse [class/local-value define
                                              experimental/specialize experimental/template])
                      (only-in srfi/1 list-index)
