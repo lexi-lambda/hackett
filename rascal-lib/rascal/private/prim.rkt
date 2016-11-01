@@ -7,6 +7,7 @@
                      rascal/private/util/stx)
          (only-in macrotypes/typecheck postfix-in)
          (postfix-in - racket/base)
+         rascal/data/bool
          rascal/data/unit
          rascal/private/base
          rascal/private/prim/io
@@ -38,9 +39,21 @@
           [+ : (→ Integer (→ Integer Integer))]
           [- : (→ Integer (→ Integer Integer))]
           [* : (→ Integer (→ Integer Integer))]
+          [quotient! : (→ Integer (→ Integer Integer))]
+          [remainder! : (→ Integer (→ Integer Integer))]
+          [equal?/Integer : (→ Integer (→ Integer Bool))]
+          [< : (→ Integer (→ Integer Bool))]
+          [> : (→ Integer (→ Integer Bool))]
+          [<= : (→ Integer (→ Integer Bool))]
+          [>= : (→ Integer (→ Integer Bool))]
           [show/Integer : (→ Integer String)]
+
+          [equal?/String : (→ String (→ String Bool))]
           [append/String : (→ String (→ String String))]
           [print! : (→ String (IO Unit))]))
+
+(define (boolean->Bool x)
+  (if x true false))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Integer
@@ -49,11 +62,21 @@
 (define ((- a) b) (-- a b))
 (define ((* a) b) (*- a b))
 
+(define ((quotient! a) b) (quotient- a b))
+(define ((remainder! a) b) (remainder- a b))
+
+(define ((equal?/Integer a) b) (boolean->Bool (=- a b)))
+(define ((< a) b) (boolean->Bool (<- a b)))
+(define ((> a) b) (boolean->Bool (>- a b)))
+(define ((<= a) b) (boolean->Bool (<=- a b)))
+(define ((>= a) b) (boolean->Bool (>=- a b)))
+
 (define (show/Integer n) (format "~a" n))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; String
 
+(define ((equal?/String a) b) (boolean->Bool (string=?- a b)))
 (define ((append/String a) b) (string-append- a b))
 
 ;; ---------------------------------------------------------------------------------------------------

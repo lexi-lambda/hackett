@@ -4,16 +4,41 @@
          (only-in racket/require multi-in))
 
 (require (for-syntax racket/base)
-         (multi-in rascal [data/unit function monad semigroup])
-         (only-in rascal/private/prim IO main print! show/Integer)
+         (multi-in rascal [data/bool data/unit function monad semigroup])
+         (only-in rascal/private/prim
+                  IO main print!
+                  + - * < > <= >= quotient! remainder!
+                  equal?/Integer show/Integer
+                  equal?/String)
          syntax/parse/define)
 
 (provide (all-defined-out)
+         (all-from-out rascal/data/bool)
          (all-from-out rascal/data/unit)
          (all-from-out rascal/function)
          (all-from-out rascal/monad)
          (all-from-out rascal/semigroup)
-         IO main print!)
+         IO main print!
+         + - * < > <= >= quotient! remainder! quotient remainder
+         (rename [equal? =]))
+
+;; ---------------------------------------------------------------------------------------------------
+
+(class (Eq a)
+  [equal? : {a -> {a -> Bool}}])
+
+(instance (Eq Integer)
+  [equal? equal?/Integer])
+
+(instance (Eq String)
+  [equal? equal?/String])
+
+(instance (Eq Bool)
+  [equal? (λ (x y) (case x [true  y]
+                           [false (not y)]))])
+
+(instance (Eq Unit)
+  [equal? (λ (_ _) true)])
 
 ;; ---------------------------------------------------------------------------------------------------
 
@@ -25,6 +50,11 @@
 
 (instance (Show Integer)
   [show show/Integer])
+
+(instance (Show Bool)
+  [show (λ (x) (case x
+                 [true "true"]
+                 [false "false"]))])
 
 (instance (Show Unit)
   [show (const "unit")])
@@ -38,22 +68,18 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
-(data Bool true false)
-
-(instance (Show Bool)
-  [show (λ (x) (case x
-                 [true "true"]
-                 [false "false"]))])
-
-(def not : (-> Bool Bool)
-  (λ (x) (case x [true false]
-           [false true])))
-
-;; ---------------------------------------------------------------------------------------------------
-
 (data (Maybe a)
   (just a)
   nothing)
+
+(instance (forall [a] (Eq a) => (Eq (Maybe a)))
+  [equal? (λ (x y) (case x
+                     [(just a) (case y
+                                 [(just b) (equal? a b)]
+                                 [nothing  false])]
+                     [nothing  (case y
+                                 [(just _) false]
+                                 [nothing  true])]))])
 
 (instance (forall [a] (Show a) => (Show (Maybe a)))
   [show (λ (x) (case x
@@ -85,11 +111,30 @@
                  [(just (just x)) (just x)]
                  [_               nothing]))])
 
+(def quotient : {Integer -> {Integer -> (Maybe Integer)}}
+  (λ (x y) (case (equal? y 0)
+             [true  nothing]
+             [false (just (quotient! x y))])))
+
+(def remainder : {Integer -> {Integer -> (Maybe Integer)}}
+  (λ (x y) (case (equal? y 0)
+             [true  nothing]
+             [false (just (remainder! x y))])))
+
 ;; ---------------------------------------------------------------------------------------------------
 
 (data (Either a b)
   (left a)
   (right b))
+
+(instance (forall [a b] (Eq a) (Eq b) => (Eq (Either a b)))
+  [equal? (λ (x y) (case x
+                     [(right a) (case y
+                                  [(right b) (equal? a b)]
+                                  [(left _)  false])]
+                     [(left a)  (case y
+                                  [(right _) false]
+                                  [(left b)  (equal? a b)])]))])
 
 (instance (forall [a b] (Show a) (Show b) => (Show (Either a b)))
   [show (λ (x) (case x
@@ -126,6 +171,16 @@
 (data (List a)
   (cons a (List a))
   nil)
+
+(instance (forall [a] (Eq a) => (Eq (List a)))
+  [equal? (λ (x y) (case x
+                     [(cons a as) (case y
+                                    [(cons b bs) (and (equal? a b)
+                                                      (equal? as bs))]
+                                    [nil         false])]
+                     [nil         (case y
+                                    [(cons _ _)  false]
+                                    [nil         true])]))])
 
 (instance (forall [a] (Show a) => (Show (List a)))
   [show (λ (x) (case x

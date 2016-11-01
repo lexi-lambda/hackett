@@ -1,11 +1,8 @@
 #lang racket/base
 
-(require racket/require)
+(require rascal/private/kernel)
 
-(require (multi-in rascal/private [kernel prim]))
-
-(provide (all-from-out rascal/private/kernel)
-         + - *)
+(provide (all-from-out rascal/private/kernel))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; module reader
