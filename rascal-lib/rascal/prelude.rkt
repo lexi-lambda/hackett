@@ -207,3 +207,10 @@
 
 (instance (Functor List)
   [map (λ (f) (foldl (λ (acc x) (cons (f x) acc)) nil))])
+
+(instance (Monad List)
+  [join (λ (xss) (case xss
+                   [nil           nil]
+                   [(cons ys yss) (case ys
+                                    [nil         (join yss)]
+                                    [(cons z zs) (cons z (join (cons zs yss)))])]))])

@@ -274,8 +274,22 @@
       τ)]))
 
 ; Given a type, finds all free type variables and universally quantifies them using ∀.
-(define (generalize-type τ)
+(define (generalize-type τ #:src [src-stx #f])
   (let ([free-vars (type-free-vars τ)])
+    (cond
+      [(empty? free-vars) τ]
+      [else
+       (when (⇒? τ)
+         (match-let* ([(⇒ preds τ) τ]
+                      [τ-free-vars (type-free-vars τ)])
+           (for* ([pred (in-list preds)]
+                  [τv (in-list (type-free-vars pred))])
+             (unless (member τv τ-free-vars free-identifier=?)
+               (raise-syntax-error #f
+                                   (~a "type variable ‘" (syntax-e τv)
+                                       "’ is ambiguous in " (type->string pred))
+                                   src-stx)))))
+       (∀ free-vars τ)])
     (if (empty? free-vars) τ
         (∀ free-vars τ))))
 

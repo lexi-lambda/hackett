@@ -166,7 +166,9 @@
         (reduce-context predicates)))
 
     ; generalize the resulting types, apply the results to the original syntax and return everything
-    (define τs_generalized (map generalize-type (map ⇒ reduced-predicatess τs_substituted)))
+    (define τs_generalized (map #{generalize-type %1 #:src %2}
+                                (map ⇒ reduced-predicatess τs_substituted)
+                                exprs))
     (let ([vals-generalized
            (for/list ([expr- (in-list exprs-)]
                       [τ (in-list τs_generalized)]
@@ -264,7 +266,7 @@
    #:do [(define/infer+erase [τ_val [] val-] #'val)
          (define subst (solve-constraints (collect-constraints #'val-)))
          (define τ_substituted (apply-subst subst τ_val))
-         (define τ_generalized (generalize-type τ_substituted))]
+         (define τ_generalized (generalize-type τ_substituted #:src #'val))]
    #:with val-* (assign-type #'val- τ_generalized)
    #:do [(define/infer+erase [τ [x-] e-] #'e #:ctx (list (cons #'x τ_generalized)))]
    (assign-type (syntax/loc this-syntax

@@ -66,6 +66,13 @@
      #px"could not unify Integer with String"
      (def x : Integer "hello"))))
 
+(describe "ambiguous type"
+  (it "is an error"
+    (check-typecheck-failure
+     #px"type variable ‘([^’]+)’ is ambiguous in \\(Show \\1\\)"
+     (def x : String
+       (show (right "hello"))))))
+
 (describe "rascal/prelude"
   (describe "List"
     (it "is a polymorphic container"
