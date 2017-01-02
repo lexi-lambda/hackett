@@ -10,7 +10,7 @@ Here are some of the features that Rascal supports **right now**:
   - Typeclasses
   - Type-aware/type-directed macros
 
-Here are some of the features that I am currently working on:
+Here are some of the features that still need to be implemented for a minimal release:
 
   - Kindchecking
   - Exhaustiveness checking
@@ -52,6 +52,8 @@ Here’s what some Rascal code *might* eventually look like:
     [(just x) -> {"just " <> (show x)}]))
 ```
 
+Much of the above syntax is already implemented, but some things are not.
+
 ## Trying Rascal
 
 To reiterate: **Rascal is extremely experimental right now.** Things are not guaranteed to work correctly (or work at all), and things are likely to change dramatically. If you really want to install Rascal to play around with it, though, you can.
@@ -62,6 +64,6 @@ You will need to have Racket installed to use Rascal. Using `raco`, you can inst
 $ raco pkg install rascal
 ```
 
-Now you can use Rascal by writing `#lang rascal` at the top of a file. For an example of what Rascal syntax currently looks like, check out the `client.rkt` file for some simple examples.
+Now you can use Rascal by writing `#lang rascal` at the top of a file. Documentation is currently sparse, but you can take a look at what some Rascal code looks like by looking at the source of the `rascal/prelude` module.
 
 [types-as-macros]: http://www.ccs.neu.edu/home/stchang/pubs/ckg-popl2017.pdf
