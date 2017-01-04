@@ -169,48 +169,48 @@
 ;; ---------------------------------------------------------------------------------------------------
 
 (data (List a)
-  (cons a (List a))
+  {a :: (List a)}
   nil)
 
 (instance (forall [a] (Eq a) => (Eq (List a)))
   [equal? (λ (x y) (case x
-                     [(cons a as) (case y
-                                    [(cons b bs) (and (equal? a b)
-                                                      (equal? as bs))]
+                     [(:: a as) (case y
+                                    [(:: b bs) (and (equal? a b)
+                                                    (equal? as bs))]
                                     [nil         false])]
                      [nil         (case y
-                                    [(cons _ _)  false]
-                                    [nil         true])]))])
+                                    [(:: _ _)  false]
+                                    [nil       true])]))])
 
 (instance (forall [a] (Show a) => (Show (List a)))
   [show (λ (x) (case x
-                 [(cons v vs) {"(cons " <> (show v) <> " " <> (show vs) <> ")"}]
+                 [(:: v vs) {"{" <> (show v) <> " :: " <> (show vs) <> "}"}]
                  [nil "nil"]))])
 
 (def foldl : (forall [a b] (-> (-> b (-> a b)) (-> b (-> (List a) b))))
   (λ (f acc lst)
     (case lst
       [nil acc]
-      [(cons x xs) (foldl f (f acc x) xs)])))
+      [(:: x xs) (foldl f (f acc x) xs)])))
 
 (def foldr : (forall [a b] (-> (-> a (-> b b)) (-> b (-> (List a) b))))
   (λ (f acc lst)
     (case lst
       [nil acc]
-      [(cons x xs) (f x (foldr f acc xs))])))
+      [(:: x xs) (f x (foldr f acc xs))])))
 
 (instance (forall [a] (Semigroup (List a)))
-  [append (λ (xs ys) (foldr cons ys xs))])
+  [append (λ (xs ys) (foldr :: ys xs))])
 
 (def reverse : (forall [a] (-> (List a) (List a)))
-  (foldl (flip cons) nil))
+  (foldl (flip ::) nil))
 
 (instance (Functor List)
-  [map (λ (f) (foldl (λ (acc x) (cons (f x) acc)) nil))])
+  [map (λ (f) (foldl (λ (acc x) {(f x) :: acc}) nil))])
 
 (instance (Monad List)
   [join (λ (xss) (case xss
-                   [nil           nil]
-                   [(cons ys yss) (case ys
-                                    [nil         (join yss)]
-                                    [(cons z zs) (cons z (join (cons zs yss)))])]))])
+                   [nil         nil]
+                   [(:: ys yss) (case ys
+                                  [nil       (join yss)]
+                                  [(:: z zs) {z :: (join {zs :: yss})}])]))])

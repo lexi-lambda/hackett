@@ -79,8 +79,8 @@
       (check-typecheck-success
        (require rascal/prelude)
        (def x : (List String)
-         (cons "a" (cons "b" nil))))
+         {"a" :: {"b" :: nil}}))
       (check-typecheck-success
        (require rascal/prelude)
        (def x : (List Integer)
-         (cons 1 (cons 2 nil)))))))
+         {1 :: {2 :: nil}})))))
