@@ -90,4 +90,6 @@
     (it "is supported"
       (check-typecheck-success
        (data {a && b}
-         {a & b})))))
+         {a & b})
+       (def mypair : {String && String}
+         {"foo" & "bar"})))))
