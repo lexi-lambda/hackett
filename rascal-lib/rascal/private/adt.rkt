@@ -3,7 +3,7 @@
 (require racket/require (only-in macrotypes/typecheck postfix-in))
 
 (require (for-syntax (multi-in racket [base function format list match syntax])
-                     (multi-in syntax/parse [class/local-value experimental/specialize])
+                     (multi-in syntax/parse [class/local-value class/paren-shape experimental/specialize])
                      rascal/private/util/stx)
          (postfix-in - (multi-in racket [base function match splicing]))
          rascal/private/base
@@ -40,6 +40,10 @@
              #:attr [arg 1] '()
              #:attr len 0
              #:attr nullary? #t]
+    [pattern (~braces ~! arg1 tag:id arg2)
+             #:attr [arg 1] (list #'arg1 #'arg2)
+             #:attr len 2
+             #:attr nullary? #f]
     [pattern (tag:id arg ...+)
              #:attr len (length (attribute arg))
              #:attr nullary? #f]
