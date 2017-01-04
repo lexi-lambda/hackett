@@ -23,6 +23,10 @@
              #:attr [arg 1] '()
              #:attr len 0
              #:attr nullary? #t]
+    [pattern (~braces ~! arg1:id tag:id arg2:id)
+             #:attr [arg 1] (list #'arg1 #'arg2)
+             #:attr len 2
+             #:attr nullary? #f]
     [pattern (tag:id arg:id ...+)
              #:attr len (length (attribute arg))
              #:attr nullary? #f]
