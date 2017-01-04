@@ -84,3 +84,12 @@
        (require rascal/prelude)
        (def x : (List Integer)
          {1 :: {2 :: nil}})))))
+
+(describe "syntax"
+  (describe "infix type constructors"
+    (it "is supported"
+      (check-typecheck-success
+       (data {a && b}
+         {a & b})
+       (def mypair : {String && String}
+         {"foo" & "bar"})))))
