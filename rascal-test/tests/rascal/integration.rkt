@@ -79,8 +79,17 @@
       (check-typecheck-success
        (require rascal/prelude)
        (def x : (List String)
-         (cons "a" (cons "b" nil))))
+         {"a" :: {"b" :: nil}}))
       (check-typecheck-success
        (require rascal/prelude)
        (def x : (List Integer)
-         (cons 1 (cons 2 nil)))))))
+         {1 :: {2 :: nil}})))))
+
+(describe "syntax"
+  (describe "infix type constructors"
+    (it "is supported"
+      (check-typecheck-success
+       (data {a && b}
+         {a & b})
+       (def mypair : {String && String}
+         {"foo" & "bar"})))))
