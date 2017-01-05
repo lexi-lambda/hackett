@@ -2,8 +2,8 @@
 
 (require racket/require)
 
-(require (except-in (multi-in rascal/private [adt base]) class data)
-         rascal/private/provide)
+(require (except-in (multi-in hackett/private [adt base]) class data)
+         hackett/private/provide)
 
 (provide require provide rename only-in all-from-out all-defined-out
          : def λ let letrec data case _ class instance
@@ -20,6 +20,6 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; module reader
 
-(module reader syntax/module-reader rascal/private/kernel
-  #:wrapper1 with-rascal-reader-parameterization
-  (require rascal/private/reader))
+(module reader syntax/module-reader hackett/private/kernel
+  #:wrapper1 with-hackett-reader-parameterization
+  (require hackett/private/reader))

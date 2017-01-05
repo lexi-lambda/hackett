@@ -4,13 +4,13 @@
                      racket/match
                      racket/provide-transform
                      racket/syntax
-                     rascal/private/util/stx)
+                     hackett/private/util/stx)
          (only-in macrotypes/typecheck postfix-in)
          (postfix-in - racket/base)
-         rascal/data/bool
-         rascal/data/unit
-         rascal/private/base
-         rascal/private/prim/io
+         hackett/data/bool
+         hackett/data/unit
+         hackett/private/base
+         hackett/private/prim/io
          syntax/parse/define)
 
 ;; ---------------------------------------------------------------------------------------------------

@@ -1,11 +1,11 @@
-#lang rascal/base
+#lang hackett/base
 
 (require (only-in racket/base for-syntax)
          (only-in racket/require multi-in))
 
 (require (for-syntax racket/base)
-         (multi-in rascal [data/bool data/unit function monad semigroup])
-         (only-in rascal/private/prim
+         (multi-in hackett [data/bool data/unit function monad semigroup])
+         (only-in hackett/private/prim
                   IO main print!
                   + - * < > <= >= quotient! remainder!
                   equal?/Integer show/Integer
@@ -13,11 +13,11 @@
          syntax/parse/define)
 
 (provide (all-defined-out)
-         (all-from-out rascal/data/bool)
-         (all-from-out rascal/data/unit)
-         (all-from-out rascal/function)
-         (all-from-out rascal/monad)
-         (all-from-out rascal/semigroup)
+         (all-from-out hackett/data/bool)
+         (all-from-out hackett/data/unit)
+         (all-from-out hackett/function)
+         (all-from-out hackett/monad)
+         (all-from-out hackett/semigroup)
          IO main print!
          + - * < > <= >= quotient! remainder! quotient remainder
          (rename [equal? =]))

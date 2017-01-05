@@ -3,7 +3,7 @@
 (define collection 'multi)
 
 (define deps
-  '("rascal-lib"))
+  '("hackett-lib"))
 (define build-deps
   '())
 

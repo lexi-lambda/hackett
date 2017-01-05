@@ -3,7 +3,7 @@
 (require racket/require)
 
 (require (for-syntax (multi-in racket [base dict format function list match splicing syntax])
-                     (multi-in rascal/private [type util/stx])
+                     (multi-in hackett/private [type util/stx])
                      (multi-in syntax/parse [class/local-value class/paren-shape define
                                              experimental/specialize experimental/template])
                      (only-in srfi/1 list-index)
@@ -18,7 +18,7 @@
          syntax/parse/define)
 
 (provide (for-syntax (all-defined-out)
-                     (all-from-out rascal/private/type))
+                     (all-from-out hackett/private/type))
          (all-defined-out))
 
 ;; ---------------------------------------------------------------------------------------------------

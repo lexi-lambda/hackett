@@ -6,6 +6,6 @@
   '())
 (define build-deps
   '("base"
+    "hackett-lib"
     "rackunit-lib"
-    "rackunit-spec"
-    "rascal-lib"))
+    "rackunit-spec"))

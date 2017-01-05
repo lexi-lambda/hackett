@@ -1,8 +1,8 @@
-# Rascal [![Build Status](https://travis-ci.org/lexi-lambda/rascal.svg?branch=travis-ci)](https://travis-ci.org/lexi-lambda/rascal)
+# Hackett [![Build Status](https://travis-ci.org/lexi-lambda/hackett.svg?branch=travis-ci)](https://travis-ci.org/lexi-lambda/hackett)
 
-Rascal is an attempt to implement a Haskell-like language with support for Racket’s macro system, built using the techniques described in the paper [*Type Systems as Macros*][types-as-macros]. It is currently *extremely* work-in-progress.
+Hackett is an attempt to implement a Haskell-like language with support for Racket’s macro system, built using the techniques described in the paper [*Type Systems as Macros*][types-as-macros]. It is currently *extremely* work-in-progress.
 
-Here are some of the features that Rascal supports **right now**:
+Here are some of the features that Hackett supports **right now**:
 
   - Parametric polymorphism
   - Algebraic datatypes (ADTs)
@@ -27,12 +27,12 @@ And finally, here is a (non-exhaustive) collection of features I would like to e
   - Row types
   - Type families
 
-Due to the way Rascal is implemented, many things that are language features in Haskell can be derived concepts in Rascal. In fact, Rascal’s ADTs are not primitives, they are actually implemented as a library via the `data` and `case` macros in `rascal/private/adt`. Other things, like newtype deriving and generics, should be possible to implement as derived concepts as well.
+Due to the way Hackett is implemented, many things that are language features in Haskell can be derived concepts in Hackett. In fact, Hackett’s ADTs are not primitives, they are actually implemented as a library via the `data` and `case` macros in `hackett/private/adt`. Other things, like newtype deriving and generics, should be possible to implement as derived concepts as well.
 
-Here’s what some Rascal code *might* eventually look like:
+Here’s what some Hackett code *might* eventually look like:
 
 ```
-#lang rascal
+#lang hackett
 
 (data (Maybe a)
   nothing
@@ -54,16 +54,16 @@ Here’s what some Rascal code *might* eventually look like:
 
 Much of the above syntax is already implemented, but some things are not.
 
-## Trying Rascal
+## Trying Hackett
 
-To reiterate: **Rascal is extremely experimental right now.** Things are not guaranteed to work correctly (or work at all), and things are likely to change dramatically. If you really want to install Rascal to play around with it, though, you can.
+To reiterate: **Hackett is extremely experimental right now.** Things are not guaranteed to work correctly (or work at all), and things are likely to change dramatically. If you really want to install Hackett to play around with it, though, you can.
 
-You will need to have Racket installed to use Rascal. Using `raco`, you can install Rascal as a package:
+You will need to have Racket installed to use Hackett. Using `raco`, you can install Hackett as a package:
 
 ```
-$ raco pkg install rascal
+$ raco pkg install hackett
 ```
 
-Now you can use Rascal by writing `#lang rascal` at the top of a file. Documentation is currently sparse, but you can take a look at what some Rascal code looks like by looking at the source of the `rascal/prelude` module.
+Now you can use Hackett by writing `#lang hackett` at the top of a file. Documentation is currently sparse, but you can take a look at what some Hackett code looks like by looking at the source of the `hackett/prelude` module.
 
 [types-as-macros]: http://www.ccs.neu.edu/home/stchang/pubs/ckg-popl2017.pdf

@@ -15,10 +15,10 @@ before_install:
 
 install:
   - raco pkg install --installation --auto --link
-      $TRAVIS_BUILD_DIR/rascal-lib
-      $TRAVIS_BUILD_DIR/rascal-test
+      $TRAVIS_BUILD_DIR/hackett-lib
+      $TRAVIS_BUILD_DIR/hackett-test
   - raco pkg install --installation --auto cover cover-coveralls
 
 script:
-  - raco test -ep rascal-lib rascal-test
-  - raco cover -bf coveralls -d $TRAVIS_BUILD_DIR/coverage -p rascal-lib rascal-test
+  - raco test -ep hackett-lib hackett-test
+  - raco cover -bf coveralls -d $TRAVIS_BUILD_DIR/coverage -p hackett-lib hackett-test

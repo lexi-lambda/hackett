@@ -7,16 +7,16 @@
          syntax/parse/define
          syntax/strip-context)
 
-(define (expand-rascal-module-proc stx)
+(define (expand-hackett-module-proc stx)
   (parameterize ([current-namespace (make-base-empty-namespace)])
     (namespace-require ''#%kernel)
     (expand (strip-context
-             #`(module m rascal
+             #`(module m hackett
                  (#%module-begin
                   #,@stx))))))
 
-(define-syntax-rule (expand-rascal-module form ...)
-  (expand-rascal-module-proc #'(form ...)))
+(define-syntax-rule (expand-hackett-module form ...)
+  (expand-hackett-module-proc #'(form ...)))
 
 (define-syntax-parser check-typecheck-success
   [(_ form ...)
@@ -31,7 +31,7 @@
                                        (syntax-position src-stx)
                                        (syntax-span src-stx)))
             (make-check-expression (syntax->datum this-stx)))
-      (thunk (check-not-exn (thunk (expand-rascal-module form ...)))))])
+      (thunk (check-not-exn (thunk (expand-hackett-module form ...)))))])
 
 (define-syntax-parser check-typecheck-failure
   [(_ exn-pred form ...)
@@ -46,7 +46,7 @@
                                        (syntax-position src-stx)
                                        (syntax-span src-stx)))
             (make-check-expression (syntax->datum this-stx)))
-      (thunk (check-exn exn-pred (thunk (expand-rascal-module form ...)))))])
+      (thunk (check-exn exn-pred (thunk (expand-hackett-module form ...)))))])
 
 ;; ---------------------------------------------------------------------------------------------------
 
@@ -73,15 +73,15 @@
      (def x : String
        (show (right "hello"))))))
 
-(describe "rascal/prelude"
+(describe "hackett/prelude"
   (describe "List"
     (it "is a polymorphic container"
       (check-typecheck-success
-       (require rascal/prelude)
+       (require hackett/prelude)
        (def x : (List String)
          {"a" :: {"b" :: nil}}))
       (check-typecheck-success
-       (require rascal/prelude)
+       (require hackett/prelude)
        (def x : (List Integer)
          {1 :: {2 :: nil}})))))
 

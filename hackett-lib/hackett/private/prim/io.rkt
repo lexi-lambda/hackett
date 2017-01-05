@@ -1,6 +1,6 @@
-#lang rascal/private/kernel
+#lang hackett/private/kernel
 
-(require rascal/monad)
+(require hackett/monad)
 
 (provide (data IO)
          (data Tuple2)

@@ -1,6 +1,6 @@
-#lang rascal/base
+#lang hackett/base
 
-(require rascal/private/prim)
+(require hackett/private/prim)
 
 (provide (class Semigroup)
          (rename [append <>]))

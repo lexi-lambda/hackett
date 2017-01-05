@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require rackunit
-         rascal/private/type
+         hackett/private/type
          syntax/id-table)
 
 (define-base-type → #:arity 2)

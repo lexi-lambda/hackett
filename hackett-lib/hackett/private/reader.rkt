@@ -1,8 +1,8 @@
 #lang racket/base
 
-(provide with-rascal-reader-parameterization)
+(provide with-hackett-reader-parameterization)
 
-(define (with-rascal-reader-parameterization thunk)
+(define (with-hackett-reader-parameterization thunk)
   (parameterize ([read-accept-dot #f]
                  [read-accept-infix-dot #f])
     (thunk)))

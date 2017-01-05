@@ -1,9 +1,9 @@
-#lang rascal/private/kernel
+#lang hackett/private/kernel
 
 (require (only-in racket/base for-syntax))
 
 (require (for-syntax racket/base)
-         rascal/function
+         hackett/function
          syntax/parse/define)
 
 (provide (class Functor) $>

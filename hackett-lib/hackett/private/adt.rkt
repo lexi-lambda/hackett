@@ -4,9 +4,9 @@
 
 (require (for-syntax (multi-in racket [base function format list match syntax])
                      (multi-in syntax/parse [class/local-value class/paren-shape experimental/specialize])
-                     rascal/private/util/stx)
+                     hackett/private/util/stx)
          (postfix-in - (multi-in racket [base function match splicing]))
-         rascal/private/base
+         hackett/private/base
          syntax/parse/define)
 
 (provide (for-syntax data-constructor-spec)

@@ -5,8 +5,8 @@
                      racket/require-transform
                      syntax/id-table)
          racket/splicing
-         (rename-in rascal/private/adt [data define-data])
-         (rename-in rascal/private/base [class define-class])
+         (rename-in hackett/private/adt [data define-data])
+         (rename-in hackett/private/base [class define-class])
          syntax/parse/define)
 
 (provide class data rename)

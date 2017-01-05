@@ -1,6 +1,6 @@
-#lang rascal/base
+#lang hackett/base
 
-(require rascal/monad)
+(require hackett/monad)
 
 (provide (data Identity))
 
