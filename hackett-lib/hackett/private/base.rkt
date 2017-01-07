@@ -3,12 +3,11 @@
 (require racket/require)
 
 (require (for-syntax (multi-in racket [base dict format function list match splicing syntax])
-                     (multi-in hackett/private [type util/stx])
+                     (multi-in hackett/private [type util/function util/stx])
                      (multi-in syntax/parse [class/local-value class/paren-shape define
                                              experimental/specialize experimental/template])
                      (only-in srfi/1 list-index)
                      macrotypes/stx-utils
-                     point-free
                      syntax/id-table)
          (for-meta 2 racket/base
                      syntax/transformer)

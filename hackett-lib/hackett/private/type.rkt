@@ -8,10 +8,9 @@
                        (only-in macrotypes/typecheck
                                 get-stx-prop/car
                                 set-stx-prop/preserved))
+         (multi-in hackett/private/util [function stx])
          (multi-in racket [dict format list match syntax])
          (multi-in syntax [id-set id-table parse/define])
-         point-free
-         hackett/private/util/stx
          syntax/parse
          "classrep.rkt"
          "typerep.rkt")
