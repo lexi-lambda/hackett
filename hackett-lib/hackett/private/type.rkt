@@ -6,7 +6,7 @@
          (for-template (prefix-in kernel: '#%kernel)
                        racket/base
                        (only-in macrotypes/typecheck
-                                get-stx-prop/car
+                                typeof
                                 set-stx-prop/preserved))
          (multi-in hackett/private/util [function stx])
          (multi-in racket [dict format list match syntax])
@@ -120,9 +120,6 @@
     [(τapp τa τb) (remove-duplicates (append (type-free-vars τa)
                                              (type-free-vars τb))
                                      free-identifier=?)]))
-
-(define (typeof stx)
-  (get-stx-prop/car stx ':))
 
 (define (assign-type stx τ)
   (match τ
@@ -587,7 +584,7 @@
 (define (apply-substitutions-to-types subst stx)
   (define (perform-substitution/: stx)
     (if (syntax-property stx ':)
-        (let ([new-type (apply-subst subst (get-stx-prop/car stx ':))])
+        (let ([new-type (apply-subst subst (typeof stx))])
           (syntax-property (syntax-property stx ': new-type #t)
                            ':-string (type->string new-type)))
         stx))
