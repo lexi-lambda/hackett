@@ -1,0 +1,19 @@
+language: c
+
+env:
+  global:
+    - RACKET_DIR: '~/racket'
+  matrix:
+    - RACKET_VERSION: 6.8
+    - RACKET_VERSION: HEAD
+
+before_install:
+  - git clone https://github.com/greghendershott/travis-racket.git
+  - cat travis-racket/install-racket.sh | bash
+  - export PATH="${RACKET_DIR}/bin:${PATH}"
+
+install:
+  - raco pkg install --installation --auto --name higher-rank --link $TRAVIS_BUILD_DIR
+
+script:
+  - raco test -ep higher-rank
