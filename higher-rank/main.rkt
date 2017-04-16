@@ -1,5 +1,7 @@
 #lang curly-fn racket/base
 
+(module reader syntax/module-reader higher-rank)
+
 (require (for-syntax racket/base
                      racket/list
                      racket/match
@@ -14,7 +16,9 @@
 (provide #%module-begin #%top
          (rename-out [app #%app]
                      [top-interaction #%top-interaction]
-                     [λ: λ])
+                     [λ: λ]
+                     [λ: lambda]
+                     [∀ forall])
          Unit -> ∀
          : unit app)
 
