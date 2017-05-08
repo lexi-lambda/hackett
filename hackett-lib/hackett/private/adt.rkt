@@ -104,6 +104,16 @@
                                "constructor with arity " arity)
              #:attr pat (pat-con this-syntax val '())
              #:attr disappeared-uses (list (syntax-local-introduce #'constructor))]
+    [pattern (~braces ~! arg1:pat constructor:data-constructor-val arg2:pat)
+             #:do [(define val (attribute constructor.local-value))
+                   (define arity (data-constructor-arity val))]
+             #:fail-unless (= arity 2)
+                           (~a "cannot match ‘" (syntax-e #'constructor) "’ as an infix constructor; it "
+                               "needs to have arity 2, but it has arity " arity)
+             #:attr pat (pat-con this-syntax val (list (attribute arg1.pat) (attribute arg2.pat)))
+             #:attr disappeared-uses (list* (syntax-local-introduce #'constructor)
+                                            (append (attribute arg1.disappeared-uses)
+                                                    (attribute arg2.disappeared-uses)))]
     [pattern (constructor:data-constructor-val ~! arg:pat ...+)
              #:do [(define val (attribute constructor.local-value))
                    (define arity (data-constructor-arity val))]
