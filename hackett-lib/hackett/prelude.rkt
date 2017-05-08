@@ -174,30 +174,30 @@
 
 (instance (forall [a] (Eq a) => (Eq (List a)))
   [equal? (λ (x y) (case x
-                     [(:: a as) (case y
-                                    [(:: b bs) (and (equal? a b)
+                     [{a :: as} (case y
+                                    [{b :: bs} (and (equal? a b)
                                                     (equal? as bs))]
                                     [nil         false])]
                      [nil         (case y
-                                    [(:: _ _)  false]
+                                    [{_ :: _}  false]
                                     [nil       true])]))])
 
 (instance (forall [a] (Show a) => (Show (List a)))
   [show (λ (x) (case x
-                 [(:: v vs) {"{" <> (show v) <> " :: " <> (show vs) <> "}"}]
+                 [{v :: vs} {"{" <> (show v) <> " :: " <> (show vs) <> "}"}]
                  [nil "nil"]))])
 
 (def foldl : (forall [a b] (-> (-> b (-> a b)) (-> b (-> (List a) b))))
   (λ (f acc lst)
     (case lst
       [nil acc]
-      [(:: x xs) (foldl f (f acc x) xs)])))
+      [{x :: xs} (foldl f (f acc x) xs)])))
 
 (def foldr : (forall [a b] (-> (-> a (-> b b)) (-> b (-> (List a) b))))
   (λ (f acc lst)
     (case lst
       [nil acc]
-      [(:: x xs) (f x (foldr f acc xs))])))
+      [{x :: xs} (f x (foldr f acc xs))])))
 
 (instance (forall [a] (Semigroup (List a)))
   [append (λ (xs ys) (foldr :: ys xs))])
@@ -211,6 +211,6 @@
 (instance (Monad List)
   [join (λ (xss) (case xss
                    [nil         nil]
-                   [(:: ys yss) (case ys
+                   [{ys :: yss} (case ys
                                   [nil       (join yss)]
-                                  [(:: z zs) {z :: (join {zs :: yss})}])]))])
+                                  [{z :: zs} {z :: (join {zs :: yss})}])]))])
