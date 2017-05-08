@@ -116,7 +116,7 @@
              #:fail-when {(length (attribute arg)) . > . arity}
                          (~a "too many arguments provided for constructor ‘"
                              (syntax-e #'constructor) "’, which has arity " arity)
-             #:attr pat (pat-con this-syntax (attribute constructor.local-value) (attribute arg.pat))
+             #:attr pat (pat-con this-syntax val (attribute arg.pat))
              #:attr disappeared-uses (list* (syntax-local-introduce #'constructor)
                                             (append* (attribute arg.disappeared-uses)))]
     [pattern _
