@@ -20,19 +20,18 @@
                        [struct τ:var^ ([x^ identifier?])]
                        [struct τ:con ([name identifier?])]
                        [struct τ:app ([a τ?] [b τ?])]
-                       ;[struct τ:-> ([a τ?] [b τ?])]
                        [struct τ:∀ ([x identifier?] [t τ?])]
                        [struct ctx:var ([x identifier?])]
                        [struct ctx:var^ ([x^ identifier?])]
                        [struct ctx:assump ([x identifier?] [t τ?])]
                        [struct ctx:solution ([x^ identifier?] [t τ?])]
                        [struct ctx:marker ([x^ identifier?])])
-         τ:unit τ:-> τ:->? τ:->* τ=? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf! inst
+         τ:unit τ:-> τ:->? τ:->* τ=? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf! generalize inst
          τ<:! τ-inst-l! τ-inst-r! τ⇐/λ! τ⇐! τ⇒! τ⇒app!
          ctx-elem? ctx? ctx-elem=? ctx-member? ctx-until ctx-split current-ctx-split
          ctx-find-solution current-ctx-solution apply-subst apply-current-subst
          current-type-context modify-type-context
-         type τ-stx-token attach-type attach-expected
+         type parse-type τ-stx-token attach-type attach-expected
          get-type get-expected local-expand/get-type make-typed-var-transformer)
 
 (struct τ:var (x) #:prefab)
@@ -158,7 +157,6 @@
 (define/contract (τ-wf! ctx t)
   (-> ctx? τ? void?)
   (match t
-    [(== τ:unit) (void)]
     [(τ:var x) (if (ctx-member? ctx (ctx:var x)) (void)
                    (raise-syntax-error #f "unbound type variable" x))]
     [(τ:var^ x^) (if (or (ctx-member? ctx (ctx:var^ x^))
@@ -175,7 +173,6 @@
 (define/contract (apply-subst ctx t)
   (-> ctx? τ? τ?)
   (match t
-    [(== τ:unit) τ:unit]
     [(τ:var _) t]
     [(τ:var^ x^) (let ([s (ctx-find-solution ctx x^)])
                    (if s (apply-subst ctx s) t))]
@@ -184,6 +181,22 @@
     [(τ:∀ x t) (τ:∀ x (apply-subst ctx t))]))
 (define (apply-current-subst t)
   (apply-subst (current-type-context) t))
+
+(define/contract free-vars
+  (-> τ? (listof identifier?))
+  (match-lambda
+    [(τ:var _) '()]
+    [(τ:var^ x^) (list x^)]
+    [(τ:con _) '()]
+    [(τ:app a b) (remove-duplicates (append (free-vars a) (free-vars b)) free-identifier=?)]
+    [(τ:∀ _ t) (free-vars t)]))
+
+(define/contract (generalize t)
+  (-> τ? τ?)
+  (let* ([xs^ (free-vars t)]
+         [xs (generate-temporaries xs^)]
+         [subst (map ctx:solution xs^ xs)])
+    (foldr #{τ:∀ %1 %2} (apply-subst subst t) xs)))
 
 (define/contract (inst t x s)
   (-> τ? identifier? τ? τ?)
@@ -379,6 +392,11 @@
            #:with t- (local-expand #'t 'expression '())
            #:attr τ (syntax-property #'t- 'τ)
            #:when (τ? (attribute τ))])
+
+(define (parse-type stx)
+  (syntax-parse stx
+    #:context 'parse-type
+    [t:type (attribute t.τ)]))
 
 ;; -------------------------------------------------------------------------------------------------
 

@@ -14,7 +14,8 @@
                      hackett/private/util/list
                      hackett/private/util/stx))
 
-(provide #%module-begin #%top
+(provide (for-syntax (all-from-out hackett/private/typecheck))
+         #%module-begin #%top
          (rename-out [#%module-begin @%module-begin]
                      [#%top @%top]
                      [λ: λ]
@@ -23,7 +24,8 @@
                      [+/curried +])
          @%datum @%app @%top-interaction λ: +/curried
          Unit -> ∀ Tuple Integer
-         : unit tuple tuple-cata)
+         : unit tuple tuple-cata
+         define-primop)
 
 (define unit- (let () (struct unit ()) (unit)))
 (define-syntax unit (make-typed-var-transformer #'unit- τ:unit))
