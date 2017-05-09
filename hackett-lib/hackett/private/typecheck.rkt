@@ -13,8 +13,8 @@
          syntax/parse
          threading
 
-         higher-rank/private/util/list
-         higher-rank/private/util/stx)
+         hackett/private/util/list
+         hackett/private/util/stx)
 
 (provide (contract-out [struct τ:var ([x identifier?])]
                        [struct τ:var^ ([x^ identifier?])]

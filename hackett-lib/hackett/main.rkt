@@ -10,9 +10,9 @@
          racket/match
          syntax/parse/define
 
-         (for-syntax higher-rank/private/typecheck
-                     higher-rank/private/util/list
-                     higher-rank/private/util/stx))
+         (for-syntax hackett/private/typecheck
+                     hackett/private/util/list
+                     hackett/private/util/stx))
 
 (provide #%module-begin #%top
          (rename-out [datum #%datum]
