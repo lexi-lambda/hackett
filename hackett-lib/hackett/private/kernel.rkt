@@ -11,7 +11,7 @@
                      [λ: lambda]
                      [∀ forall]
                      [+/curried +])
-         : ∀ -> Unit Integer Tuple
+         : def ∀ -> Unit Integer Tuple
          unit tuple tuple-cata)
 
 (module reader syntax/module-reader hackett/private/kernel)

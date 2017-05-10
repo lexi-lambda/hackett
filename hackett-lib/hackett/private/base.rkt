@@ -1,12 +1,10 @@
 #lang curly-fn racket/base
 
-(module reader syntax/module-reader higher-rank)
+(require racket/require hackett/private/util/require)
 
-(require (for-syntax racket/base
-                     racket/list
-                     racket/match
-                     racket/syntax
+(require (for-syntax (multi-in racket [base list match syntax])
                      threading)
+         (postfix-in - racket/base)
          racket/match
          syntax/parse/define
 
@@ -24,7 +22,7 @@
                      [+/curried +])
          @%datum @%app @%top-interaction λ: +/curried
          Unit -> ∀ Tuple Integer
-         : unit tuple tuple-cata
+         : def unit tuple tuple-cata
          define-primop)
 
 (define unit- (let () (struct unit ()) (unit)))
@@ -108,6 +106,28 @@
    #:do [(define-values [f- t_f] (τ⇒! #'f))
          (define-values [e- t_r] (τ⇒app! (apply-current-subst t_f) #'e))]
    (attach-type #`(#%app #,f- #,e-) t_r)])
+
+(define-syntax-parser def
+  #:literals [:]
+  [(_ id:id : t:type e:expr)
+   #:with id- (generate-temporary #'id)
+   #:with t-expr (preservable-property->expression (attribute t.τ))
+   #'(begin-
+       (define- id- (: e t))
+       (define-syntax- id
+         (make-typed-var-transformer #'id- t-expr)))]
+  [(_ id:id e:expr)
+   #:do [(define-values [e-stx- t]
+           (parameterize ([current-type-context '()])
+             (let-values ([(e-stx- t) (τ⇒! #'e)])
+               (values e-stx- (apply-current-subst t)))))]
+   #:with id- (generate-temporary #'id)
+   #:with e- e-stx-
+   #:with t-expr (preservable-property->expression (generalize t))
+   #'(begin-
+       (define- id- e-)
+       (define-syntax- id
+         (make-typed-var-transformer #'id- t-expr)))])
 
 (define-syntax-parser :infer/print-type
   [(_ e)

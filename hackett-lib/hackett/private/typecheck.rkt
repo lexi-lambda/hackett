@@ -195,8 +195,8 @@
   (-> τ? τ?)
   (let* ([xs^ (free-vars t)]
          [xs (generate-temporaries xs^)]
-         [subst (map ctx:solution xs^ xs)])
-    (foldr #{τ:∀ %1 %2} (apply-subst subst t) xs)))
+         [subst (map #{ctx:solution %1 (τ:var %2)} xs^ xs)])
+    (foldr τ:∀ (apply-subst subst t) xs)))
 
 (define/contract (inst t x s)
   (-> τ? identifier? τ? τ?)
