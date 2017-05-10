@@ -11,7 +11,7 @@
                      [λ: lambda]
                      [∀ forall]
                      [+/curried +])
-         : def ∀ -> Unit Integer Tuple
+         require only-in provide : def ∀ -> Unit Integer Tuple
          unit tuple tuple-cata)
 
 (module reader syntax/module-reader hackett/private/kernel)

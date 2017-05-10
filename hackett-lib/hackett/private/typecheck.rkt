@@ -40,7 +40,7 @@
 (struct τ:app (a b) #:prefab)
 (struct τ:∀ (x t) #:prefab)
 
-(define τ:unit (τ:con #'unit))
+(define τ:unit (τ:con #'Unit))
 (define τ:-> (τ:con #'->))
 
 (define (mk-τ:-> a b) (τ:app (τ:app τ:-> a) b))

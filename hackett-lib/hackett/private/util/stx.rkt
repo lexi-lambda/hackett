@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require racket/contract
+(require (for-template racket/base)
+         racket/contract
          racket/match)
 
 (provide (contract-out [make-variable-like-transformer (-> syntax? any)]

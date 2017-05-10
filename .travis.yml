@@ -14,7 +14,9 @@ before_install:
   - export PATH="${RACKET_DIR}/bin:${PATH}"
 
 install:
-  - raco pkg install --installation --auto --link $TRAVIS_BUILD_DIR/hackett-lib
+  - raco pkg install --installation --auto --link
+      $TRAVIS_BUILD_DIR/hackett-lib
+      $TRAVIS_BUILD_DIR/hackett-test
 
 script:
-  - raco test -ep hackett-lib
+  - raco test -ep hackett-lib hackett-test

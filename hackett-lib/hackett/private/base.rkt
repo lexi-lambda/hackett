@@ -77,8 +77,8 @@
   [(_ e t-expr:type)
    #:do [(define t (attribute t-expr.τ))
          (define-values [e- t⇒] (τ⇒! (attach-expected #'e t)))]
-   #:fail-when (and (not (τ=? t t⇒)) #'e) (format "type mismatch: expected ~a, produced ~a"
-                                                  (τ->string t) (τ->string t⇒))
+   #:fail-when (and (not (τ=? t (apply-current-subst t⇒))) #'e)
+               (format "type mismatch: expected ~a, produced ~a" (τ->string t) (τ->string t⇒))
    e-])
 
 (define-syntax-parser λ:
