@@ -82,3 +82,8 @@
 (typecheck-succeed ((tuple-cata (λ x (λ y y))) ((tuple unit) 1)))
 (typecheck-succeed (: ((tuple-cata (λ x (λ y y))) ((tuple unit) 1)) Integer))
 (typecheck-succeed (: ((tuple-cata +) ((tuple 1) 1)) Integer))
+
+(typecheck-succeed (: (λ x x) (∀ a (-> a a))))
+(typecheck-fail (: (λ x 1) (∀ a (-> a a))))
+(typecheck-succeed (: (λ x (λ y x)) (∀ a (∀ b (-> a (-> b a))))))
+(typecheck-fail (: (λ x (λ y y)) (∀ a (∀ b (-> a (-> b a))))))
