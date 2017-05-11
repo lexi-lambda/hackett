@@ -75,7 +75,7 @@
 
 (define-syntax-parser :
   [(_ e t-expr:type)
-   (τ⇐! #'e (attribute t-expr.τ))])
+   (attach-type (τ⇐! #'e (attribute t-expr.τ)) (apply-current-subst (attribute t-expr.τ)))])
 
 (define-syntax-parser λ:
   [(_ x:id e:expr)
