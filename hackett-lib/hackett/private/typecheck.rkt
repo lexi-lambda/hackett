@@ -127,7 +127,7 @@
   (until ctx elem ctx-elem=?))
 
 (define/contract ctx-split
-  (-> ctx? ctx-elem? ctx-elem? ... (listof ctx?))
+  (-> ctx? ctx-elem? ctx-elem? ... (or/c (listof ctx?) #f))
   (case-lambda
     [(ctx elem)
      (let ([idx (index-of ctx elem ctx-elem=?)])
@@ -137,7 +137,7 @@
      (let ([ctx* (ctx-split ctx elem)])
        (and ctx* (cons (first ctx*) (apply ctx-split (second ctx*) elems))))]))
 (define/contract (current-ctx-split elem . elems)
-  (-> ctx-elem? ctx-elem? ... (listof ctx?))
+  (-> ctx-elem? ctx-elem? ... (or/c (listof ctx?) #f))
   (apply ctx-split (current-type-context) elem elems))
 
 (define (ctx-find-assump ctx x)
