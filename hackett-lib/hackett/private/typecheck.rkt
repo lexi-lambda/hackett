@@ -23,12 +23,12 @@
                        [struct τ:∀ ([x identifier?] [t τ?])]
                        [struct ctx:var ([x identifier?])]
                        [struct ctx:var^ ([x^ identifier?])]
+                       [struct ctx:skolem ([x^ identifier?])]
                        [struct ctx:assump ([x identifier?] [t τ?])]
-                       [struct ctx:solution ([x^ identifier?] [t τ?])]
-                       [struct ctx:marker ([x^ identifier?])])
+                       [struct ctx:solution ([x^ identifier?] [t τ?])])
          τ:unit τ:-> τ:->? τ:->* τ=? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf! generalize inst
          τ<:! τ-inst-l! τ-inst-r! τ⇐/λ! τ⇐! τ⇒! τ⇒app!
-         ctx-elem? ctx? ctx-elem=? ctx-member? ctx-until ctx-split current-ctx-split
+         ctx-elem? ctx? ctx-elem=? ctx-member? ctx-remove
          ctx-find-solution current-ctx-solution apply-subst apply-current-subst
          current-type-context modify-type-context
          type parse-type τ-stx-token attach-type attach-expected
@@ -36,6 +36,7 @@
 
 (struct τ:var (x) #:prefab)
 (struct τ:var^ (x^) #:prefab)
+(struct τ:skolem (x^) #:prefab)
 (struct τ:con (name) #:prefab)
 (struct τ:app (a b) #:prefab)
 (struct τ:∀ (x t) #:prefab)
@@ -61,6 +62,7 @@
   (match-lambda**
    [[(τ:var x) (τ:var y)] (free-identifier=? x y)]
    [[(τ:var^ x^) (τ:var^ y^)] (free-identifier=? x^ y^)]
+   [[(τ:skolem x^) (τ:skolem y^)] (free-identifier=? x^ y^)]
    [[(τ:con a) (τ:con b)] (free-identifier=? a b)]
    [[(τ:app a b) (τ:app c d)] (and (τ=? a c) (τ=? b d))]
    [[(τ:∀ x a) (τ:∀ y b)] (and (free-identifier=? x y) (τ=? a b))]
@@ -69,9 +71,9 @@
 (define/contract τ-mono?
   (-> τ? boolean?)
   (match-lambda
-    [(== τ:unit) #t]
     [(τ:var _) #t]
     [(τ:var^ _) #t]
+    [(τ:skolem _) #t]
     [(τ:con _) #t]
     [(τ:app a b) (and (τ-mono? a) (τ-mono? b))]
     [(τ:∀ _ _) #f]))
@@ -79,11 +81,11 @@
 (define/contract τ-vars^
   (-> τ? (listof identifier?))
   (match-lambda
-    [(== τ:unit) '()]
     [(τ:var _) '()]
     [(τ:var^ x^) (list x^)]
+    [(τ:skolem _) '()]
     [(τ:con _) '()]
-    [(τ:app a b) (append (τ-vars^ a) (τ-vars^ b))]
+    [(τ:app a b) (remove-duplicates (append (τ-vars^ a) (τ-vars^ b)) free-identifier=?)]
     [(τ:∀ _ t) (τ-vars^ t)]))
 
 (define/contract (τ->string t)
@@ -94,6 +96,7 @@
               [(== τ:unit) 'Unit]
               [(τ:var x) (syntax-e x)]
               [(τ:var^ x^) (string->symbol (format "~a^" (syntax-e x^)))]
+              [(τ:skolem x^) (syntax-e x^)]
               [(τ:con name) (syntax-e name)]
               [(? τ:app?)
                (let flatten-app ([t t])
@@ -104,41 +107,27 @@
 
 (struct ctx:var (x) #:prefab)
 (struct ctx:var^ (x^) #:prefab)
+(struct ctx:skolem (x^) #:prefab)
 (struct ctx:assump (x t) #:prefab)
 (struct ctx:solution (x^ t) #:prefab)
-(struct ctx:marker (x^) #:prefab)
 
-(define (ctx-elem? x) ((disjoin ctx:var? ctx:var^? ctx:assump? ctx:solution? ctx:marker?) x))
+(define (ctx-elem? x) ((disjoin ctx:var? ctx:var^? ctx:skolem? ctx:assump? ctx:solution?) x))
 (define (ctx? x) ((listof ctx-elem?) x))
 (define/contract ctx-elem=?
   (-> ctx-elem? ctx-elem? boolean?)
   (match-lambda**
    [[(ctx:var x) (ctx:var y)] (free-identifier=? x y)]
    [[(ctx:var^ x) (ctx:var^ y)] (free-identifier=? x y)]
+   [[(ctx:skolem x^) (ctx:skolem y^)] (free-identifier=? x^ y^)]
    [[(ctx:assump x a) (ctx:assump y b)] (and (free-identifier=? x y) (τ=? a b))]
    [[(ctx:solution x^ a) (ctx:solution y^ b)] (and (free-identifier=? x^ y^) (τ=? a b))]
-   [[(ctx:marker x^) (ctx:marker y^)] (free-identifier=? x^ y^)]
    [[_ _] #f]))
 (define/contract (ctx-member? ctx elem)
   (-> ctx? ctx-elem? boolean?)
   (and (member elem ctx ctx-elem=?) #t))
-(define/contract (ctx-until ctx elem)
+(define/contract (ctx-remove ctx elem)
   (-> ctx? ctx-elem? ctx?)
-  (until ctx elem ctx-elem=?))
-
-(define/contract ctx-split
-  (-> ctx? ctx-elem? ctx-elem? ... (or/c (listof ctx?) #f))
-  (case-lambda
-    [(ctx elem)
-     (let ([idx (index-of ctx elem ctx-elem=?)])
-       (and idx (let-values ([(a b) (split-at ctx idx)])
-                  (list a (drop b 1)))))]
-    [(ctx elem . elems)
-     (let ([ctx* (ctx-split ctx elem)])
-       (and ctx* (cons (first ctx*) (apply ctx-split (second ctx*) elems))))]))
-(define/contract (current-ctx-split elem . elems)
-  (-> ctx-elem? ctx-elem? ... (or/c (listof ctx?) #f))
-  (apply ctx-split (current-type-context) elem elems))
+  (remove elem ctx ctx-elem=?))
 
 (define (ctx-find-assump ctx x)
   (and~> (findf #{and (ctx:assump? %) (free-identifier=? x (ctx:assump-x %))} ctx)
@@ -157,12 +146,13 @@
 (define/contract (τ-wf! ctx t)
   (-> ctx? τ? void?)
   (match t
-    [(τ:var x) (if (ctx-member? ctx (ctx:var x)) (void)
-                   (raise-syntax-error #f "unbound type variable" x))]
-    [(τ:var^ x^) (if (or (ctx-member? ctx (ctx:var^ x^))
-                         (ctx-find-solution ctx x^))
-                     (void)
-                     (raise-syntax-error #f "unbound existential variable" x^))]
+    [(τ:var x) (unless (ctx-member? ctx (ctx:var x))
+                 (raise-syntax-error #f "unbound type variable" x))]
+    [(τ:var^ x^) (unless (or (ctx-member? ctx (ctx:var^ x^))
+                             (ctx-find-solution ctx x^))
+                   (raise-syntax-error #f "unbound existential variable" x^))]
+    [(τ:skolem x^) (unless (ctx-member? ctx (ctx:skolem x^))
+                    (raise-syntax-error #f "skolem escaped its scope" x^))]
     [(τ:con _) (void)]
     [(τ:app a b) (τ-wf! ctx a) (τ-wf! ctx b)]
     [(τ:∀ x t) (τ-wf! (snoc ctx (ctx:var x)) t)]))
@@ -176,24 +166,16 @@
     [(τ:var _) t]
     [(τ:var^ x^) (let ([s (ctx-find-solution ctx x^)])
                    (if s (apply-subst ctx s) t))]
+    [(τ:skolem _) t]
     [(τ:con _) t]
     [(τ:app a b) (τ:app (apply-subst ctx a) (apply-subst ctx b))]
     [(τ:∀ x t) (τ:∀ x (apply-subst ctx t))]))
 (define (apply-current-subst t)
   (apply-subst (current-type-context) t))
 
-(define/contract free-vars
-  (-> τ? (listof identifier?))
-  (match-lambda
-    [(τ:var _) '()]
-    [(τ:var^ x^) (list x^)]
-    [(τ:con _) '()]
-    [(τ:app a b) (remove-duplicates (append (free-vars a) (free-vars b)) free-identifier=?)]
-    [(τ:∀ _ t) (free-vars t)]))
-
 (define/contract (generalize t)
   (-> τ? τ?)
-  (let* ([xs^ (free-vars t)]
+  (let* ([xs^ (τ-vars^ t)]
          [xs (generate-temporaries xs^)]
          [subst (map #{ctx:solution %1 (τ:var %2)} xs^ xs)])
     (foldr τ:∀ (apply-subst subst t) xs)))
@@ -204,6 +186,7 @@
     [(== τ:unit) τ:unit]
     [(τ:var y) (if (free-identifier=? x y) s t)]
     [(τ:var^ _) t]
+    [(τ:skolem _) t]
     [(τ:con _) t]
     [(τ:app a b) (τ:app (inst a x s) (inst b x s))]
     [(τ:∀ v t*) (τ:∀ v (inst t* x s))]))
@@ -213,9 +196,9 @@
   (-> (-> ctx? ctx?) void?)
   (current-type-context (f (current-type-context))))
 
-(define/contract τ<:!
+(define/contract (τ<:! a b)
   (-> τ? τ? void?)
-  (match-lambda**
+  (match* [(apply-current-subst a) (apply-current-subst b)]
    ; <:Con
    [[(? τ:con? a) (? τ:con? b)]
     #:when (τ=? a b)
@@ -228,6 +211,9 @@
    [[(τ:var^ x^) (τ:var^ y^)]
     #:when (free-identifier=? x^ y^)
     (void)]
+   [[(τ:skolem x^) (τ:skolem y^)]
+    #:when (free-identifier=? x^ y^)
+    (void)]
    ; <:→
    ; we need to handle → specially since it is allowed to be applied to polytypes
    [[(τ:->* a b) (τ:->* c d)]
@@ -237,7 +223,7 @@
    [[(τ:app a b) (τ:app c d)]
     (for ([t (in-list (list a b c d))])
       (unless (τ-mono? t)
-        (error (~a "illegal polymorphic type "(τ->string t)
+        (error (~a "illegal polymorphic type " (τ->string t)
                    ", impredicative polymorphism is not supported"))))
     (τ<:! a c)
     (τ<:! b d)]
@@ -245,14 +231,16 @@
    [[(τ:∀ x a) b]
     (let* ([x^ (generate-temporary x)]
            [a* (inst a x (τ:var^ x^))])
-      (modify-type-context #{append % (list (ctx:marker x^) (ctx:var^ x^))})
+      (modify-type-context #{snoc % (ctx:var^ x^)})
       (τ<:! a* b)
-      (modify-type-context #{ctx-until % (ctx:marker x^)}))]
+      (modify-type-context #{ctx-remove % (ctx:var^ x^)}))]
    ; <:∀R
    [[a (τ:∀ x b)]
-    (modify-type-context #{snoc % (ctx:var x)})
-    (τ<:! a b)
-    (modify-type-context #{ctx-until % (ctx:var x)})]
+    (let* ([x^ (generate-temporary x)]
+           [b* (inst b x (τ:skolem x^))])
+      (modify-type-context #{snoc % (ctx:skolem x^)})
+      (τ<:! a b)
+      (modify-type-context #{ctx-remove % (ctx:skolem x^)}))]
    ; <:InstantiateL
    [[(τ:var^ x^) a]
     #:when (not (member x^ (τ-vars^ a) free-identifier=?))
@@ -268,29 +256,20 @@
   (-> identifier? τ? void?)
   (match t
     ; InstLSolve
-    [(? τ-mono?) {=> fail}
-                 (match-let ([(list l r) (or (current-ctx-split (ctx:var^ x^)) (fail))])
-                   (with-handlers ([exn:fail:syntax? (λ (exn) (fail))])
-                     (τ-wf! l t))
-                   (current-type-context (append l (list (ctx:solution x^ t)) r)))]
-    ; InstLReach
-    [(τ:var^ y^) {=> fail}
-                 (match-let ([(list l m r) (or (current-ctx-split (ctx:var^ x^) (ctx:var^ y^)) (fail))])
-                   (current-type-context (append l (list (ctx:var^ x^)) m (list (ctx:solution y^ (τ:var^ x^))) r)))]
+    [(? τ-mono?)
+     (modify-type-context #{snoc % (ctx:solution x^ t)})]
     ; InstLArr
-    [(τ:->* a b) {=> fail}
-                 (match-let ([(list l r) (or (current-ctx-split (ctx:var^ x^)) (fail))]
-                             [x1^ (generate-temporary x^)]
-                             [x2^ (generate-temporary x^)])
-                   (current-type-context (append l (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^)))) r))
-                   (τ-inst-r! a x1^)
-                   (τ-inst-l! x2^ (apply-current-subst b)))]
+    [(τ:->* a b)
+     (let ([x1^ (generate-temporary x^)]
+           [x2^ (generate-temporary x^)])
+       (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^))))})
+       (τ-inst-r! a x1^)
+       (τ-inst-l! x2^ (apply-current-subst b)))]
     ; InstLAllR
     [(τ:∀ x t*)
      (modify-type-context #{snoc % (ctx:var x)})
      (τ-inst-l! x^ t*)
-     (match-let ([(list ctx _) (current-ctx-split (ctx:var x))])
-       (current-type-context ctx))]
+     (modify-type-context #{ctx-remove % (ctx:var x)})]
     [_ (error 'τ-inst-l! (format "failed to instantiate ~a to a subtype of ~a"
                                  (τ->string (τ:var^ x^)) (τ->string t)))]))
 
@@ -298,30 +277,21 @@
   (-> τ? identifier? void?)
   (match t
     ; InstRSolve
-    [(? τ-mono?) {=> fail}
-                 (match-let ([(list l r) (or (current-ctx-split (ctx:var^ x^)) (fail))])
-                   (with-handlers ([exn:fail:syntax? (λ (exn) (fail))])
-                     (τ-wf! l t))
-                   (current-type-context (append l (list (ctx:solution x^ t)) r)))]
-    ; InstRReach
-    [(τ:var^ y^) {=> fail}
-                 (match-let ([(list l m r) (or (current-ctx-split (ctx:var^ x^) (ctx:var^ y^)) (fail))])
-                   (current-type-context (append l (list (ctx:var^ x^)) m (list (ctx:solution y^ (τ:var^ x^))) r)))]
+    [(? τ-mono?)
+     (modify-type-context #{snoc % (ctx:solution x^ t)})]
     ; InstRArr
-    [(τ:->* a b) {=> fail}
-                 (match-let ([(list l r) (or (current-ctx-split (ctx:var^ x^)) (fail))]
-                             [x1^ (generate-temporary x^)]
-                             [x2^ (generate-temporary x^)])
-                   (current-type-context (append l (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^)))) r))
-                   (τ-inst-l! x1^ a)
-                   (τ-inst-r! (apply-current-subst b) x2^))]
+    [(τ:->* a b)
+     (let ([x1^ (generate-temporary x^)]
+           [x2^ (generate-temporary x^)])
+       (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^))))})
+       (τ-inst-l! x1^ a)
+       (τ-inst-r! (apply-current-subst b) x2^))]
     ; InstRAllL
     [(τ:∀ x t*)
      (let ([y^ (generate-temporary x)])
-       (modify-type-context #{append % (list (ctx:marker y^) (ctx:var^ y^))})
+       (modify-type-context #{snoc % (ctx:var^ y^)})
        (τ-inst-r! (inst t* x (τ:var^ y^)) x^)
-       (match-let ([(list ctx _) (current-ctx-split (ctx:marker y^))])
-         (current-type-context ctx)))]
+       (modify-type-context #{ctx-remove % (ctx:var^ y^)}))]
     [_ (error 'τ-inst-r! (format "failed to instantiate ~a to a supertype of ~a"
                                  (τ->string (τ:var^ x^)) (τ->string t)))]))
 
@@ -335,7 +305,7 @@
      (modify-type-context #{snoc % (ctx:var x)})
      (begin0
        (τ⇐/λ! e a bindings)
-       (modify-type-context #{ctx-until % (ctx:var x)}))]
+       (modify-type-context #{ctx-remove % (ctx:var x)}))]
     [_
      (define/syntax-parse [x ...] (map car bindings))
      (define/syntax-parse [x- ...] (generate-temporaries (attribute x)))
@@ -350,7 +320,7 @@
           (values (attribute x-*) #'e-)]))
      (define t_e (get-type e-))
      (unless t_e (raise-syntax-error #f "no inferred type" e))
-     (τ<:! (apply-current-subst t_e) (apply-current-subst t))
+     (τ<:! t_e t)
      (values xs- e-)]))
 
 (define/contract (τ⇐! e t)
@@ -368,10 +338,9 @@
   (-> τ? syntax? (values syntax? τ?))
   (match t
     [(τ:var^ x^)
-     (match-let ([(list l r) (current-ctx-split (ctx:var^ x^))]
-                 [x1^ (generate-temporary x^)]
-                 [x2^ (generate-temporary x^)])
-       (current-type-context (append l (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var x1^) (τ:var x2^)))) r))
+     (let ([x1^ (generate-temporary x^)]
+           [x2^ (generate-temporary x^)])
+       (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var x1^) (τ:var x2^))))})
        (values (τ⇐! e (τ:var^ x1^)) (τ:var^ x2^)))]
     [(τ:->* a b)
      (values (τ⇐! e a) b)]

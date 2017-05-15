@@ -85,7 +85,7 @@
    #:do [(match-define (τ:->* a b) t)
          (modify-type-context #{snoc % (ctx:assump #'x a)})
          (define-values [xs- e-] (τ⇐/λ! #'e b (list (cons #'x a))))
-         (modify-type-context #{ctx-until % (ctx:assump #'x a)})]
+         (modify-type-context #{ctx-remove % (ctx:assump #'x a)})]
    #:with [x-] xs-
    (attach-type #`(λ (x-) #,e-) t)]
   [(_ x:id e:expr)
@@ -93,7 +93,7 @@
          (define y^ (generate-temporary))
          (modify-type-context #{append % (list (ctx:var^ x^) (ctx:var^ y^) (ctx:assump #'x (τ:var^ x^)))})
          (define-values [xs- e-] (τ⇐/λ! #'e (τ:var^ y^) (list (cons #'x (τ:var^ x^)))))
-         (modify-type-context #{ctx-until % (ctx:assump #'x (τ:var^ x^))})]
+         (modify-type-context #{ctx-remove % (ctx:assump #'x (τ:var^ x^))})]
    #:with [x-] xs-
    (attach-type #`(λ (x-) #,e-) (τ:->* (τ:var^ x^) (τ:var^ y^)))])
 
