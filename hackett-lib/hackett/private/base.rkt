@@ -16,11 +16,9 @@
          #%module-begin #%top
          (rename-out [#%module-begin @%module-begin]
                      [#%top @%top]
-                     [λ: λ]
-                     [λ: lambda]
                      [∀ forall]
                      [+/curried +])
-         @%datum @%app @%top-interaction λ: +/curried
+         @%datum @%app @%top-interaction λ1 +/curried
          Unit -> ∀ Tuple Integer
          : def unit tuple tuple-cata
          define-primop)
@@ -77,7 +75,7 @@
   [(_ e t-expr:type)
    (attach-type (τ⇐! #'e (attribute t-expr.τ)) (apply-current-subst (attribute t-expr.τ)))])
 
-(define-syntax-parser λ:
+(define-syntax-parser λ1
   [(_ x:id e:expr)
    #:do [(define t (get-expected this-syntax))]
    #:fail-unless t "no expected type, add more type annotations"
@@ -87,7 +85,7 @@
          (define-values [xs- e-] (τ⇐/λ! #'e b (list (cons #'x a))))
          (modify-type-context #{ctx-remove % (ctx:assump #'x a)})]
    #:with [x-] xs-
-   (attach-type #`(λ (x-) #,e-) t)]
+   (attach-type #`(λ- (x-) #,e-) t)]
   [(_ x:id e:expr)
    #:do [(define x^ (generate-temporary))
          (define y^ (generate-temporary))
@@ -95,7 +93,7 @@
          (define-values [xs- e-] (τ⇐/λ! #'e (τ:var^ y^) (list (cons #'x (τ:var^ x^)))))
          (modify-type-context #{ctx-remove % (ctx:assump #'x (τ:var^ x^))})]
    #:with [x-] xs-
-   (attach-type #`(λ (x-) #,e-) (τ:->* (τ:var^ x^) (τ:var^ y^)))])
+   (attach-type #`(λ- (x-) #,e-) (τ:->* (τ:var^ x^) (τ:var^ y^)))])
 
 (define-syntax-parser @%app
   [(_ f:expr e:expr)
