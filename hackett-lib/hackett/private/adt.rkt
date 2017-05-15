@@ -271,7 +271,7 @@
    #:do [; infer the result type and make sure it is a subtype of all case branches
          (define result^ (generate-temporary))
          (modify-type-context #{snoc % (ctx:var^ result^)})
-         (for-each #{τ<:! (τ:var^ result^) %} ts_bodies)
+         (for-each #{τ<:! % (τ:var^ result^)} ts_bodies)
          (define t_result (apply-current-subst (τ:var^ result^)))]
    #:with [match-pat- ...] match-pats-
    #:with [body- ...] bodies-

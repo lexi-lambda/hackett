@@ -150,3 +150,14 @@
 (typecheck-fail (λ x (case x
                        [nothing unit]
                        [true unit])))
+
+(typecheck-succeed (λ m (case m [nothing nothing])))
+(typecheck-succeed (: (λ m (case m [nothing nothing]))
+                      (∀ a (∀ b (-> (Maybe a) (Maybe b))))))
+(typecheck-succeed (λ f (λ m (case m
+                               [(just x) (just (f x))]
+                               [nothing nothing]))))
+(typecheck-succeed (: (λ f (λ m (case m
+                                  [(just x) (just (f x))]
+                                  [nothing (: nothing (∀ a (Maybe a)))])))
+                      (∀ a (∀ b (-> (-> a b) (-> (Maybe a) (Maybe b)))))))
