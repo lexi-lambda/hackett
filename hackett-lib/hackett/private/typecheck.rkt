@@ -26,8 +26,8 @@
                        [struct ctx:skolem ([x^ identifier?])]
                        [struct ctx:assump ([x identifier?] [t τ?])]
                        [struct ctx:solution ([x^ identifier?] [t τ?])])
-         τ:unit τ:-> τ:->? τ:->* τ=? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf! generalize inst
-         τ<:! τ-inst-l! τ-inst-r! τ⇐/λ! τ⇐! τ⇒! τ⇒app!
+         τ? τ:unit τ:-> τ:->? τ:->* τ=? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf! generalize inst
+         τ<:! τ-inst-l! τ-inst-r! τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒!
          ctx-elem? ctx? ctx-elem=? ctx-member? ctx-remove
          ctx-find-solution current-ctx-solution apply-subst apply-current-subst
          current-type-context modify-type-context
@@ -297,6 +297,23 @@
 
 ;; -------------------------------------------------------------------------------------------------
 
+(define/contract (τ⇒/λ! e bindings)
+  (-> syntax? (listof (cons/c identifier? τ?)) (values (listof identifier?) syntax? τ?))
+  (define/syntax-parse [x ...] (map car bindings))
+  (define/syntax-parse [x- ...] (generate-temporaries (attribute x)))
+  (define/syntax-parse [t_x ...] (map (λ~> cdr preservable-property->expression) bindings))
+  (define-values [xs- e-]
+    (syntax-parse (local-expand #`(λ (x- ...)
+                                    (let-syntax ([x (make-typed-var-transformer #'x- t_x)] ...)
+                                      #,e))
+                                'expression '())
+      #:literals [#%plain-lambda let-values]
+      [(#%plain-lambda (x-* ...) (let-values _ (let-values _ e-)))
+       (values (attribute x-*) #'e-)]))
+  (define t_e (get-type e-))
+  (unless t_e (raise-syntax-error #f "no inferred type" e))
+  (values xs- e- t_e))
+
 (define/contract (τ⇐/λ! e t bindings)
   (-> syntax? τ? (listof (cons/c identifier? τ?)) (values (listof identifier?) syntax?))
   (current-τ-wf! t)
@@ -307,32 +324,19 @@
        (τ⇐/λ! e a bindings)
        (modify-type-context #{ctx-remove % (ctx:var x)}))]
     [_
-     (define/syntax-parse [x ...] (map car bindings))
-     (define/syntax-parse [x- ...] (generate-temporaries (attribute x)))
-     (define/syntax-parse [t_x ...] (map (λ~> cdr preservable-property->expression) bindings))
-     (define-values [xs- e-]
-       (syntax-parse (local-expand #`(λ (x- ...)
-                                       (let-syntax ([x (make-typed-var-transformer #'x- t_x)] ...)
-                                         #,(attach-expected e t)))
-                                   'expression '())
-         #:literals [#%plain-lambda let-values]
-         [(#%plain-lambda (x-* ...) (let-values _ (let-values _ e-)))
-          (values (attribute x-*) #'e-)]))
-     (define t_e (get-type e-))
-     (unless t_e (raise-syntax-error #f "no inferred type" e))
+     (define-values [xs- e- t_e] (τ⇒/λ! (attach-expected e t) bindings))
      (τ<:! t_e t)
      (values xs- e-)]))
+
+(define/contract (τ⇒! e)
+  (-> syntax? (values syntax? τ?))
+  (match-let-values ([(_ e- t_e) (τ⇒/λ! e '())])
+    (values e- t_e)))
 
 (define/contract (τ⇐! e t)
   (-> syntax? τ? syntax?)
   (match-let-values ([(_ e-) (τ⇐/λ! e t '())])
     e-))
-
-(define/contract (τ⇒! e)
-  (-> syntax? (values syntax? τ?))
-  (define-values [e- τ_e] (local-expand/get-type e))
-  (unless τ_e (raise-syntax-error #f "no inferred type" e))
-  (values e- τ_e))
 
 (define/contract (τ⇒app! t e)
   (-> τ? syntax? (values syntax? τ?))
@@ -351,6 +355,14 @@
     [_ (raise-syntax-error #f (format "cannot apply expression of type ~a to expression ~a"
                                       (τ->string t) (syntax->datum e))
                            e)]))
+
+(define/contract (τs⇒! es)
+  (-> (listof syntax?) (values (listof syntax?) (listof τ?)))
+  (for/fold ([es- '()]
+             [ts '()])
+            ([e (in-list es)])
+    (let-values ([(e- t) (τ⇒! e)])
+      (values (snoc es- e-) (snoc ts t)))))
 
 ;; -------------------------------------------------------------------------------------------------
 

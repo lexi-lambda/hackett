@@ -87,3 +87,66 @@
 (typecheck-fail (: (λ x 1) (∀ a (-> a a))))
 (typecheck-succeed (: (λ x (λ y x)) (∀ a (∀ b (-> a (-> b a))))))
 (typecheck-fail (: (λ x (λ y y)) (∀ a (∀ b (-> a (-> b a))))))
+
+(data Bool true false)
+
+(typecheck-succeed true)
+(typecheck-succeed (: true Bool))
+(typecheck-succeed false)
+(typecheck-succeed (: false Bool))
+(typecheck-fail (: true Unit))
+(typecheck-fail (: false Unit))
+
+(data (Maybe a) (just a) nothing)
+
+(typecheck-succeed just)
+(typecheck-succeed (: just (∀ a (-> a (Maybe a)))))
+(typecheck-succeed (: just (-> Unit (Maybe Unit))))
+(typecheck-succeed (just unit))
+(typecheck-succeed (: (just unit) (Maybe Unit)))
+(typecheck-succeed nothing)
+(typecheck-succeed (: nothing (∀ a (Maybe a))))
+(typecheck-succeed (: nothing (Maybe Unit)))
+(typecheck-fail (: just (Maybe Unit)))
+(typecheck-fail (: (just unit) (∀ a (Maybe a))))
+(typecheck-fail (: (just unit) (Maybe Integer)))
+(typecheck-fail (: nothing Unit))
+(typecheck-fail (: (: nothing (Maybe Unit)) (∀ a (Maybe a))))
+(typecheck-fail (: (: nothing (Maybe Unit)) (Maybe Integer)))
+
+(typecheck-succeed (case nothing
+                     [(just x) x]
+                     [nothing unit]))
+(typecheck-succeed (: (case nothing
+                        [(just x) x]
+                        [nothing unit])
+                      Unit))
+(typecheck-succeed (λ x (case x
+                          [(just x) x]
+                          [nothing unit])))
+(typecheck-succeed (: (λ x (case x
+                             [(just x) x]
+                             [nothing unit]))
+                      (-> (Maybe Unit) Unit)))
+(typecheck-fail (: (λ x (case x
+                          [(just x) x]
+                          [nothing unit]))
+                   (-> (Maybe Integer) Unit)))
+(typecheck-fail (: (λ x (case x
+                          [(just x) x]
+                          [nothing unit]))
+                   (∀ a (-> (Maybe a) Unit))))
+(typecheck-succeed (case nothing
+                     [(just (just x)) x]
+                     [_ unit]))
+(typecheck-succeed (: (case nothing
+                        [(just (just x)) x]
+                        [_ unit])
+                      Unit))
+(typecheck-fail (case nothing
+                  [(just x) x]
+                  [(just (just x)) x]
+                  [_ unit]))
+(typecheck-fail (λ x (case x
+                       [nothing unit]
+                       [true unit])))
