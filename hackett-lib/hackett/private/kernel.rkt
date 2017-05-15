@@ -3,7 +3,7 @@
 (require (for-syntax racket/base)
          syntax/parse/define
 
-         hackett/private/base)
+         (rename-in hackett/private/base [@%app @%app1]))
 
 (provide (rename-out [@%module-begin #%module-begin]
                      [@%top #%top]
@@ -23,3 +23,9 @@
    #'(λ1 x e)]
   [(_ [x:id xs:id ...+] e:expr)
    #'(λ1 x (λ [xs ...] e))])
+
+(define-syntax-parser @%app
+  [(_ f:expr x:expr)
+   #'(@%app1 f x)]
+  [(_ f:expr x:expr xs:expr ...+)
+   #'(@%app (@%app1 f x) xs ...)])
