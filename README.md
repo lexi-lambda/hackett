@@ -5,12 +5,13 @@ Hackett is an attempt to implement a Haskell-like language with support for Rack
 Here are some of the features that Hackett supports **right now**:
 
   - Bidirectional type inference
+  - Algebraic datatypes (ADTs)
+  - Pattern matching
   - Higher-rank polymorphism
   - Type-aware/type-directed macros
 
 Here are some of the features that still need to be implemented for a minimal release:
 
-  - Algebraic datatypes (ADTs)
   - Higher-kinded types
   - Typeclasses
   - Kindchecking
