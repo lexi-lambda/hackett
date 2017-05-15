@@ -56,7 +56,7 @@
     [(τ:->* _ _) #t]
     [_ #f]))
 
-(define (τ? x) ((disjoin τ:var? τ:var^? τ:con? τ:app? τ:∀?) x))
+(define (τ? x) ((disjoin τ:var? τ:var^? τ:skolem? τ:con? τ:app? τ:∀?) x))
 (define/contract τ=?
   (-> τ? τ? boolean?)
   (match-lambda**
