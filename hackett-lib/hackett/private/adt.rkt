@@ -13,7 +13,8 @@
 
          hackett/private/base)
 
-(provide data case)
+(provide (for-syntax data-constructor-spec)
+         data case)
 
 (begin-for-syntax
   (define-syntax-class type-constructor-spec
@@ -240,7 +241,7 @@
    #:with [τ-arg ...] (generate-temporaries (attribute τ.arg))
    #:with [τ-arg.τ ...] (map #{begin #`(attribute #,(format-id % "~a.τ" %))} (attribute τ-arg))
    #`(begin-
-       (define-for-syntax- τ-base (τ:con #'τ.tag))
+       (define-for-syntax- τ-base (τ:con #'τ.tag (list #'constructor ...)))
        (define-syntax-parser τ.tag
          #,(if (attribute τ.nullary?)
                #'[_:id (τ-stx-token τ-base)]

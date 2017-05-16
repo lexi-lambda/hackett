@@ -18,7 +18,7 @@
 
 (provide (contract-out [struct τ:var ([x identifier?])]
                        [struct τ:var^ ([x^ identifier?])]
-                       [struct τ:con ([name identifier?])]
+                       [struct τ:con ([name identifier?] [constructors (or/c (listof syntax?) #f)])]
                        [struct τ:app ([a τ?] [b τ?])]
                        [struct τ:∀ ([x identifier?] [t τ?])]
                        [struct ctx:var ([x identifier?])]
@@ -37,12 +37,12 @@
 (struct τ:var (x) #:prefab)
 (struct τ:var^ (x^) #:prefab)
 (struct τ:skolem (x^) #:prefab)
-(struct τ:con (name) #:prefab)
+(struct τ:con (name constructors) #:prefab)
 (struct τ:app (a b) #:prefab)
 (struct τ:∀ (x t) #:prefab)
 
-(define τ:unit (τ:con #'Unit))
-(define τ:-> (τ:con #'->))
+(define τ:unit (τ:con #'Unit #f))
+(define τ:-> (τ:con #'-> #f))
 
 (define (mk-τ:-> a b) (τ:app (τ:app τ:-> a) b))
 (define-match-expander τ:->*
@@ -63,7 +63,7 @@
    [[(τ:var x) (τ:var y)] (free-identifier=? x y)]
    [[(τ:var^ x^) (τ:var^ y^)] (free-identifier=? x^ y^)]
    [[(τ:skolem x^) (τ:skolem y^)] (free-identifier=? x^ y^)]
-   [[(τ:con a) (τ:con b)] (free-identifier=? a b)]
+   [[(τ:con a _) (τ:con b _)] (free-identifier=? a b)]
    [[(τ:app a b) (τ:app c d)] (and (τ=? a c) (τ=? b d))]
    [[(τ:∀ x a) (τ:∀ y b)] (and (free-identifier=? x y) (τ=? a b))]
    [[_ _] #f]))
@@ -74,7 +74,7 @@
     [(τ:var _) #t]
     [(τ:var^ _) #t]
     [(τ:skolem _) #t]
-    [(τ:con _) #t]
+    [(τ:con _ _) #t]
     [(τ:app a b) (and (τ-mono? a) (τ-mono? b))]
     [(τ:∀ _ _) #f]))
 
@@ -84,7 +84,7 @@
     [(τ:var _) '()]
     [(τ:var^ x^) (list x^)]
     [(τ:skolem _) '()]
-    [(τ:con _) '()]
+    [(τ:con _ _) '()]
     [(τ:app a b) (remove-duplicates (append (τ-vars^ a) (τ-vars^ b)) free-identifier=?)]
     [(τ:∀ _ t) (τ-vars^ t)]))
 
@@ -97,7 +97,7 @@
               [(τ:var x) (syntax-e x)]
               [(τ:var^ x^) (string->symbol (format "~a^" (syntax-e x^)))]
               [(τ:skolem x^) (syntax-e x^)]
-              [(τ:con name) (syntax-e name)]
+              [(τ:con name _) (syntax-e name)]
               [(? τ:app?)
                (let flatten-app ([t t])
                  (match t
@@ -153,7 +153,7 @@
                    (raise-syntax-error #f "unbound existential variable" x^))]
     [(τ:skolem x^) (unless (ctx-member? ctx (ctx:skolem x^))
                     (raise-syntax-error #f "skolem escaped its scope" x^))]
-    [(τ:con _) (void)]
+    [(τ:con _ _) (void)]
     [(τ:app a b) (τ-wf! ctx a) (τ-wf! ctx b)]
     [(τ:∀ x t) (τ-wf! (snoc ctx (ctx:var x)) t)]))
 (define/contract (current-τ-wf! t)
@@ -167,7 +167,7 @@
     [(τ:var^ x^) (let ([s (ctx-find-solution ctx x^)])
                    (if s (apply-subst ctx s) t))]
     [(τ:skolem _) t]
-    [(τ:con _) t]
+    [(τ:con _ _) t]
     [(τ:app a b) (τ:app (apply-subst ctx a) (apply-subst ctx b))]
     [(τ:∀ x t) (τ:∀ x (apply-subst ctx t))]))
 (define (apply-current-subst t)
@@ -187,7 +187,7 @@
     [(τ:var y) (if (free-identifier=? x y) s t)]
     [(τ:var^ _) t]
     [(τ:skolem _) t]
-    [(τ:con _) t]
+    [(τ:con _ _) t]
     [(τ:app a b) (τ:app (inst a x s) (inst b x s))]
     [(τ:∀ v t*) (τ:∀ v (inst t* x s))]))
 

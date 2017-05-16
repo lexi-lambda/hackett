@@ -47,12 +47,12 @@
                         'expression '())
    (τ-stx-token (τ:∀ #'x- (attribute t-.τ)))])
 
-(define-for-syntax τ:tuple (τ:con #'Tuple))
+(define-for-syntax τ:tuple (τ:con #'Tuple #f))
 (define-syntax-parser Tuple
   [(_ a:type b:type)
    (τ-stx-token (τ:app (τ:app τ:tuple (attribute a.τ)) (attribute b.τ)))])
 
-(define-for-syntax τ:integer (τ:con #'Integer))
+(define-for-syntax τ:integer (τ:con #'Integer #f))
 (define-syntax-parser Integer
   [_:id (τ-stx-token τ:integer)])
 
