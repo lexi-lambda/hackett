@@ -168,7 +168,7 @@
     (-> pat? τ?
         (values (listof ctx:assump?) (-> (listof identifier?) (values syntax? (listof identifier?)))))
     (let-values ([(t_⇒ assumps mk-pat) (pat⇒! pat)])
-      (τ<:! t_⇒ t)
+      (τ<:! t_⇒ t #:src (pat-base-stx pat))
       (values assumps mk-pat)))
 
   ; Combines a list of `match` pattern constructors to properly run them against a list of identifiers
@@ -266,12 +266,12 @@
          ; infer the type of the value being matched and ensure all the patterns can match against it
          (define val^ (generate-temporary))
          (modify-type-context #{snoc % (ctx:var^ val^)})
-         (for-each #{τ<:! % (τ:var^ val^)} ts_pats)]
+         (for-each #{τ<:! %1 (τ:var^ val^) #:src %2} ts_pats (attribute pat))]
    #:with val- (τ⇐! #'val (apply-current-subst (τ:var^ val^)))
    #:do [; infer the result type and make sure it is a subtype of all case branches
          (define result^ (generate-temporary))
          (modify-type-context #{snoc % (ctx:var^ result^)})
-         (for-each #{τ<:! % (τ:var^ result^)} ts_bodies)
+         (for-each #{τ<:! %1 (τ:var^ result^) #:src %2} ts_bodies (attribute body))
          (define t_result (apply-current-subst (τ:var^ result^)))]
    #:with [match-pat- ...] match-pats-
    #:with [body- ...] bodies-

@@ -197,8 +197,8 @@
   (-> (-> ctx? ctx?) void?)
   (current-type-context (f (current-type-context))))
 
-(define/contract (τ<:! a b)
-  (-> τ? τ? void?)
+(define/contract (τ<:! a b #:src src)
+  (-> τ? τ? #:src syntax? void?)
   (match* [(apply-current-subst a) (apply-current-subst b)]
    ; <:Con
    [[(? τ:con? a) (? τ:con? b)]
@@ -218,28 +218,28 @@
    ; <:→
    ; we need to handle → specially since it is allowed to be applied to polytypes
    [[(τ:->* a b) (τ:->* c d)]
-    (τ<:! c a)
-    (τ<:! b d)]
+    (τ<:! c a #:src src)
+    (τ<:! b d #:src src)]
    ; <:App
    [[(τ:app a b) (τ:app c d)]
     (for ([t (in-list (list a b c d))])
       (unless (τ-mono? t)
-        (error (~a "illegal polymorphic type " (τ->string t)
-                   ", impredicative polymorphism is not supported"))))
-    (τ<:! a c)
-    (τ<:! b d)]
+        (raise-syntax-error #f (~a "illegal polymorphic type " (τ->string t)
+                                   ", impredicative polymorphism is not supported") src)))
+    (τ<:! a c #:src src)
+    (τ<:! b d #:src src)]
    ; <:∀L
    [[(τ:∀ x a) b]
     (let* ([x^ (generate-temporary x)]
            [a* (inst a x (τ:var^ x^))])
       (modify-type-context #{snoc % (ctx:var^ x^)})
-      (τ<:! a* b))]
+      (τ<:! a* b #:src src))]
    ; <:∀R
    [[a (τ:∀ x b)]
     (let* ([x^ (generate-temporary x)]
            [b* (inst b x (τ:skolem x^))])
       (modify-type-context #{snoc % (ctx:skolem x^)})
-      (τ<:! a b)
+      (τ<:! a b #:src src)
       (modify-type-context #{ctx-remove % (ctx:skolem x^)}))]
    ; <:InstantiateL
    [[(τ:var^ x^) a]
@@ -250,7 +250,11 @@
     #:when (not (member x^ (τ-vars^ a) free-identifier=?))
     (τ-inst-r! a x^)]
    [[a b]
-    (error (format "type mismatch: expected ~a, given ~a" (τ->string b) (τ->string a)))]))
+    (raise-syntax-error 'typechecker
+                        (~a "type mismatch\n"
+                            "  between: " (τ->string b) "\n"
+                            "      and: " (τ->string a))
+                        src)]))
 
 (define/contract (τ-inst-l! x^ t)
   (-> identifier? τ? void?)
@@ -325,7 +329,7 @@
        (modify-type-context #{ctx-remove % (ctx:var x)}))]
     [_
      (define-values [xs- e- t_e] (τ⇒/λ! (attach-expected e t) bindings))
-     (τ<:! t_e t)
+     (τ<:! t_e t #:src e)
      (values xs- e-)]))
 
 (define/contract (τ⇒! e)
