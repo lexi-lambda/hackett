@@ -19,19 +19,15 @@
                      [∀ forall]
                      [+/curried +])
          @%datum @%app @%top-interaction λ1 +/curried
-         Unit -> ∀ Tuple Integer
-         : def unit tuple tuple-cata
+         -> ∀ Tuple Integer
+         : def tuple tuple-cata
          define-primop)
-
-(define unit- (let () (struct unit ()) (unit)))
-(define-syntax unit (make-typed-var-transformer #'unit- τ:unit))
 
 (define-syntax-parser define-primop
   [(_ op:id op-:id t-expr:type)
    #:with t (preservable-property->expression (attribute t-expr.τ))
    #'(define-syntax op (make-typed-var-transformer #'op- t))])
 
-(define-syntax Unit (make-type-variable-transformer τ:unit))
 (define-syntax -> (make-type-variable-transformer τ:->))
 (define-syntax-parser ∀
   #:literals [let-values]
