@@ -20,6 +20,6 @@
   (λ [x y] (case x [true y]
                    [false false])))
 
-(def bool : (∀ a (-> a (-> a (-> Bool a))))
+(def bool : (∀ [a] (-> a (-> a (-> Bool a))))
   (λ [x y b] (case b [true x]
                      [false y])))
