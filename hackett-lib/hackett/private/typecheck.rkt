@@ -104,7 +104,12 @@
                  (match t
                    [(τ:app a b) (append (flatten-app a) (list (->datum b)))]
                    [other (list (->datum other))]))]
-              [(τ:∀ x t) `(∀ ,(syntax-e x) ,(->datum t))]))))
+              [(τ:∀ x t)
+               (let flatten-forall ([xs (list x)]
+                                    [t t])
+                 (match t
+                   [(τ:∀ x t) (flatten-forall (cons x xs) t)]
+                   [other `(∀ ,(map syntax-e (reverse xs)) ,(->datum t))]))]))))
 
 (struct ctx:var (x) #:prefab)
 (struct ctx:var^ (x^) #:prefab)
