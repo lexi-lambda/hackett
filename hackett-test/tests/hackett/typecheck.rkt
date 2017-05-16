@@ -39,6 +39,7 @@
 
 (require hackett/data/bool
          hackett/data/maybe
+         hackett/data/tuple
          hackett/function
          (submod "." assertions))
 

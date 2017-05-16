@@ -19,8 +19,8 @@
                      [∀ forall]
                      [+/curried +])
          @%datum @%app @%top-interaction λ1 +/curried
-         -> ∀ Tuple Integer
-         : def tuple tuple-cata
+         -> ∀ Integer
+         : def
          define-primop)
 
 (define-syntax-parser define-primop
@@ -123,23 +123,12 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
-(define-for-syntax τ:tuple (τ:con #'Tuple #f))
-(define-syntax Tuple (make-type-variable-transformer τ:tuple))
-
 (define-for-syntax τ:integer (τ:con #'Integer #f))
 (define-syntax Integer (make-type-variable-transformer τ:integer))
 
-(define ((tuple- x) y) `#s(tuple ,x ,y))
-
-(define ((tuple-cata- f) t)
-  (match-let ([`#s(tuple ,x ,y) t])
-    ((f x) y)))
-
 (define ((+/curried- x) y) (+ x y))
 
-; TODO: move these into a place that have access to hackett/private/kernel’s @%app so they can use the
-; currying shorthand and are generally less awful
+; TODO: move this into a place that has access to hackett/private/kernel’s @%app so it can use the
+; currying shorthand and is generally less awful
 (splicing-let-syntax ([#%app (make-rename-transformer #'@%app)])
-  (define-primop tuple tuple- (∀ a (∀ b ((-> a) ((-> b) ((Tuple a) b))))))
-  (define-primop tuple-cata tuple-cata- (∀ a (∀ b (∀ c ((-> ((-> a) ((-> b) c))) ((-> ((Tuple a) b)) c))))))
   (define-primop +/curried +/curried- ((-> Integer) ((-> Integer) Integer))))
