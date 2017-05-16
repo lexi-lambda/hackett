@@ -5,7 +5,7 @@
 (require (for-syntax (multi-in racket [base list match syntax])
                      threading)
          (postfix-in - racket/base)
-         racket/match
+         (multi-in racket [match splicing])
          syntax/parse/define
 
          (for-syntax hackett/private/typecheck
@@ -31,10 +31,8 @@
    #:with t (preservable-property->expression (attribute t-expr.τ))
    #'(define-syntax op (make-typed-var-transformer #'op- t))])
 
-(define-syntax-parser Unit
-  [_:id (τ-stx-token τ:unit)])
-(define-syntax-parser ->
-  [(-> a:type b:type) (τ-stx-token (τ:->* (attribute a.τ) (attribute b.τ)))])
+(define-syntax Unit (make-type-variable-transformer τ:unit))
+(define-syntax -> (make-type-variable-transformer τ:->))
 (define-syntax-parser ∀
   #:literals [let-values]
   [(∀ x:id t)
@@ -46,26 +44,6 @@
                             t)
                         'expression '())
    (τ-stx-token (τ:∀ #'x- (attribute t-.τ)))])
-
-(define-for-syntax τ:tuple (τ:con #'Tuple #f))
-(define-syntax-parser Tuple
-  [(_ a:type b:type)
-   (τ-stx-token (τ:app (τ:app τ:tuple (attribute a.τ)) (attribute b.τ)))])
-
-(define-for-syntax τ:integer (τ:con #'Integer #f))
-(define-syntax-parser Integer
-  [_:id (τ-stx-token τ:integer)])
-
-(define ((tuple- x) y) `#s(tuple ,x ,y))
-(define-primop tuple tuple- (∀ a (∀ b (-> a (-> b (Tuple a b))))))
-
-(define ((tuple-cata- f) t)
-  (match-let ([`#s(tuple ,x ,y) t])
-    ((f x) y)))
-(define-primop tuple-cata tuple-cata- (∀ a (∀ b (∀ c (-> (-> a (-> b c)) (-> (Tuple a b) c))))))
-
-(define ((+/curried- x) y) (+ x y))
-(define-primop +/curried +/curried- (-> Integer (-> Integer Integer)))
 
 (define-syntax-parser @%datum
   [(_ . n:integer)
@@ -95,11 +73,16 @@
    #:with [x-] xs-
    (attach-type #`(λ- (x-) #,e-) (τ:->* (τ:var^ x^) (τ:var^ y^)))])
 
-(define-syntax-parser @%app
-  [(_ f:expr e:expr)
-   #:do [(define-values [f- t_f] (τ⇒! #'f))
-         (define-values [e- t_r] (τ⇒app! (apply-current-subst t_f) #'e))]
-   (attach-type #`(#%app #,f- #,e-) t_r)])
+(define-syntax (@%app stx)
+  (if (type-transforming?)
+      (syntax-parse stx
+        [(_ a:type b:type)
+         (τ-stx-token (τ:app (attribute a.τ) (attribute b.τ)))])
+      (syntax-parse stx
+        [(_ f:expr e:expr)
+         #:do [(define-values [f- t_f] (τ⇒! #'f))
+               (define-values [e- t_r] (τ⇒app! (apply-current-subst t_f) #'e))]
+         (attach-type #`(#%app #,f- #,e-) t_r)])))
 
 (define-syntax-parser def
   #:literals [:]
@@ -141,3 +124,26 @@
      (define-values [e- τ_e] (τ⇒! #'e))
      (printf ": ~a\n" (τ->string (apply-current-subst τ_e)))
      e-)])
+
+;; ---------------------------------------------------------------------------------------------------
+
+(define-for-syntax τ:tuple (τ:con #'Tuple #f))
+(define-syntax Tuple (make-type-variable-transformer τ:tuple))
+
+(define-for-syntax τ:integer (τ:con #'Integer #f))
+(define-syntax Integer (make-type-variable-transformer τ:integer))
+
+(define ((tuple- x) y) `#s(tuple ,x ,y))
+
+(define ((tuple-cata- f) t)
+  (match-let ([`#s(tuple ,x ,y) t])
+    ((f x) y)))
+
+(define ((+/curried- x) y) (+ x y))
+
+; TODO: move these into a place that have access to hackett/private/kernel’s @%app so they can use the
+; currying shorthand and are generally less awful
+(splicing-let-syntax ([#%app (make-rename-transformer #'@%app)])
+  (define-primop tuple tuple- (∀ a (∀ b ((-> a) ((-> b) ((Tuple a) b))))))
+  (define-primop tuple-cata tuple-cata- (∀ a (∀ b (∀ c ((-> ((-> a) ((-> b) c))) ((-> ((Tuple a) b)) c))))))
+  (define-primop +/curried +/curried- ((-> Integer) ((-> Integer) Integer))))

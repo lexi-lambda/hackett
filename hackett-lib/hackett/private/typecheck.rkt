@@ -31,8 +31,9 @@
          ctx-elem? ctx? ctx-elem=? ctx-member? ctx-remove
          ctx-find-solution current-ctx-solution apply-subst apply-current-subst
          current-type-context modify-type-context
-         type parse-type τ-stx-token attach-type attach-expected
-         get-type get-expected local-expand/get-type make-typed-var-transformer)
+         type type-transforming? parse-type τ-stx-token make-type-variable-transformer
+         attach-type attach-expected get-type get-expected local-expand/get-type
+         make-typed-var-transformer)
 
 (struct τ:var (x) #:prefab)
 (struct τ:var^ (x^) #:prefab)
@@ -366,11 +367,15 @@
 
 ;; -------------------------------------------------------------------------------------------------
 
+(define type-transforming?-param (make-parameter #f))
+(define (type-transforming?) (type-transforming?-param))
+
 (define-syntax-class type
   #:attributes [τ]
   #:opaque
   [pattern t:expr
-           #:with t- (local-expand #'t 'expression '())
+           #:with t- (parameterize ([type-transforming?-param #t])
+                       (local-expand #'t 'expression '()))
            #:attr τ (syntax-property #'t- 'τ)
            #:when (τ? (attribute τ))])
 
@@ -378,6 +383,10 @@
   (syntax-parse stx
     #:context 'parse-type
     [t:type (attribute t.τ)]))
+
+(define/contract (make-type-variable-transformer t)
+  (-> τ? any)
+  (make-variable-like-transformer (τ-stx-token t)))
 
 ;; -------------------------------------------------------------------------------------------------
 

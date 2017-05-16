@@ -11,7 +11,8 @@
          (postfix-in - (multi-in racket [base match splicing]))
          syntax/parse/define
 
-         hackett/private/base)
+         (except-in hackett/private/base @%app)
+         (only-in hackett/private/kernel [#%app @%app]))
 
 (provide (for-syntax data-constructor-spec)
          data case)
@@ -208,9 +209,11 @@
    #:with tag-/curried (generate-temporary #'constructor.tag)
    #:with [α ...] (attribute τ.arg)
    ; calculate the result type of the data constructor, after being applied to args (if any)
-   #:with τ_result (if (attribute τ.nullary?) #'τ.tag #'(τ.tag α ...))
+   #:with τ_result (if (attribute τ.nullary?) #'τ.tag #'(@%app τ.tag α ...))
    ; calculate the type of the underlying constructor, with arguments, unquantified
-   #:with τ_con_unquantified (foldr #{begin #`(-> #,%1 #,%2)} #'τ_result (attribute constructor.arg))
+   #:with τ_con_unquantified (foldr #{begin #`(@%app -> #,%1 #,%2)}
+                                    #'τ_result
+                                    (attribute constructor.arg))
    ; quantify the type using the type variables in τ, then evaluate the type
    #:with τ_con:type (foldr #{begin #`(∀ #,%1 #,%2)} #'τ_con_unquantified (attribute α))
    #:with τ_con-expr (preservable-property->expression (attribute τ_con.τ))
@@ -242,11 +245,7 @@
    #:with [τ-arg.τ ...] (map #{begin #`(attribute #,(format-id % "~a.τ" %))} (attribute τ-arg))
    #`(begin-
        (define-for-syntax- τ-base (τ:con #'τ.tag (list #'constructor ...)))
-       (define-syntax-parser τ.tag
-         #,(if (attribute τ.nullary?)
-               #'[_:id (τ-stx-token τ-base)]
-               #`[(_ {~var τ-arg type} ...)
-                  (τ-stx-token #,(foldl #{begin #`(τ:app #,%2 #,%1)} #'τ-base (attribute τ-arg.τ)))]))
+       (define-syntax τ.tag (make-type-variable-transformer τ-base))
        (define-data-constructor τ constructor) ...)])
 
 (define-syntax-parser case
