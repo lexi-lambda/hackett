@@ -37,7 +37,10 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
-(require (submod "." assertions))
+(require hackett/data/bool
+         hackett/data/maybe
+         hackett/function
+         (submod "." assertions))
 
 (typecheck-succeed unit)
 (typecheck-succeed (: unit Unit))
@@ -89,16 +92,12 @@
 (typecheck-succeed (: (λ [x y] x) (∀ [a b] (-> a (-> b a)))))
 (typecheck-fail (: (λ [x y] y) (∀ [a b] (-> a (-> b a)))))
 
-(data Bool true false)
-
 (typecheck-succeed true)
 (typecheck-succeed (: true Bool))
 (typecheck-succeed false)
 (typecheck-succeed (: false Bool))
 (typecheck-fail (: true Unit))
 (typecheck-fail (: false Unit))
-
-(data (Maybe a) (just a) nothing)
 
 (typecheck-succeed just)
 (typecheck-succeed (: just (∀ [a] (-> a (Maybe a)))))
@@ -162,3 +161,7 @@
                                  [(just x) (just (f x))]
                                  [nothing nothing]))
                       (∀ [a b] (-> (-> a b) (-> (Maybe a) (Maybe b))))))
+
+(typecheck-succeed (compose just (+ 1)))
+(typecheck-succeed (: (compose just (+ 1)) (-> Integer (Maybe Integer))))
+(typecheck-fail (compose just 1))

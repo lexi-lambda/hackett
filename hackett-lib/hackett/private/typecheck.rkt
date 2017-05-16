@@ -233,8 +233,7 @@
     (let* ([x^ (generate-temporary x)]
            [a* (inst a x (τ:var^ x^))])
       (modify-type-context #{snoc % (ctx:var^ x^)})
-      (τ<:! a* b)
-      (modify-type-context #{ctx-remove % (ctx:var^ x^)}))]
+      (τ<:! a* b))]
    ; <:∀R
    [[a (τ:∀ x b)]
     (let* ([x^ (generate-temporary x)]
