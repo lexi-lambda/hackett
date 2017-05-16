@@ -13,8 +13,7 @@
                      [@%app #%app]
                      [@%top-interaction #%top-interaction]
                      [λ lambda]
-                     [∀ forall]
-                     [+/curried +])
+                     [∀ forall])
          require only-in provide : def λ ∀ -> Integer)
 
 (module reader syntax/module-reader hackett/private/kernel)

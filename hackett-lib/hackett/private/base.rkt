@@ -16,12 +16,17 @@
          #%module-begin #%top
          (rename-out [#%module-begin @%module-begin]
                      [#%top @%top]
-                     [∀ forall]
-                     [+/curried +])
-         @%datum @%app @%top-interaction λ1 +/curried
-         -> ∀ Integer
-         : def
-         define-primop)
+                     [∀ forall])
+         @%datum @%app @%top-interaction
+         define-primop define-base-type
+         -> ∀ Integer String
+         : λ1 def)
+
+(define-simple-macro (define-base-type name:id)
+  (define-syntax name (make-type-variable-transformer (τ:con #'name #f))))
+
+(define-base-type Integer)
+(define-base-type String)
 
 (define-syntax-parser define-primop
   [(_ op:id op-:id t-expr:type)
@@ -43,7 +48,11 @@
 
 (define-syntax-parser @%datum
   [(_ . n:integer)
-   (attach-type #'(#%datum . n) τ:integer)])
+   (attach-type #'(#%datum . n) (parse-type #'Integer))]
+  [(_ . s:str)
+   (attach-type #'(#%datum . s) (parse-type #'String))]
+  [(_ . x)
+   (raise-syntax-error #f "literal not supported" #'x)])
 
 (define-syntax-parser :
   [(_ e t-expr:type)
@@ -122,9 +131,6 @@
      e-)])
 
 ;; ---------------------------------------------------------------------------------------------------
-
-(define-for-syntax τ:integer (τ:con #'Integer #f))
-(define-syntax Integer (make-type-variable-transformer τ:integer))
 
 (define ((+/curried- x) y) (+ x y))
 
