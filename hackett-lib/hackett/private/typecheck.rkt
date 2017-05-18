@@ -244,7 +244,7 @@
     (let* ([x^ (generate-temporary x)]
            [b* (inst b x (τ:skolem x^))])
       (modify-type-context #{snoc % (ctx:skolem x^)})
-      (τ<:! a b #:src src)
+      (τ<:! a b* #:src src)
       (modify-type-context #{ctx-remove % (ctx:skolem x^)}))]
    ; <:InstantiateL
    [[(τ:var^ x^) a]
