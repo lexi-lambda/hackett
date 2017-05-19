@@ -51,6 +51,7 @@
           [> : (-> Integer (-> Integer Bool))]
           [<= : (-> Integer (-> Integer Bool))]
           [>= : (-> Integer (-> Integer Bool))]
+          [append/String : (-> String (-> String String))]
           [print : (-> String (IO Unit))]))
 
 (define (boolean->Bool x)
@@ -71,6 +72,11 @@
 (define ((> a) b) (boolean->Bool (>- a b)))
 (define ((<= a) b) (boolean->Bool (<=- a b)))
 (define ((>= a) b) (boolean->Bool (>=- a b)))
+
+;; ---------------------------------------------------------------------------------------------------
+;; String
+
+(define ((append/String x) y) (string-append- x y))
 
 ;; ---------------------------------------------------------------------------------------------------
 

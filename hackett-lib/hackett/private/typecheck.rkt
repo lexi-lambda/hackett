@@ -1,15 +1,18 @@
 #lang curly-fn racket/base
 
-(require (for-template racket/base)
+(require (for-template racket/base
+                       hackett/private/delay-expansion)
          (for-syntax racket/base
                      syntax/parse
                      syntax/transformer)
+         data/gvector
          racket/contract
          racket/format
          racket/function
          racket/list
          racket/match
          racket/syntax
+         syntax/id-table
          syntax/parse
          threading
 
@@ -18,21 +21,27 @@
 
 (provide (contract-out [struct τ:var ([x identifier?])]
                        [struct τ:var^ ([x^ identifier?])]
+                       [struct τ:skolem ([x^ identifier?])]
                        [struct τ:con ([name identifier?] [constructors (or/c (listof syntax?) #f)])]
                        [struct τ:app ([a τ?] [b τ?])]
                        [struct τ:∀ ([x identifier?] [t τ?])]
+                       [struct τ:qual ([constr constr?] [t τ?])]
+                       [struct constr:class ([class-id identifier?] [t τ?])]
                        [struct ctx:var ([x identifier?])]
                        [struct ctx:var^ ([x^ identifier?])]
                        [struct ctx:skolem ([x^ identifier?])]
                        [struct ctx:assump ([x identifier?] [t τ?])]
-                       [struct ctx:solution ([x^ identifier?] [t τ?])])
-         τ? τ:unit τ:-> τ:->? τ:->* τ=? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf! generalize inst
-         τ<:! τ-inst-l! τ-inst-r! τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒!
+                       [struct ctx:solution ([x^ identifier?] [t τ?])]
+                       [struct class:info ([var identifier?] [method-table immutable-free-id-table?])]
+                       [struct class:instance ([class class:info?] [t τ?] [dict-id identifier?])])
+         τ? τ:-> τ:->? τ:->* τ=? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf! generalize inst
+         τ<:/full! τ<:/elaborate! τ<:! τ-inst-l! τ-inst-r!
          ctx-elem? ctx? ctx-elem=? ctx-member? ctx-remove
          ctx-find-solution current-ctx-solution apply-subst apply-current-subst
          current-type-context modify-type-context
-         type type-transforming? parse-type τ-stx-token make-type-variable-transformer
-         attach-type attach-expected get-type get-expected local-expand/get-type
+         register-global-class-instance! local-class-instances lookup-instance!
+         type type-transforming? parse-type τ-stx-token local-expand-type
+         make-type-variable-transformer attach-type attach-expected get-type get-expected
          make-typed-var-transformer)
 
 (struct τ:var (x) #:prefab)
@@ -41,8 +50,10 @@
 (struct τ:con (name constructors) #:prefab)
 (struct τ:app (a b) #:prefab)
 (struct τ:∀ (x t) #:prefab)
+(struct τ:qual (constr t) #:prefab)
 
-(define τ:unit (τ:con #'Unit #f))
+(struct constr:class (class-id t) #:prefab)
+
 (define τ:-> (τ:con #'-> #f))
 
 (define (mk-τ:-> a b) (τ:app (τ:app τ:-> a) b))
@@ -57,7 +68,7 @@
     [(τ:->* _ _) #t]
     [_ #f]))
 
-(define (τ? x) ((disjoin τ:var? τ:var^? τ:skolem? τ:con? τ:app? τ:∀?) x))
+(define (τ? x) ((disjoin τ:var? τ:var^? τ:skolem? τ:con? τ:app? τ:∀? τ:qual?) x))
 (define/contract τ=?
   (-> τ? τ? boolean?)
   (match-lambda**
@@ -69,6 +80,13 @@
    [[(τ:∀ x a) (τ:∀ y b)] (and (free-identifier=? x y) (τ=? a b))]
    [[_ _] #f]))
 
+(define (constr? x) (constr:class? x))
+(define/contract constr=?
+  (-> constr? constr? boolean?)
+  (match-lambda**
+   [[(constr:class class-a t-a) (constr:class class-b t-b)]
+    (and (free-identifier=? class-a class-b) (τ=? t-a t-b))]))
+
 (define/contract τ-mono?
   (-> τ? boolean?)
   (match-lambda
@@ -77,7 +95,8 @@
     [(τ:skolem _) #t]
     [(τ:con _ _) #t]
     [(τ:app a b) (and (τ-mono? a) (τ-mono? b))]
-    [(τ:∀ _ _) #f]))
+    [(τ:∀ _ _) #f]
+    [(τ:qual (constr:class _ a) b) (and (τ-mono? a) (τ-mono? b))]))
 
 (define/contract τ-vars^
   (-> τ? (listof identifier?))
@@ -87,29 +106,48 @@
     [(τ:skolem _) '()]
     [(τ:con _ _) '()]
     [(τ:app a b) (remove-duplicates (append (τ-vars^ a) (τ-vars^ b)) free-identifier=?)]
-    [(τ:∀ _ t) (τ-vars^ t)]))
+    [(τ:∀ _ t) (τ-vars^ t)]
+    [(τ:qual (constr:class _ a) b)
+     (remove-duplicates (append (τ-vars^ a) (τ-vars^ b)) free-identifier=?)]))
 
 (define/contract (τ->string t)
   (-> τ? string?)
-  (format "~a"
-          (let ->datum ([t t])
-            (match t
-              [(== τ:unit) 'Unit]
-              [(τ:var x) (syntax-e x)]
-              [(τ:var^ x^) (string->symbol (format "~a^" (syntax-e x^)))]
-              [(τ:skolem x^) (syntax-e x^)]
-              [(τ:con name _) (syntax-e name)]
-              [(? τ:app?)
-               (let flatten-app ([t t])
-                 (match t
-                   [(τ:app a b) (append (flatten-app a) (list (->datum b)))]
-                   [other (list (->datum other))]))]
-              [(τ:∀ x t)
-               (let flatten-forall ([xs (list x)]
-                                    [t t])
-                 (match t
-                   [(τ:∀ x t) (flatten-forall (cons x xs) t)]
-                   [other `(∀ ,(map syntax-e (reverse xs)) ,(->datum t))]))]))))
+  (format "~a" (τ->datum t)))
+
+(define/contract (τ->datum t)
+  (-> τ? any/c)
+  (match t
+    [(τ:var x) (syntax-e x)]
+    [(τ:var^ x^) (string->symbol (format "~a^" (syntax-e x^)))]
+    [(τ:skolem x^) (syntax-e x^)]
+    [(τ:con name _) (syntax-e name)]
+    [(? τ:app?)
+     (let flatten-app ([t t])
+       (match t
+         [(τ:app a b) (append (flatten-app a) (list (τ->datum b)))]
+         [other (list (τ->datum other))]))]
+    [(τ:∀ x t)
+     (let flatten-forall ([xs (list x)]
+                          [t t])
+       (match t
+         [(τ:∀ x t) (flatten-forall (cons x xs) t)]
+         [other `(∀ ,(map syntax-e (reverse xs)) ,(τ->datum t))]))]
+    [(τ:qual constr t)
+     (let flatten-qual ([constrs (list constr)]
+                        [t t])
+       (match t
+         [(τ:qual constr t) (flatten-qual (cons constr constrs) t)]
+         [other `(=> ,(map constr->datum (reverse constrs)) ,(τ->datum t))]))]))
+
+(define/contract (constr->string constr)
+  (-> constr? string?)
+  (format "~a" (constr->datum constr)))
+
+(define/contract (constr->datum constr)
+  (-> constr? any/c)
+  (match constr
+    [(constr:class id t)
+     `(,(syntax-e id) ,(τ->datum t))]))
 
 (struct ctx:var (x) #:prefab)
 (struct ctx:var^ (x^) #:prefab)
@@ -161,7 +199,8 @@
                     (raise-syntax-error #f "skolem escaped its scope" x^))]
     [(τ:con _ _) (void)]
     [(τ:app a b) (τ-wf! ctx a) (τ-wf! ctx b)]
-    [(τ:∀ x t) (τ-wf! (snoc ctx (ctx:var x)) t)]))
+    [(τ:∀ x t) (τ-wf! (snoc ctx (ctx:var x)) t)]
+    [(τ:qual (constr:class _ a) b) (τ-wf! ctx a) (τ-wf! ctx b)]))
 (define/contract (current-τ-wf! t)
   (-> τ? void?)
   (τ-wf! (current-type-context) t))
@@ -175,7 +214,9 @@
     [(τ:skolem _) t]
     [(τ:con _ _) t]
     [(τ:app a b) (τ:app (apply-subst ctx a) (apply-subst ctx b))]
-    [(τ:∀ x t) (τ:∀ x (apply-subst ctx t))]))
+    [(τ:∀ x t) (τ:∀ x (apply-subst ctx t))]
+    [(τ:qual (constr:class id a) b) (τ:qual (constr:class id (apply-subst ctx a))
+                                            (apply-subst ctx b))]))
 (define (apply-current-subst t)
   (apply-subst (current-type-context) t))
 
@@ -189,77 +230,116 @@
 (define/contract (inst t x s)
   (-> τ? identifier? τ? τ?)
   (match t
-    [(== τ:unit) τ:unit]
     [(τ:var y) (if (free-identifier=? x y) s t)]
     [(τ:var^ _) t]
     [(τ:skolem _) t]
     [(τ:con _ _) t]
     [(τ:app a b) (τ:app (inst a x s) (inst b x s))]
-    [(τ:∀ v t*) (τ:∀ v (inst t* x s))]))
+    [(τ:∀ v t*) (τ:∀ v (inst t* x s))]
+    [(τ:qual (constr:class id a) b) (τ:qual (constr:class id (inst a x s)) (inst b x s))]))
 
 (define/contract current-type-context (parameter/c ctx?) (make-parameter '()))
 (define/contract (modify-type-context f)
   (-> (-> ctx? ctx?) void?)
   (current-type-context (f (current-type-context))))
 
+(struct class:info (var method-table) #:transparent)
+(struct class:instance (class t dict-id) #:transparent)
+
+(define global-class-instances (make-gvector))
+(define/contract (register-global-class-instance! instance)
+  (-> class:instance? void?)
+  (gvector-add! global-class-instances instance))
+(define/contract local-class-instances (parameter/c (listof class:instance?)) (make-parameter '()))
+(define/contract (current-class-instances)
+  (-> (listof class:instance?))
+  (append (gvector->list global-class-instances)
+          (local-class-instances)))
+
+(define (current-instances-of-class class)
+  (-> class:info? (listof class:instance?))
+  (filter #{eq? class (class:instance-class %)} (current-class-instances)))
+
+(define/contract (τ<:/full! a b #:src src #:elaborate? elaborate?)
+  (->i ([a τ?]
+        [b τ?]
+        #:src [src syntax?]
+        #:elaborate? [elaborate? boolean?])
+       [result (elaborate?) (if elaborate? (listof constr?) void?)])
+  (define no-op (if elaborate? '() (void)))
+  (match* [(apply-current-subst a) (apply-current-subst b)]
+    ; <:Con
+    [[(? τ:con? a) (? τ:con? b)]
+     #:when (τ=? a b)
+     no-op]
+    ; <:Var
+    [[(τ:var x) (τ:var y)]
+     #:when (free-identifier=? x y)
+     no-op]
+    ; <:Exvar
+    [[(τ:var^ x^) (τ:var^ y^)]
+     #:when (free-identifier=? x^ y^)
+     no-op]
+    [[(τ:skolem x^) (τ:skolem y^)]
+     #:when (free-identifier=? x^ y^)
+     no-op]
+    ; <:→
+    ; we need to handle → specially since it is allowed to be applied to polytypes
+    [[(τ:->* a b) (τ:->* c d)]
+     (τ<:! c a #:src src)
+     (τ<:! b d #:src src)
+     no-op]
+    ; <:App
+    [[(τ:app a b) (τ:app c d)]
+     (for ([t (in-list (list a b c d))])
+       (unless (τ-mono? t)
+         (raise-syntax-error #f (~a "illegal polymorphic type " (τ->string t)
+                                    ", impredicative polymorphism is not supported") src)))
+     (τ<:! a c #:src src)
+     (τ<:! b d #:src src)
+     no-op]
+    ; <:∀L
+    [[(τ:∀ x a) b]
+     (let* ([x^ (generate-temporary x)]
+            [a* (inst a x (τ:var^ x^))])
+       (modify-type-context #{snoc % (ctx:var^ x^)})
+       (τ<:/full! a* b #:src src #:elaborate? elaborate?))]
+    ; <:∀R
+    [[a (τ:∀ x b)]
+     (let* ([x^ (generate-temporary x)]
+            [b* (inst b x (τ:skolem x^))])
+       (modify-type-context #{snoc % (ctx:skolem x^)})
+       (begin0
+         (τ<:/full! a b* #:src src #:elaborate? elaborate?)
+         (modify-type-context #{ctx-remove % (ctx:skolem x^)})))]
+    ; <:Qual
+    [[(τ:qual constr a) b]
+     #:when elaborate?
+     (snoc (τ<:/elaborate! a b #:src src) constr)]
+    ; <:InstantiateL
+    [[(τ:var^ x^) a]
+     #:when (not (member x^ (τ-vars^ a) free-identifier=?))
+     (τ-inst-l! x^ a)
+     no-op]
+    ; <:InstantiateR
+    [[a (τ:var^ x^)]
+     #:when (not (member x^ (τ-vars^ a) free-identifier=?))
+     (τ-inst-r! a x^)
+     no-op]
+    [[a b]
+     (raise-syntax-error 'typechecker
+                         (~a "type mismatch\n"
+                             "  between: " (τ->string b) "\n"
+                             "      and: " (τ->string a))
+                         src)]))
+
+(define/contract (τ<:/elaborate! a b #:src src)
+  (-> τ? τ? #:src syntax? (listof constr?))
+  (τ<:/full! a b #:src src #:elaborate? #t))
+
 (define/contract (τ<:! a b #:src src)
   (-> τ? τ? #:src syntax? void?)
-  (match* [(apply-current-subst a) (apply-current-subst b)]
-   ; <:Con
-   [[(? τ:con? a) (? τ:con? b)]
-    #:when (τ=? a b)
-    (void)]
-   ; <:Var
-   [[(τ:var x) (τ:var y)]
-    #:when (free-identifier=? x y)
-    (void)]
-   ; <:Exvar
-   [[(τ:var^ x^) (τ:var^ y^)]
-    #:when (free-identifier=? x^ y^)
-    (void)]
-   [[(τ:skolem x^) (τ:skolem y^)]
-    #:when (free-identifier=? x^ y^)
-    (void)]
-   ; <:→
-   ; we need to handle → specially since it is allowed to be applied to polytypes
-   [[(τ:->* a b) (τ:->* c d)]
-    (τ<:! c a #:src src)
-    (τ<:! b d #:src src)]
-   ; <:App
-   [[(τ:app a b) (τ:app c d)]
-    (for ([t (in-list (list a b c d))])
-      (unless (τ-mono? t)
-        (raise-syntax-error #f (~a "illegal polymorphic type " (τ->string t)
-                                   ", impredicative polymorphism is not supported") src)))
-    (τ<:! a c #:src src)
-    (τ<:! b d #:src src)]
-   ; <:∀L
-   [[(τ:∀ x a) b]
-    (let* ([x^ (generate-temporary x)]
-           [a* (inst a x (τ:var^ x^))])
-      (modify-type-context #{snoc % (ctx:var^ x^)})
-      (τ<:! a* b #:src src))]
-   ; <:∀R
-   [[a (τ:∀ x b)]
-    (let* ([x^ (generate-temporary x)]
-           [b* (inst b x (τ:skolem x^))])
-      (modify-type-context #{snoc % (ctx:skolem x^)})
-      (τ<:! a b* #:src src)
-      (modify-type-context #{ctx-remove % (ctx:skolem x^)}))]
-   ; <:InstantiateL
-   [[(τ:var^ x^) a]
-    #:when (not (member x^ (τ-vars^ a) free-identifier=?))
-    (τ-inst-l! x^ a)]
-   ; <:InstantiateR
-   [[a (τ:var^ x^)]
-    #:when (not (member x^ (τ-vars^ a) free-identifier=?))
-    (τ-inst-r! a x^)]
-   [[a b]
-    (raise-syntax-error 'typechecker
-                        (~a "type mismatch\n"
-                            "  between: " (τ->string b) "\n"
-                            "      and: " (τ->string a))
-                        src)]))
+  (τ<:/full! a b #:src src #:elaborate? #f))
 
 (define/contract (τ-inst-l! x^ t)
   (-> identifier? τ? void?)
@@ -304,74 +384,19 @@
     [_ (error 'τ-inst-r! (format "failed to instantiate ~a to a supertype of ~a"
                                  (τ->string (τ:var^ x^)) (τ->string t)))]))
 
-;; -------------------------------------------------------------------------------------------------
-
-(define/contract (τ⇒/λ! e bindings)
-  (-> syntax? (listof (cons/c identifier? τ?)) (values (listof identifier?) syntax? τ?))
-  (define/syntax-parse [x ...] (map car bindings))
-  (define/syntax-parse [x- ...] (generate-temporaries (attribute x)))
-  (define/syntax-parse [t_x ...] (map (λ~> cdr preservable-property->expression) bindings))
-  (define-values [xs- e-]
-    (syntax-parse (local-expand #`(λ (x- ...)
-                                    (let-syntax ([x (make-typed-var-transformer #'x- t_x)] ...)
-                                      #,e))
-                                'expression '())
-      #:literals [#%plain-lambda let-values]
-      [(#%plain-lambda (x-* ...) (let-values _ (let-values _ e-)))
-       (values (attribute x-*) #'e-)]))
-  (define t_e (get-type e-))
-  (unless t_e (raise-syntax-error #f "no inferred type" e))
-  (values xs- e- t_e))
-
-(define/contract (τ⇐/λ! e t bindings)
-  (-> syntax? τ? (listof (cons/c identifier? τ?)) (values (listof identifier?) syntax?))
-  (current-τ-wf! t)
-  (match t
-    [(τ:∀ x a)
-     (modify-type-context #{snoc % (ctx:var x)})
-     (begin0
-       (τ⇐/λ! e a bindings)
-       (modify-type-context #{ctx-remove % (ctx:var x)}))]
-    [_
-     (define-values [xs- e- t_e] (τ⇒/λ! (attach-expected e t) bindings))
-     (τ<:! t_e t #:src e)
-     (values xs- e-)]))
-
-(define/contract (τ⇒! e)
-  (-> syntax? (values syntax? τ?))
-  (match-let-values ([(_ e- t_e) (τ⇒/λ! e '())])
-    (values e- t_e)))
-
-(define/contract (τ⇐! e t)
-  (-> syntax? τ? syntax?)
-  (match-let-values ([(_ e-) (τ⇐/λ! e t '())])
-    e-))
-
-(define/contract (τ⇒app! t e)
-  (-> τ? syntax? (values syntax? τ?))
-  (match t
-    [(τ:var^ x^)
-     (let ([x1^ (generate-temporary x^)]
-           [x2^ (generate-temporary x^)])
-       (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var x1^) (τ:var x2^))))})
-       (values (τ⇐! e (τ:var^ x1^)) (τ:var^ x2^)))]
-    [(τ:->* a b)
-     (values (τ⇐! e a) b)]
-    [(τ:∀ x t)
-     (let ([x^ (generate-temporary x)])
-       (modify-type-context #{snoc % (ctx:var^ x^)})
-       (τ⇒app! (inst t x (τ:var^ x^)) e))]
-    [_ (raise-syntax-error #f (format "cannot apply expression of type ~a to expression ~a"
-                                      (τ->string t) (syntax->datum e))
-                           e)]))
-
-(define/contract (τs⇒! es)
-  (-> (listof syntax?) (values (listof syntax?) (listof τ?)))
-  (for/fold ([es- '()]
-             [ts '()])
-            ([e (in-list es)])
-    (let-values ([(e- t) (τ⇒! e)])
-      (values (snoc es- e-) (snoc ts t)))))
+(define/contract (lookup-instance! constr #:src src)
+  (-> constr:class? #:src syntax? (values class:instance? (listof constr?)))
+  (match-define (constr:class class-id (app apply-current-subst t)) constr)
+  (define class (syntax-local-value class-id)) ; FIXME: handle when this isn’t a class:info
+  (apply values
+         (or (for/or ([instance (in-list (current-instances-of-class class))])
+               (let ([old-type-context (current-type-context)])
+                 (with-handlers ([exn:fail:syntax?
+                                  (λ (exn) (current-type-context old-type-context) #f)])
+                   (list instance (τ<:/elaborate! (class:instance-t instance) t #:src src)))))
+             (raise-syntax-error 'typechecker
+                                 (~a "could not deduce " (constr->string (constr:class class-id t)))
+                                 src))))
 
 ;; -------------------------------------------------------------------------------------------------
 
@@ -382,15 +407,18 @@
   #:attributes [τ]
   #:opaque
   [pattern t:expr
-           #:with t- (parameterize ([type-transforming?-param #t])
-                       (local-expand #'t 'expression '()))
-           #:attr τ (syntax-property #'t- 'τ)
+           #:attr τ (syntax-property (local-expand-type #'t) 'τ)
            #:when (τ? (attribute τ))])
 
 (define (parse-type stx)
   (syntax-parse stx
     #:context 'parse-type
     [t:type (attribute t.τ)]))
+
+(define/contract (local-expand-type stx)
+  (-> syntax? syntax?)
+  (parameterize ([type-transforming?-param #t])
+    (local-expand stx 'expression '())))
 
 (define/contract (make-type-variable-transformer t)
   (-> τ? any)
@@ -400,13 +428,13 @@
 
 (define/contract (τ-stx-token t)
   (-> τ? syntax?)
-  (syntax-property #'(void) 'τ t #t))
+  (syntax-property #'(void) 'τ t))
 (define/contract (attach-type stx t)
   (-> syntax? τ? syntax?)
-  (syntax-property stx ': t #t))
+  (syntax-property stx ': t))
 (define/contract (attach-expected stx t)
   (-> syntax? τ? syntax?)
-  (syntax-property stx ':⇐ t #t))
+  (syntax-property stx ':⇐ t))
 
 (define/contract (get-type stx)
   (-> syntax? (or/c τ? #f))
@@ -416,11 +444,6 @@
   (-> syntax? (or/c τ? #f))
   (let loop ([val (syntax-property stx ':⇐)])
     (if (pair? val) (loop (car val)) val)))
-
-(define/contract (local-expand/get-type stx)
-  (-> syntax? (values syntax? (or/c τ? #f)))
-  (let ([stx* (local-expand stx 'expression '())])
-    (values stx* (get-type stx*))))
 
 (define/contract (make-typed-var-transformer x t)
   (-> identifier? τ? any)
