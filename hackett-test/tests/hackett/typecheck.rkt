@@ -9,6 +9,7 @@
            rackunit/log
            syntax/macro-testing
            syntax/parse/define
+           (only-in hackett/private/base τ⇒!)
            (only-in hackett/private/typecheck τ->string))
 
   (provide typecheck-succeed typecheck-fail)

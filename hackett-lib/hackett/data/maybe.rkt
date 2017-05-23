@@ -1,11 +1,15 @@
 #lang hackett/private/kernel
 
 (require (only-in racket/base except-in)
+         hackett/applicative
          hackett/function
+         hackett/functor
+         hackett/monad
          (except-in hackett/private/adt data)
+         (except-in hackett/private/class class)
          hackett/private/provide)
 
-(provide (data Maybe) maybe from-maybe map/maybe join/maybe and-then/maybe)
+(provide (data Maybe) maybe from-maybe)
 
 (data (Maybe a) (just a) nothing)
 
@@ -16,13 +20,14 @@
 (def from-maybe : (∀ [a b] (-> a (-> (Maybe a) a)))
   (λ [v] (maybe v id)))
 
-(def map/maybe : (∀ [a b] (-> (-> a b) (-> (Maybe a) (Maybe b))))
-  (λ [f m] (case m [(just x) (just (f x))]
-                   [nothing nothing])))
+(instance (Functor Maybe)
+  [map (λ [f m] (case m [(just x) (just (f x))]
+                        [nothing nothing]))])
 
-(def join/maybe : (∀ [a] (-> (Maybe (Maybe a)) (Maybe a)))
-  (λ [x] (case x [(just (just x)) (just x)]
-                 [_ nothing])))
+(instance (Applicative Maybe)
+  [pure just]
+  [apply (λ [f] (ap f))])
 
-(def and-then/maybe : (∀ [a b] (-> (Maybe a) (-> (-> a (Maybe b)) (Maybe b))))
-  (λ [m f] (join/maybe (map/maybe f m))))
+(instance (Monad Maybe)
+  [join (λ [x] (case x [(just (just x)) (just x)]
+                       [_ nothing]))])

@@ -39,7 +39,7 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
-(provide IO pure/io map/io join/io and-then/io do/io main
+(provide IO main
          (typed-out
           [+ : (-> Integer (-> Integer Integer))]
           [- : (-> Integer (-> Integer Integer))]
@@ -51,6 +51,7 @@
           [> : (-> Integer (-> Integer Bool))]
           [<= : (-> Integer (-> Integer Bool))]
           [>= : (-> Integer (-> Integer Bool))]
+          [append/String : (-> String (-> String String))]
           [print : (-> String (IO Unit))]))
 
 (define (boolean->Bool x)
@@ -73,11 +74,16 @@
 (define ((>= a) b) (boolean->Bool (>=- a b)))
 
 ;; ---------------------------------------------------------------------------------------------------
+;; String
+
+(define ((append/String x) y) (string-append- x y))
+
+;; ---------------------------------------------------------------------------------------------------
 
 (define-syntax-parser main
   [(_ e:expr)
    #'(module+ main
-       (void- (@%app unsafe-run-io! e)))])
+       (void- (with-dictionary-elaboration (@%app unsafe-run-io! e))))])
 
 (define (print str)
   (io (λ- (rw)

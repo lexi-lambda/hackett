@@ -2,10 +2,12 @@
 
 (require hackett/prelude
          (only-in hackett/private/adt case)
+         (only-in hackett/private/class instance)
          hackett/private/kernel
          hackett/private/provide)
 (provide (all-from-out hackett/prelude)
          (all-from-out hackett/private/adt)
+         (all-from-out hackett/private/class)
          (all-from-out hackett/private/kernel)
          (all-from-out hackett/private/provide))
 
