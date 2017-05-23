@@ -7,23 +7,26 @@ Here are some of the features that Hackett supports **right now**:
   - Bidirectional type inference
   - Algebraic datatypes (ADTs)
   - Pattern matching
+  - Typeclasses
+  - Higher-kinded types
   - Higher-rank polymorphism
   - Type-aware/type-directed macros
 
 Here are some of the features that still need to be implemented for a minimal release:
 
-  - Higher-kinded types
-  - Typeclasses
-  - Kindchecking
+  - Syntax for infix operators
+  - Superclasses
+  - Default class methods
   - Exhaustiveness checking
-  - Type inference for recursive definitions
+  - Scoped type variables
+  - Kindchecking
   - Type expanders (of which type aliases are a subset)
 
 And finally, here is a (non-exhaustive) collection of features I would like to eventually support:
 
   - Multi-parameter typeclasses
   - Functional dependencies
-  - Syntax for infix operators
+  - Laziness
   - GADTs
   - Row types
   - Type families
