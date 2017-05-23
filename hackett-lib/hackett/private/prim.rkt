@@ -39,7 +39,7 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
-(provide IO pure/io map/io join/io and-then/io do/io main
+(provide IO main
          (typed-out
           [+ : (-> Integer (-> Integer Integer))]
           [- : (-> Integer (-> Integer Integer))]
@@ -83,7 +83,7 @@
 (define-syntax-parser main
   [(_ e:expr)
    #'(module+ main
-       (void- (@%app unsafe-run-io! e)))])
+       (void- (with-dictionary-elaboration (@%app unsafe-run-io! e))))])
 
 (define (print str)
   (io (λ- (rw)

@@ -24,7 +24,7 @@
          @%datum @%app @%top-interaction
          define-primop define-base-type
          -> ∀ => Integer String
-         : :/top-level λ1 def)
+         : :/top-level with-dictionary-elaboration λ1 def)
 
 (define-simple-macro (define-base-type name:id)
   (define-syntax name (make-type-variable-transformer (τ:con #'name #f))))
@@ -208,6 +208,13 @@
   [(_ e t-expr:type)
    #:with e- (local-expand #'(: e t-expr) 'expression '())
    (elaborate-dictionaries #'e-)])
+
+(define-syntax-parser with-dictionary-elaboration
+  [(_ e:expr)
+   (~> #'e
+       (local-expand 'expression '())
+       elaborate-dictionaries
+       (local-expand 'expression '()))])
 
 (define-syntax-parser λ1
   [(_ x:id e:expr)

@@ -14,7 +14,8 @@
          (except-in hackett/private/base ∀ =>)
          (only-in hackett/private/kernel ∀ =>))
 
-(provide class instance)
+(provide (for-syntax class-id)
+         class instance)
 
 (begin-for-syntax
   (define-syntax-class/specialize class-id
@@ -132,6 +133,7 @@
          (make-immutable-free-id-table-
           (list- (cons- #'method-id impl-fn-spec-) ...))))])
 
+(require (for-syntax racket/pretty))
 (define-syntax-parser :/class-method
   [(_ e-expr:expr t-expr:expr
       #:constraints [constraint-expr:expr ...]
@@ -150,5 +152,6 @@
                (make-variable-like-transformer
                 (parameterize ([local-class-instances
                                 (append subgoal-instances (local-class-instances))])
-                  (local-expand (elaborate-dictionaries (τ⇐! e t)) 'expression '())))))])
+                  (local-expand (elaborate-dictionaries (local-expand (τ⇐! e t) 'expression '()))
+                                'expression '())))))])
        result)])
