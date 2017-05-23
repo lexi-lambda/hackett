@@ -384,6 +384,37 @@
     [_ (error 'τ-inst-r! (format "failed to instantiate ~a to a supertype of ~a"
                                  (τ->string (τ:var^ x^)) (τ->string t)))]))
 
+;; ---------------------------------------------------------------------------------------------------
+
+; Attempts to unify a type with an instance head with a type for the purposes of picking a typeclass.
+; If the match succeeds, it returns a list of constraints, which are the subgoals for the instance,
+; if any.
+(define/contract (unify-instance-head t head)
+  (-> τ? τ? (or/c (listof constr?) #f))
+  (match* [(apply-current-subst t) (apply-current-subst head)]
+    [[(τ:skolem x^) (τ:skolem y^)]
+     #:when (free-identifier=? x^ y^)
+     '()]
+    [[(? τ-mono? t) (τ:var^ x^)]
+     (modify-type-context #{snoc % (ctx:solution x^ t)})
+     '()]
+    [[(? τ:con? a) (? τ:con? b)]
+     #:when (τ=? a b)
+     '()]
+    [[(τ:app a b) (τ:app c d)]
+     (let ([x (unify-instance-head a c)])
+       (and x (let ([y (unify-instance-head b d)])
+                (and y (append x y)))))]
+    [[a (τ:∀ x b)]
+     (let ([x^ (generate-temporary x)])
+       (modify-type-context #{snoc % (ctx:var^ x^)})
+       (unify-instance-head a (inst b x (τ:var^ x^))))]
+    [[a (τ:qual constr b)]
+     (and~>> (unify-instance-head a b)
+             (cons constr))]
+    [[_ _]
+     #f]))
+
 (define/contract (lookup-instance! constr #:src src)
   (-> constr:class? #:src syntax? (values class:instance? (listof constr?)))
   (match-define (constr:class class-id (app apply-current-subst t)) constr)
@@ -391,14 +422,14 @@
   (apply values
          (or (for/or ([instance (in-list (current-instances-of-class class))])
                (let ([old-type-context (current-type-context)])
-                 (with-handlers ([exn:fail:syntax?
-                                  (λ (exn) (current-type-context old-type-context) #f)])
-                   (list instance (τ<:/elaborate! (class:instance-t instance) t #:src src)))))
+                 (let ([constrs (unify-instance-head t (class:instance-t instance))])
+                   (if constrs (list instance constrs)
+                       (begin (current-type-context old-type-context) #f)))))
              (raise-syntax-error 'typechecker
                                  (~a "could not deduce " (constr->string (constr:class class-id t)))
                                  src))))
 
-;; -------------------------------------------------------------------------------------------------
+;; ---------------------------------------------------------------------------------------------------
 
 (define type-transforming?-param (make-parameter #f))
 (define (type-transforming?) (type-transforming?-param))
