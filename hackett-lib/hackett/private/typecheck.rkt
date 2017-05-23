@@ -329,8 +329,8 @@
     [[a b]
      (raise-syntax-error 'typechecker
                          (~a "type mismatch\n"
-                             "  between: " (τ->string b) "\n"
-                             "      and: " (τ->string a))
+                             "  between: " (τ->string a) "\n"
+                             "      and: " (τ->string b))
                          src)]))
 
 (define/contract (τ<:/elaborate! a b #:src src)

@@ -55,6 +55,9 @@
 (define (@%dictionary-placeholder . args)
   (error '@%dictionary-placeholder "should never appear at runtime"))
 
+(define (@%with-dictionary . args)
+  (error '@%with-dictionary "should never appear at runtime"))
+
 (begin-for-syntax
   (define/contract (τ⇒/λ! e bindings)
     (-> syntax? (listof (cons/c identifier? τ?)) (values (listof identifier?) syntax? τ?))
@@ -78,10 +81,15 @@
     (current-τ-wf! t)
     (match t
       [(τ:∀ x a)
-       (modify-type-context #{snoc % (ctx:var x)})
-       (begin0
-         (τ⇐/λ! e a bindings)
-         (modify-type-context #{ctx-remove % (ctx:var x)}))]
+       (let ([x^ (generate-temporary x)])
+         (modify-type-context #{snoc % (ctx:skolem x^)})
+         (begin0
+           (τ⇐/λ! e (inst a x (τ:skolem x^)) bindings)
+           (modify-type-context #{ctx-remove % (ctx:skolem x^)})))]
+      [(τ:qual constr a)
+       (let*-values ([(xs- e-) (τ⇐/λ! e a bindings)])
+         (values xs- (quasisyntax/loc e-
+                       (@%with-dictionary #,(preservable-property->expression constr) #,e-))))]
       [_
        (define-values [xs- e- t_e] (τ⇒/λ! (attach-expected e t) bindings))
        (define constrs (τ<:/elaborate! t_e t #:src e))
@@ -141,7 +149,7 @@
     (-> syntax? syntax?)
     (syntax-parse stx
       #:context 'elaborate-dictionaries
-      #:literals [#%plain-app @%dictionary-placeholder]
+      #:literals [#%plain-app @%dictionary-placeholder @%with-dictionary]
       [(#%plain-app @%dictionary-placeholder constr-expr)
        #:with this #`(quote-syntax #,this-syntax)
        #'(let-syntax-
@@ -150,9 +158,9 @@
                           [(instance constrs) (lookup-instance! constr #:src this)]
                           [(dict-id) (class:instance-dict-id instance)])
               ; It’s possible that the dictionary itself requires dictionaries for classes with
-              ; subgoals, like (instance ∀ [a] (Show a) => (Show (List a)) ...). If there are not any
-              ; constraints, we should just produce a bare identifier. Otherwise, we should produce
-              ; an application to sub-dictionaries, which need to be recursively elaborated.
+              ; subgoals, like (instance ∀ [a] [(Show a)] => (Show (List a)) ...). If there are not
+              ; any constraints, we should just produce a bare identifier. Otherwise, we should
+              ; produce an application to sub-dictionaries, which need to be recursively elaborated.
               (if (empty? constrs)
                   (make-rename-transformer dict-id)
                   (make-variable-like-transformer
@@ -163,6 +171,20 @@
                                                        #,(preservable-property->expression constr)))))
                                   'expression '())))))])
            dict-expr)]
+      [(#%plain-app @%with-dictionary constr-expr e)
+       #:with this #`(quote-syntax #,this-syntax)
+       #:with dict-id (generate-temporary #'constr-expr)
+       #'(λ- (dict-id)
+           (let-syntax-
+            ([abs-expr
+              (match-let* ([(constr:class class-id t) constr-expr]
+                           [class-info (syntax-local-value class-id)]
+                           [instance (class:instance class-info (apply-current-subst t) #'dict-id)])
+                (make-variable-like-transformer
+                 (parameterize ([local-class-instances (cons instance (local-class-instances))])
+                   (let ([elaborated (elaborate-dictionaries (quote-syntax e))])
+                     (local-expand elaborated 'expression '())))))])
+            abs-expr))]
       [(a . b)
        (datum->syntax this-syntax
                       (cons (elaborate-dictionaries #'a) (elaborate-dictionaries #'b))
