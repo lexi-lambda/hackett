@@ -5,5 +5,5 @@
 (provide (class Applicative))
 
 (class (Applicative f)
-  [pure : (∀ [a] (-> a (f a)))]
-  [apply : (∀ [a b] (-> (f (-> a b)) (-> (f a) (f b))))])
+  [pure : (∀ [a] {a -> (f a)})]
+  [<*> : (∀ [a b] {(f {a -> b}) -> (f a) -> (f b)})])

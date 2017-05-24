@@ -8,11 +8,11 @@
 
 (data (Tuple a b) (tuple a b))
 
-(def tuple-cata : (∀ [a b c] (-> (-> a (-> b c)) (-> (Tuple a b) c)))
+(def tuple-cata : (∀ [a b c] {{a -> b -> c} -> (Tuple a b) -> c})
   (λ [f t] (case t [(tuple x y) (f x y)])))
 
-(def fst : (∀ [a b] (-> (Tuple a b) a))
+(def fst : (∀ [a b] {(Tuple a b) -> a})
   (λ [t] (case t [(tuple x _) x])))
 
-(def snd : (∀ [a b] (-> (Tuple a b) b))
+(def snd : (∀ [a b] {(Tuple a b) -> b})
   (λ [t] (case t [(tuple _ x) x])))

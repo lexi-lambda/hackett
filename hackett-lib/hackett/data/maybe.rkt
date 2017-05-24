@@ -1,7 +1,6 @@
 #lang hackett/private/kernel
 
-(require (only-in racket/base except-in)
-         hackett/applicative
+(require hackett/applicative
          hackett/function
          hackett/functor
          hackett/monad
@@ -13,11 +12,11 @@
 
 (data (Maybe a) (just a) nothing)
 
-(def maybe : (∀ [a b] (-> b (-> (-> a b) (-> (Maybe a) b))))
+(def maybe : (∀ [a b] {b -> {a -> b} -> (Maybe a) -> b})
   (λ [v f m] (case m [(just x) (f x)]
                      [nothing v])))
 
-(def from-maybe : (∀ [a b] (-> a (-> (Maybe a) a)))
+(def from-maybe : (∀ [a b] {a -> (Maybe a) -> a})
   (λ [v] (maybe v id)))
 
 (instance (Functor Maybe)
@@ -26,7 +25,7 @@
 
 (instance (Applicative Maybe)
   [pure just]
-  [apply (λ [f] (ap f))])
+  [<*> (λ [f] (ap f))])
 
 (instance (Monad Maybe)
   [join (λ [x] (case x [(just (just x)) (just x)]

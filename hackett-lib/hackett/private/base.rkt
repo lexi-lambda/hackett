@@ -11,7 +11,8 @@
          (multi-in racket [match splicing])
          syntax/parse/define
 
-         (for-syntax hackett/private/typecheck
+         (for-syntax hackett/private/infix
+                     hackett/private/typecheck
                      hackett/private/util/list
                      hackett/private/util/stx))
 
@@ -37,7 +38,9 @@
    #:with t (preservable-property->expression (attribute t-expr.τ))
    #'(define-syntax op (make-typed-var-transformer #'op- t))])
 
-(define-syntax -> (make-type-variable-transformer τ:->))
+(define-syntax ->/prefix (make-type-variable-transformer τ:->))
+(define-syntax -> (infix-operator-impl #'->/prefix 'right))
+
 (define-syntax-parser ∀
   #:literals [let-values]
   [(_ x:id t)
@@ -250,24 +253,46 @@
 
 (define-syntax-parser def
   #:literals [:]
-  [(_ id:id : t:type e:expr)
+  [(_ id:id
+      {~or {~once {~seq : t:type}}
+           {~optional {~seq #:fixity {~and fixity {~or {~datum left}
+                                                       {~datum right}}}}}}
+      ...
+      e:expr)
    #:with id- (generate-temporary #'id)
+   #:with id/prefix (generate-temporary #'id)
    #:with t-expr (preservable-property->expression (attribute t.τ))
-   #'(begin-
+   #`(begin-
        (define- id- (:/top-level e t))
-       (define-syntax- id
-         (make-typed-var-transformer #'id- t-expr)))]
-  [(_ id:id e:expr)
+       #,(if (attribute fixity)
+             #'(begin
+                 (define-syntax- id/prefix
+                   (make-typed-var-transformer #'id- t-expr))
+                 (define-syntax- id
+                   (infix-operator-impl #'id/prefix 'fixity)))
+             #'(define-syntax- id
+                 (make-typed-var-transformer #'id- t-expr))))]
+  [(_ id:id
+      {~optional {~seq #:fixity {~and fixity {~or {~datum left}
+                                                  {~datum right}}}}}
+      e:expr)
    #:do [(define-values [e-stx- t]
            (let-values ([(e-stx- t) (τ⇒! #'e)])
              (values e-stx- (apply-current-subst t))))]
    #:with id- (generate-temporary #'id)
+   #:with id/prefix (generate-temporary #'id)
    #:with e- (elaborate-dictionaries e-stx-)
    #:with t-expr (preservable-property->expression (generalize t))
    #'(begin-
        (define- id- e-)
-       (define-syntax- id
-         (make-typed-var-transformer #'id- t-expr)))])
+       #,(if (attribute fixity)
+             #'(begin
+                 (define-syntax- id/prefix
+                   (make-typed-var-transformer #'id- t-expr))
+                 (define-syntax- id
+                   (infix-operator-impl #'id/prefix 'fixity)))
+             #'(define-syntax- id
+                 (make-typed-var-transformer #'id- t-expr))))])
 
 (define-syntax-parser :infer/print-type
   [(_ e)

@@ -10,7 +10,8 @@
                                    syntax/id-table))
          syntax/parse/define
 
-         (for-syntax hackett/private/util/stx)
+         (for-syntax hackett/private/infix
+                     hackett/private/util/stx)
          (except-in hackett/private/base ∀ =>)
          (only-in hackett/private/kernel ∀ =>))
 
@@ -23,7 +24,13 @@
 
 (define-syntax-parser class
   #:literals [: let-values]
-  [(_ (name:id var-id:id) [method-id:id : bare-t] ...)
+  [(_ (name:id var-id:id)
+      [method-id:id
+       {~or {~once {~seq : bare-t}}
+            {~optional {~seq #:fixity {~and fixity {~or {~datum left}
+                                                        {~datum right}}}}}}
+       ...]
+      ...)
    ; The methods in a class’s method table should *not* be quantified. That is, in this class:
    ;
    ;    (class (Show a)
@@ -39,6 +46,7 @@
                                                      (τ-stx-token var-id-expr))])
                                  bare-t ... (void)))
    #:with [method-id- ...] (generate-temporaries #'[method-id ...])
+   #:with [method-id/prefix ...] (generate-temporaries #'[method-id ...])
    #:with [method-t-expr ...] (map preservable-property->expression (attribute method-t.τ))
 
    ; Now that we’ve manually expanded the types above for the purpose of inclusion in the class’s
@@ -47,9 +55,21 @@
    #:with [quantified-t:type ...] #'[(∀ [var-id] (=> [(name var-id)] bare-t)) ...]
    #:with [quantified-t-expr ...] (map preservable-property->expression (attribute quantified-t.τ))
 
-   #'(begin-
+   #`(begin-
        (define- (method-id- dict) (free-id-table-ref- dict #'method-id)) ...
-       (define-syntax- method-id (make-typed-var-transformer #'method-id- quantified-t-expr)) ...
+       #,@(for/list ([method-id (in-list (attribute method-id))]
+                     [method-id- (in-list (attribute method-id-))]
+                     [method-id/prefix (in-list (attribute method-id/prefix))]
+                     [fixity (in-list (attribute fixity))]
+                     [quantified-t-expr (in-list (attribute quantified-t-expr))])
+            (if fixity
+                #`(begin
+                    (define-syntax- #,method-id/prefix
+                      (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))
+                    (define-syntax- #,method-id
+                      (infix-operator-impl #'#,method-id/prefix '#,fixity)))
+                #`(define-syntax- #,method-id
+                    (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))))
        (define-syntax- name
          (class:info #'var-id- (make-immutable-free-id-table
                                 (list (cons #'method-id method-t-expr) ...)))))])

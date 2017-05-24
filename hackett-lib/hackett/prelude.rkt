@@ -24,32 +24,33 @@
          (all-from-out hackett/monad)
          (all-from-out hackett/private/prim)
 
-         (data List) sequence traverse)
+         (data List) sequence traverse
+         (rename-out [:: cons]))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; List
 
-(data (List a) (cons a (List a)) nil)
+(data (List a) (:: a (List a)) nil)
 
 (instance (Functor List)
-  [map (λ [f x] (case x [(cons y ys) (cons (f y) (map f ys))]
+  [map (λ [f x] (case x [(:: y ys) {(f y) :: (map f ys)}]
                         [nil nil]))])
 
 (instance (Applicative List)
-  [pure (λ [x] (cons x nil))]
-  [apply (λ [f] (ap f))])
+  [pure (λ [x] {x :: nil})]
+  [<*> (λ [f] (ap f))])
 
 (instance (Monad List)
   [join (λ [xss] (case xss
                    [nil nil]
-                   [(cons ys yss) (case ys
-                                    [nil (join yss)]
-                                    [(cons z zs) (cons z (join (cons zs yss)))])]))])
+                   [(:: ys yss) (case ys
+                                  [nil (join yss)]
+                                  [(:: z zs) {z :: (join {zs :: yss})}])]))])
 
-(def sequence : (∀ [f a] (=> [(Functor f) (Applicative f)] (-> (List (f a)) (f (List a)))))
+(def sequence : (∀ [f a] (=> [(Functor f) (Applicative f)] {(List (f a)) -> (f (List a))}))
   (λ [xs] (case xs [nil (pure nil)]
-                   [(cons y ys) (apply (map cons y) (sequence ys))])))
+                   [(:: y ys) {:: <$> y <*> (sequence ys)}])))
 
 (def traverse : (∀ [f a b] (=> [(Functor f) (Applicative f)]
-                               (-> (-> a (f b)) (-> (List a) (f (List b))))))
+                               {{a -> (f b)} -> (List a) -> (f (List b))}))
   (λ [f xs] (sequence (map f xs))))

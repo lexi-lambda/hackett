@@ -41,18 +41,18 @@
 
 (provide IO main
          (typed-out
-          [+ : (-> Integer (-> Integer Integer))]
-          [- : (-> Integer (-> Integer Integer))]
-          [* : (-> Integer (-> Integer Integer))]
-          [quotient! : (-> Integer (-> Integer Integer))]
-          [remainder! : (-> Integer (-> Integer Integer))]
-          [equal?/Integer : (-> Integer (-> Integer Bool))]
-          [< : (-> Integer (-> Integer Bool))]
-          [> : (-> Integer (-> Integer Bool))]
-          [<= : (-> Integer (-> Integer Bool))]
-          [>= : (-> Integer (-> Integer Bool))]
-          [append/String : (-> String (-> String String))]
-          [print : (-> String (IO Unit))]))
+          [+ : {Integer -> Integer -> Integer}]
+          [- : {Integer -> Integer -> Integer}]
+          [* : {Integer -> Integer -> Integer}]
+          [quotient! : {Integer -> Integer -> Integer}]
+          [remainder! : {Integer -> Integer -> Integer}]
+          [equal?/Integer : {Integer -> Integer -> Bool}]
+          [< : {Integer -> Integer -> Bool}]
+          [> : {Integer -> Integer -> Bool}]
+          [<= : {Integer -> Integer -> Bool}]
+          [>= : {Integer -> Integer -> Bool}]
+          [append/String : {String -> String -> String}]
+          [print : {String -> (IO Unit)}]))
 
 (define (boolean->Bool x)
   (if x true false))

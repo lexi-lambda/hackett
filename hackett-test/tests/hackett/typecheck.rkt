@@ -89,10 +89,10 @@
 (typecheck-succeed (tuple-cata + (tuple 1 1)))
 (typecheck-succeed (: (tuple-cata + (tuple 1 1)) Integer))
 
-(typecheck-succeed (: (λ [x] x) (∀ [a] (-> a a))))
-(typecheck-fail (: (λ [x] 1) (∀ [a] (-> a a))))
-(typecheck-succeed (: (λ [x y] x) (∀ [a b] (-> a (-> b a)))))
-(typecheck-fail (: (λ [x y] y) (∀ [a b] (-> a (-> b a)))))
+(typecheck-succeed (: (λ [x] x) (∀ [a] {a -> a})))
+(typecheck-fail (: (λ [x] 1) (∀ [a] {a -> a})))
+(typecheck-succeed (: (λ [x y] x) (∀ [a b] {a -> b -> a})))
+(typecheck-fail (: (λ [x y] y) (∀ [a b] {a -> b -> a})))
 
 (typecheck-succeed true)
 (typecheck-succeed (: true Bool))
@@ -102,8 +102,8 @@
 (typecheck-fail (: false Unit))
 
 (typecheck-succeed just)
-(typecheck-succeed (: just (∀ [a] (-> a (Maybe a)))))
-(typecheck-succeed (: just (-> Unit (Maybe Unit))))
+(typecheck-succeed (: just (∀ [a] {a -> (Maybe a)})))
+(typecheck-succeed (: just {Unit -> (Maybe Unit)}))
 (typecheck-succeed (just unit))
 (typecheck-succeed (: (just unit) (Maybe Unit)))
 (typecheck-succeed nothing)
@@ -155,15 +155,15 @@
 
 (typecheck-succeed (λ [m] (case m [nothing nothing])))
 (typecheck-succeed (: (λ [m] (case m [nothing nothing]))
-                      (∀ [a b] (-> (Maybe a) (Maybe b)))))
+                      (∀ [a b] {(Maybe a) -> (Maybe b)})))
 (typecheck-succeed (λ [f m] (case m
                               [(just x) (just (f x))]
                               [nothing nothing])))
 (typecheck-succeed (: (λ [f m] (case m
                                  [(just x) (just (f x))]
                                  [nothing nothing]))
-                      (∀ [a b] (-> (-> a b) (-> (Maybe a) (Maybe b))))))
+                      (∀ [a b] {{a -> b} -> (Maybe a) -> (Maybe b)})))
 
 (typecheck-succeed (compose just (+ 1)))
-(typecheck-succeed (: (compose just (+ 1)) (-> Integer (Maybe Integer))))
+(typecheck-succeed (: (compose just (+ 1)) {Integer -> (Maybe Integer)}))
 (typecheck-fail (compose just 1))
