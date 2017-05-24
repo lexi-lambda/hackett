@@ -27,13 +27,18 @@
          (all-from-out hackett/monoid)
          (all-from-out hackett/semigroup)
 
-         IO main print
+         IO main print error! undefined!
          + - * quotient! remainder! < > <= >=
 
          (class Show)
          (class Eq)
 
          (data List) sequence traverse)
+
+;; ---------------------------------------------------------------------------------------------------
+
+(def undefined! : (∀ [a] a)
+  (error! "undefined!"))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Show

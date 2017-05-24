@@ -55,7 +55,8 @@
           [>= : {Integer -> Integer -> Bool}]
           [equal?/String : {String -> String -> Bool}]
           [append/String : {String -> String -> String}]
-          [print : {String -> (IO Unit)}]))
+          [print : {String -> (IO Unit)}]
+          [error! : (∀ a {String -> a})]))
 
 (define (boolean->Bool x)
   (if- x true false))
@@ -94,3 +95,5 @@
   (io (λ- (rw)
         (display- (force- str))
         ((tuple rw) unit))))
+
+(define (error! str) (error- (force- str)))
