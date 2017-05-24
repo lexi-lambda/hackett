@@ -47,12 +47,13 @@
           [* : {Integer -> Integer -> Integer}]
           [quotient! : {Integer -> Integer -> Integer}]
           [remainder! : {Integer -> Integer -> Integer}]
+          [show/Integer : {Integer -> String}]
           [equal?/Integer : {Integer -> Integer -> Bool}]
           [< : {Integer -> Integer -> Bool}]
           [> : {Integer -> Integer -> Bool}]
           [<= : {Integer -> Integer -> Bool}]
           [>= : {Integer -> Integer -> Bool}]
-          [show/Integer : {Integer -> String}]
+          [equal?/String : {String -> String -> Bool}]
           [append/String : {String -> String -> String}]
           [print : {String -> (IO Unit)}]))
 
@@ -79,6 +80,7 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; String
 
+(define ((equal?/String x) y) (string=?- (force- x) (force- y)))
 (define ((append/String x) y) (string-append- (force- x) (force- y)))
 
 ;; ---------------------------------------------------------------------------------------------------
