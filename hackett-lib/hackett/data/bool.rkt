@@ -4,7 +4,7 @@
          (except-in hackett/private/adt data)
          hackett/private/provide)
 
-(provide (data Bool) not or and bool)
+(provide (data Bool) not or and if bool)
 
 (data Bool true false)
 
@@ -20,6 +20,9 @@
   (λ [x y] (case x [true y]
                    [false false])))
 
-(def bool : (∀ [a] {a -> a -> Bool -> a})
-  (λ [x y b] (case b [true x]
+(def if : (∀ [a] {Bool -> a -> a -> a})
+  (λ [b x y] (case b [true x]
                      [false y])))
+
+(def bool : (∀ [a] {a -> a -> Bool -> a})
+  (λ [x y b] (if b x y)))

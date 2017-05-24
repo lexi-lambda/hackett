@@ -11,6 +11,7 @@ Here are some of the features that Hackett supports **right now**:
   - Higher-kinded types
   - Higher-rank polymorphism
   - Type-aware/type-directed macros
+  - Laziness
 
 Here are some of the features that still need to be implemented for a minimal release:
 
@@ -26,7 +27,6 @@ And finally, here is a (non-exhaustive) collection of features I would like to e
 
   - Multi-parameter typeclasses
   - Functional dependencies
-  - Laziness
   - GADTs
   - Row types
   - Type families
@@ -48,7 +48,7 @@ Here’s what some Hackett code *might* eventually look like:
     {y + z}))
 
 (class (Show a)
-  [show : {Int -> a -> String}])
+  [show : {a -> String}])
 
 (instance (forall [a] (Show a) => (Show (Maybe a)))
   (def+ show

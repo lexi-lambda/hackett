@@ -25,7 +25,7 @@
 
 (instance (Applicative Maybe)
   [pure just]
-  [<*> (λ [f] (ap f))])
+  [<*> ap])
 
 (instance (Monad Maybe)
   [join (λ [x] (case x [(just (just x)) (just x)]

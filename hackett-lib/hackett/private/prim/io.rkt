@@ -29,7 +29,7 @@
 
 (instance (Applicative IO)
   [pure (λ [x] (io (λ [rw] (tuple rw x))))]
-  [<*> (λ [f] (ap f))])
+  [<*> ap])
 
 (instance (Monad IO)
   [join (λ [m-outer]

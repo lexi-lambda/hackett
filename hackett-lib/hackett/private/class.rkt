@@ -153,7 +153,6 @@
          (make-immutable-free-id-table-
           (list- (cons- #'method-id impl-fn-spec-) ...))))])
 
-(require (for-syntax racket/pretty))
 (define-syntax-parser :/class-method
   [(_ e-expr:expr t-expr:expr
       #:constraints [constraint-expr:expr ...]

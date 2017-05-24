@@ -4,7 +4,8 @@
          hackett/private/util/require
 
          (for-syntax (multi-in racket [base provide-transform]))
-         (postfix-in - racket/base)
+         (postfix-in - (combine-in racket/base
+                                   racket/promise))
          syntax/parse/define
 
          (for-syntax hackett/private/util/stx)
@@ -51,41 +52,43 @@
           [> : {Integer -> Integer -> Bool}]
           [<= : {Integer -> Integer -> Bool}]
           [>= : {Integer -> Integer -> Bool}]
+          [show/Integer : {Integer -> String}]
           [append/String : {String -> String -> String}]
           [print : {String -> (IO Unit)}]))
 
 (define (boolean->Bool x)
-  (if x true false))
+  (if- x true false))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Integer
 
-(define ((+ x) y) (+- x y))
-(define ((- x) y) (-- x y))
-(define ((* x) y) (*- x y))
+(define ((+ x) y) (+- (force- x) (force- y)))
+(define ((- x) y) (-- (force- x) (force- y)))
+(define ((* x) y) (*- (force- x) (force- y)))
 
-(define ((quotient! x) y) (quotient- x y))
-(define ((remainder! x) y) (remainder- x y))
+(define ((quotient! x) y) (quotient- (force- x) (force- y)))
+(define ((remainder! x) y) (remainder- (force- x) (force- y)))
 
-(define ((equal?/Integer a) b) (boolean->Bool (=- a b)))
-(define ((< a) b) (boolean->Bool (<- a b)))
-(define ((> a) b) (boolean->Bool (>- a b)))
-(define ((<= a) b) (boolean->Bool (<=- a b)))
-(define ((>= a) b) (boolean->Bool (>=- a b)))
+(define (show/Integer a) (format- "~a" (force- a)))
+(define ((equal?/Integer a) b) (boolean->Bool (=- (force- a) (force- b))))
+(define ((< a) b) (boolean->Bool (<- (force- a) (force- b))))
+(define ((> a) b) (boolean->Bool (>- (force- a) (force- b))))
+(define ((<= a) b) (boolean->Bool (<=- (force- a) (force- b))))
+(define ((>= a) b) (boolean->Bool (>=- (force- a) (force- b))))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; String
 
-(define ((append/String x) y) (string-append- x y))
+(define ((append/String x) y) (string-append- (force- x) (force- y)))
 
 ;; ---------------------------------------------------------------------------------------------------
 
 (define-syntax-parser main
   [(_ e:expr)
    #'(module+ main
-       (void- (with-dictionary-elaboration (@%app unsafe-run-io! e))))])
+       (void- (with-dictionary-elaboration (force- (@%app unsafe-run-io! e)))))])
 
 (define (print str)
   (io (λ- (rw)
-        (display- str)
+        (display- (force- str))
         ((tuple rw) unit))))

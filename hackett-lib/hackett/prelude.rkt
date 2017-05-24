@@ -38,7 +38,7 @@
 
 (instance (Applicative List)
   [pure (λ [x] {x :: nil})]
-  [<*> (λ [f] (ap f))])
+  [<*> ap])
 
 (instance (Monad List)
   [join (λ [xss] (case xss

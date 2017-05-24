@@ -7,6 +7,7 @@
                      syntax/parse
                      threading)
          (postfix-in - (combine-in racket/base
+                                   racket/promise
                                    syntax/id-table))
          (multi-in racket [match splicing])
          syntax/parse/define
@@ -97,9 +98,10 @@
        (define-values [xs- e- t_e] (τ⇒/λ! (attach-expected e t) bindings))
        (define constrs (τ<:/elaborate! t_e t #:src e))
        (values xs- (foldr #{begin (quasisyntax/loc e
-                                    (#,%2 #,(quasisyntax/loc e
-                                              (@%dictionary-placeholder
-                                               #,(preservable-property->expression %1)))))}
+                                    (lazy- (#%app- (force- #,%2)
+                                                   #,(quasisyntax/loc e
+                                                       (@%dictionary-placeholder
+                                                        #,(preservable-property->expression %1))))))}
                           e- constrs))]))
 
   (define/contract (τ⇒! e)
@@ -120,11 +122,11 @@
              [x2^ (generate-temporary x^)])
          (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var x1^) (τ:var x2^))))})
          (values (quasisyntax/loc src
-                   (#%app- #,e_fn #,(τ⇐! e_arg (τ:var^ x1^))))
+                   (lazy- (#%app- (force- #,e_fn) #,(τ⇐! e_arg (τ:var^ x1^)))))
                  (τ:var^ x2^)))]
       [(τ:->* a b)
        (values (quasisyntax/loc src
-                 (#%app- #,e_fn #,(τ⇐! e_arg a)))
+                 (lazy- (#%app- (force- #,e_fn) #,(τ⇐! e_arg a))))
                b)]
       [(τ:∀ x t)
        (let ([x^ (generate-temporary x)])
@@ -132,9 +134,10 @@
          (τ⇒app! e_fn (inst t x (τ:var^ x^)) e_arg #:src src))]
       [(τ:qual constr t)
        (τ⇒app! (quasisyntax/loc src
-                 (#%app- #,e_fn #,(quasisyntax/loc src
+                 (lazy- (#%app- (force- #,e_fn)
+                                #,(quasisyntax/loc src
                                     (@%dictionary-placeholder
-                                     #,(preservable-property->expression constr)))))
+                                     #,(preservable-property->expression constr))))))
                t e_arg #:src src)]
       [_ (raise-syntax-error #f (format "cannot apply expression of type ~a to expression ~a"
                                         (τ->string t_fn) (syntax->datum e_arg))

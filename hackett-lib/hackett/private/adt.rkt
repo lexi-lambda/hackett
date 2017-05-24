@@ -8,7 +8,7 @@
                      hackett/private/util/list
                      hackett/private/util/stx)
 
-         (postfix-in - (multi-in racket [base match splicing]))
+         (postfix-in - (multi-in racket [base match promise splicing]))
          syntax/parse/define
 
          (except-in hackett/private/base @%app)
@@ -275,4 +275,4 @@
          (define t_result (apply-current-subst (τ:var^ result^)))]
    #:with [match-pat- ...] match-pats-
    #:with [body- ...] bodies-
-   (attach-type #'(match- val- [match-pat- body-] ...) t_result)])
+   (attach-type #'(match- (force- val-) [match-pat- body-] ...) t_result)])
