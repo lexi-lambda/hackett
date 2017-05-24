@@ -5,6 +5,7 @@
 (require (for-syntax (multi-in racket [base contract format list match syntax])
                      (multi-in syntax/parse [class/local-value experimental/specialize])
 
+                     hackett/private/infix
                      hackett/private/util/list
                      hackett/private/util/stx)
 
@@ -18,14 +19,14 @@
          data case)
 
 (begin-for-syntax
-  (define-syntax-class type-constructor-spec
-    #:attributes [tag [arg 1] len nullary?]
+  (define-splicing-syntax-class type-constructor-spec
+    #:attributes [tag [arg 1] len nullary? fixity]
     #:description #f
-    [pattern tag:id
+    [pattern {~seq tag:id {~optional :fixity-annotation}}
              #:attr [arg 1] '()
              #:attr len 0
              #:attr nullary? #t]
-    [pattern (tag:id arg:id ...+)
+    [pattern {~seq (tag:id arg:id ...+) {~optional :fixity-annotation}}
              #:attr len (length (attribute arg))
              #:attr nullary? #f]
     [pattern {~and (tag:id)
@@ -33,16 +34,17 @@
                               " you meant ‘" (syntax-e #'tag) "’?")}}
              #:attr [arg 1] #f
              #:attr len #f
-             #:attr nullary? #f])
+             #:attr nullary? #f
+             #:attr fixity #f])
 
-  (define-syntax-class data-constructor-spec
-    #:attributes [tag [arg 1] len nullary?]
+  (define-splicing-syntax-class data-constructor-spec
+    #:attributes [tag [arg 1] len nullary? fixity]
     #:description #f
-    [pattern tag:id
+    [pattern {~seq tag:id {~optional :fixity-annotation}}
              #:attr [arg 1] '()
              #:attr len 0
              #:attr nullary? #t]
-    [pattern (tag:id arg ...+)
+    [pattern {~seq (tag:id arg ...+) {~optional :fixity-annotation}}
              #:attr len (length (attribute arg))
              #:attr nullary? #f]
     [pattern {~and (tag:id)
@@ -50,10 +52,12 @@
                               "parentheses; perhaps you meant ‘" (syntax-e #'tag) "’?")}}
              #:attr [arg 1] #f
              #:attr len #f
-             #:attr nullary? #f])
+             #:attr nullary? #f
+             #:attr fixity #f])
 
-  (struct data-constructor (macro type make-match-pat)
-    #:property prop:procedure 0)
+  (struct data-constructor (macro type make-match-pat fixity)
+    #:property prop:procedure (struct-field-index macro)
+    #:property prop:infix-operator (λ (ctor) (data-constructor-fixity ctor)))
 
   (define-syntax-class/specialize data-constructor-val
     (local-value data-constructor? #:failure-message "not bound as a data constructor"))
@@ -204,7 +208,7 @@
     (values (append* assumps) (combine-pattern-constructors mk-pats))))
 
 (define-syntax-parser define-data-constructor
-  [(_ τ:type-constructor-spec constructor:data-constructor-spec)
+  [(_ [τ:type-constructor-spec] [constructor:data-constructor-spec])
    #:with tag- (generate-temporary #'constructor.tag)
    #:with tag-/curried (generate-temporary #'constructor.tag)
    #:with [α ...] (attribute τ.arg)
@@ -218,6 +222,7 @@
    #:with τ_con:type (foldr #{begin #`(∀ #,%1 #,%2)} #'τ_con_unquantified (attribute α))
    #:with τ_con-expr (preservable-property->expression (attribute τ_con.τ))
    #:with [field ...] (generate-temporaries (attribute constructor.arg))
+   #:with fixity-expr (preservable-property->expression (or (attribute constructor.fixity) 'left))
    ; check if the constructor is nullary or not
    (if (attribute constructor.nullary?)
        ; if it is, just define a value
@@ -228,7 +233,8 @@
                (constructor.tag)))
            (define-syntax- constructor.tag
              (data-constructor (make-typed-var-transformer #'tag- τ_con-expr) τ_con-expr
-                               (match-lambda [(list) #'(==- tag-)]))))
+                               (match-lambda [(list) #'(==- tag-)])
+                               fixity-expr)))
        ; if it isn’t, define a constructor function
        #`(splicing-local- [(struct- tag- (field ...) #:transparent
                              #:reflection-name 'constructor.tag)
@@ -236,16 +242,20 @@
                              (tag- field ...))]
            (define-syntax- constructor.tag
              (data-constructor (make-typed-var-transformer #'tag-/curried τ_con-expr) τ_con-expr
-                               (match-lambda [(list field ...) #`(tag- #,field ...)])))))])
+                               (match-lambda [(list field ...) #`(tag- #,field ...)])
+                               fixity-expr))))])
 
 (define-syntax-parser data
   [(_ τ:type-constructor-spec constructor:data-constructor-spec ...)
    #:with τ-base (generate-temporary #'τ.tag)
+   #:with τ/prefix (generate-temporary #'τ.tag)
    #:with [τ-arg ...] (generate-temporaries (attribute τ.arg))
    #:with [τ-arg.τ ...] (map #{begin #`(attribute #,(format-id % "~a.τ" %))} (attribute τ-arg))
    #`(begin-
        (define-for-syntax- τ-base (τ:con #'τ.tag (list #'constructor ...)))
-       (define-syntax τ.tag (make-type-variable-transformer τ-base))
+       #,(indirect-infix-definition
+          #'(define-syntax- τ.tag (make-type-variable-transformer τ-base))
+          (attribute τ.fixity))
        (define-data-constructor τ constructor) ...)])
 
 (define-syntax-parser case

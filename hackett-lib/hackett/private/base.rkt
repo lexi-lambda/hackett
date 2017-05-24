@@ -258,8 +258,7 @@
   #:literals [:]
   [(_ id:id
       {~or {~once {~seq : t:type}}
-           {~optional {~seq #:fixity {~and fixity {~or {~datum left}
-                                                       {~datum right}}}}}}
+           {~optional fixity:fixity-annotation}}
       ...
       e:expr)
    #:with id- (generate-temporary #'id)
@@ -267,17 +266,11 @@
    #:with t-expr (preservable-property->expression (attribute t.τ))
    #`(begin-
        (define- id- (:/top-level e t))
-       #,(if (attribute fixity)
-             #'(begin
-                 (define-syntax- id/prefix
-                   (make-typed-var-transformer #'id- t-expr))
-                 (define-syntax- id
-                   (infix-operator-impl #'id/prefix 'fixity)))
-             #'(define-syntax- id
-                 (make-typed-var-transformer #'id- t-expr))))]
+       #,(indirect-infix-definition
+          #'(define-syntax- id (make-typed-var-transformer #'id- t-expr))
+          (attribute fixity.fixity)))]
   [(_ id:id
-      {~optional {~seq #:fixity {~and fixity {~or {~datum left}
-                                                  {~datum right}}}}}
+      {~optional {~optional fixity:fixity-annotation}}
       e:expr)
    #:do [(define-values [e-stx- t]
            (let-values ([(e-stx- t) (τ⇒! #'e)])
@@ -288,14 +281,10 @@
    #:with t-expr (preservable-property->expression (generalize t))
    #'(begin-
        (define- id- e-)
-       #,(if (attribute fixity)
-             #'(begin
-                 (define-syntax- id/prefix
-                   (make-typed-var-transformer #'id- t-expr))
-                 (define-syntax- id
-                   (infix-operator-impl #'id/prefix 'fixity)))
-             #'(define-syntax- id
-                 (make-typed-var-transformer #'id- t-expr))))])
+       #,(indirect-infix-definition
+          #'(define-syntax- id
+              (make-typed-var-transformer #'id- t-expr))
+          (attribute fixity.fixity)))])
 
 (define-syntax-parser :infer/print-type
   [(_ e)

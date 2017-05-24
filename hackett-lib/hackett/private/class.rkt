@@ -27,8 +27,7 @@
   [(_ (name:id var-id:id)
       [method-id:id
        {~or {~once {~seq : bare-t}}
-            {~optional {~seq #:fixity {~and fixity {~or {~datum left}
-                                                        {~datum right}}}}}}
+            {~optional fixity:fixity-annotation}}
        ...]
       ...)
    ; The methods in a class’s method table should *not* be quantified. That is, in this class:
@@ -60,16 +59,12 @@
        #,@(for/list ([method-id (in-list (attribute method-id))]
                      [method-id- (in-list (attribute method-id-))]
                      [method-id/prefix (in-list (attribute method-id/prefix))]
-                     [fixity (in-list (attribute fixity))]
+                     [fixity (in-list (attribute fixity.fixity))]
                      [quantified-t-expr (in-list (attribute quantified-t-expr))])
-            (if fixity
-                #`(begin
-                    (define-syntax- #,method-id/prefix
-                      (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))
-                    (define-syntax- #,method-id
-                      (infix-operator-impl #'#,method-id/prefix '#,fixity)))
-                #`(define-syntax- #,method-id
-                    (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))))
+            (indirect-infix-definition
+             #`(define-syntax- #,method-id
+                 (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))
+             fixity))
        (define-syntax- name
          (class:info #'var-id- (make-immutable-free-id-table
                                 (list (cons #'method-id method-t-expr) ...)))))])

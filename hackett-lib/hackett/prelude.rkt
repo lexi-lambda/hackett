@@ -99,7 +99,9 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; List
 
-(data (List a) (:: a (List a)) nil)
+(data (List a)
+  (:: a (List a)) #:fixity right
+  nil)
 
 (instance ∀ [a] [(Show a)] => (Show (List a))
   [show (λ [xs] (case xs [nil "nil"]
