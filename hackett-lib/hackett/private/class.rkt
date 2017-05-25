@@ -54,6 +54,7 @@
    #:with [quantified-t-expr ...] (map preservable-property->expression (attribute quantified-t.τ))
 
    #`(begin-
+       (define-values- [] (begin- (λ- () quantified-t.expansion) ... (values-)))
        (define- (method-id- dict) (free-id-table-ref- dict #'method-id)) ...
        #,@(for/list ([method-id (in-list (attribute method-id))]
                      [method-id- (in-list (attribute method-id-))]
@@ -70,8 +71,8 @@
 
 (define-syntax-parser instance
   #:literals [∀ =>]
-  [(_ {~optional {~seq ∀ [var-id:id ...]} #:defaults ([[var-id 1] '()])}
-      {~optional {~seq [constr ...] =>} #:defaults ([[constr 1] '()])}
+  [(_ {~optional {~seq ∀/use:∀ [var-id:id ...]} #:defaults ([[var-id 1] '()])}
+      {~optional {~seq [constr ...] =>/use:=>} #:defaults ([[constr 1] '()])}
       (class:class-id bare-t)
       [method-id:id impl:expr] ...)
 
@@ -94,10 +95,10 @@
    ; then quantify over the whole thing.
    #:with t:type (let ([constrained (if (empty? (attribute constr))
                                         #'bare-t
-                                        #'(=> [constr ...] bare-t))])
+                                        #'(=>/use [constr ...] bare-t))])
                    (if (empty? (attribute var-id))
                        constrained
-                       #`(∀ [var-id ...] #,constrained)))
+                       #`(∀/use [var-id ...] #,constrained)))
    #:do [(define skolem-vars (generate-temporaries (attribute var-id)))
          (modify-type-context #{append % (map ctx:skolem skolem-vars)})
          (define-values [constrs- bare-t-]
@@ -132,20 +133,24 @@
    #:with [expected-t-expr ...] (map preservable-property->expression expected-ts)
    #:with [constr-expr ...] (map preservable-property->expression constrs-)
 
-   #'(begin-
-       (begin-for-syntax-
-         (register-global-class-instance!
-          (class:instance (syntax-local-value #'class)
-                          t-expr
-                          #'dict-id-)))
-       (define- impl-fn-spec-
-         (:/class-method impl expected-t-expr
-                         #:constraints [constr-expr ...]
-                         #:subdict-ids [subdict-id- ...]))
-       ...
-       (define- dict-fn-spec-
-         (make-immutable-free-id-table-
-          (list- (cons- #'method-id impl-fn-spec-) ...))))])
+   (~> #'(begin-
+           (begin-for-syntax-
+             (register-global-class-instance!
+              (class:instance (syntax-local-value #'class)
+                              t-expr
+                              #'dict-id-)))
+           (define-values- [] (begin- (λ- () t.expansion) (values-)))
+           (define- impl-fn-spec-
+             (:/class-method impl expected-t-expr
+                             #:constraints [constr-expr ...]
+                             #:subdict-ids [subdict-id- ...]))
+           ...
+           (define- dict-fn-spec-
+             (make-immutable-free-id-table-
+              (list- (cons- #'method-id impl-fn-spec-) ...))))
+       (syntax-property 'disappeared-use
+                        (~>> (map syntax-local-introduce (attribute method-id))
+                             (cons (syntax-local-introduce #'class)))))])
 
 (define-syntax-parser :/class-method
   [(_ e-expr:expr t-expr:expr

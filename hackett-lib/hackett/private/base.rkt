@@ -216,7 +216,7 @@
 
 (define-syntax-parser :
   [(_ e t-expr:type)
-   (attach-type #`(let- ([for-check-syntax (λ- () t-expr.expansion)])
+   (attach-type #`(let-values- ([() (begin- (λ- () t-expr.expansion) (values-))])
                     #,(τ⇐! #'e (attribute t-expr.τ)))
                 (apply-current-subst (attribute t-expr.τ)))])
 
