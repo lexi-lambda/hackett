@@ -74,8 +74,13 @@
                                         #,e))
                                   'expression '())
         #:literals [#%plain-lambda let-values]
-        [(#%plain-lambda (x-* ...) (let-values _ (let-values _ e-)))
-         (values (attribute x-*) #'e-)]))
+        [(#%plain-lambda (x-* ...) (let-values _ {~and inner-let (let-values _ e-)}))
+         (values (attribute x-*)
+                 ; propagate disappeared bindings to ensure binding arrows can pick up uses of
+                 ; typed var transformers that have been expanded
+                 (syntax-property #'e- 'disappeared-binding
+                                  (cons (syntax-property #'e 'disappeared-binding)
+                                        (syntax-property #'inner-let 'disappeared-binding))))]))
     (define t_e (get-type e-))
     (unless t_e (raise-syntax-error #f "no inferred type" e))
     (values xs- e- t_e))
