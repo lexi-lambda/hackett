@@ -5,6 +5,7 @@
 (require (for-syntax (multi-in racket [base contract format list match syntax])
                      (multi-in syntax/parse [class/local-value class/paren-shape
                                              experimental/specialize])
+                     threading
 
                      hackett/private/infix
                      hackett/private/util/list
@@ -222,39 +223,40 @@
   [(_ [τ:type-constructor-spec] [constructor:data-constructor-spec])
    #:with tag- (generate-temporary #'constructor.tag)
    #:with tag-/curried (generate-temporary #'constructor.tag)
-   #:with [α ...] (attribute τ.arg)
    ; calculate the result type of the data constructor, after being applied to args (if any)
-   #:with τ_result (if (attribute τ.nullary?) #'τ.tag #'(@%app τ.tag α ...))
+   #:with τ_result (if (attribute τ.nullary?) #'τ.tag #'(@%app τ.tag τ.arg ...))
    ; calculate the type of the underlying constructor, with arguments, unquantified
    #:with τ_con_unquantified (foldr #{begin #`(@%app -> #,%1 #,%2)}
                                     #'τ_result
                                     (attribute constructor.arg))
    ; quantify the type using the type variables in τ, then evaluate the type
-   #:with τ_con:type (foldr #{begin #`(∀ #,%1 #,%2)} #'τ_con_unquantified (attribute α))
+   #:with τ_con:type (foldr #{begin #`(∀ #,%1 #,%2)} #'τ_con_unquantified (attribute τ.arg))
    #:with τ_con-expr (preservable-property->expression (attribute τ_con.τ))
    #:with [field ...] (generate-temporaries (attribute constructor.arg))
    #:with fixity-expr (preservable-property->expression (or (attribute constructor.fixity) 'left))
-   ; check if the constructor is nullary or not
-   (if (attribute constructor.nullary?)
-       ; if it is, just define a value
-       #'(begin-
-           (define- tag-
-             (let- ()
-               (struct- constructor.tag ())
-               (constructor.tag)))
-           (define-syntax- constructor.tag
-             (data-constructor (make-typed-var-transformer #'tag- τ_con-expr) τ_con-expr
-                               (match-lambda [(list) #'(==- tag-)])
-                               fixity-expr)))
-       ; if it isn’t, define a constructor function
-       #`(splicing-local- [(struct- tag- (field ...) #:transparent
-                             #:reflection-name 'constructor.tag)
-                           (define- #,(foldl #{begin #`(#,%2 #,%1)} #'tag-/curried (attribute field))
-                             (tag- field ...))]
-           (define-syntax- constructor.tag
-             (data-constructor (make-typed-var-transformer #'tag-/curried τ_con-expr) τ_con-expr
-                               (match-lambda [(list field ...) #`(tag- #,field ...)])
-                               fixity-expr))))])
+   #`(begin-
+       (define-values- [] (begin- (λ- () τ_con.expansion) (values-)))
+       ; check if the constructor is nullary or not
+       #,(if (attribute constructor.nullary?)
+             ; if it is, just define a value
+             #'(begin-
+                 (define- tag-
+                   (let- ()
+                     (struct- constructor.tag ())
+                     (constructor.tag)))
+                 (define-syntax- constructor.tag
+                   (data-constructor (make-typed-var-transformer #'tag- τ_con-expr) τ_con-expr
+                                     (match-lambda [(list) #'(==- tag-)])
+                                     fixity-expr)))
+             ; if it isn’t, define a constructor function
+             #`(splicing-local- [(struct- tag- (field ...) #:transparent
+                                          #:reflection-name 'constructor.tag)
+                 (define- #,(foldl #{begin #`(#,%2 #,%1)} #'tag-/curried (attribute field))
+                   (tag- field ...))]
+                 (define-syntax- constructor.tag
+                   (data-constructor (make-typed-var-transformer #'tag-/curried τ_con-expr) τ_con-expr
+                                     (match-lambda [(list field ...) #`(tag- #,field ...)])
+                                     fixity-expr)))))])
 
 (define-syntax-parser data
   [(_ τ:type-constructor-spec constructor:data-constructor-spec ...)
@@ -296,4 +298,6 @@
          (define t_result (apply-current-subst (τ:var^ result^)))]
    #:with [match-pat- ...] match-pats-
    #:with [body- ...] bodies-
-   (attach-type #'(match- (force- val-) [match-pat- body-] ...) t_result)])
+   (~> #'(match- (force- val-) [match-pat- body-] ...)
+       (attach-type t_result)
+       (syntax-property 'disappeared-use (attribute pat.disappeared-uses)))])
