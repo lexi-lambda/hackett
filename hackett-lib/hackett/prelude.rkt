@@ -100,7 +100,7 @@
 ;; List
 
 (data (List a)
-  (:: a (List a)) #:fixity right
+  {a :: (List a)} #:fixity right
   nil)
 
 (instance ∀ [a] [(Show a)] => (Show (List a))

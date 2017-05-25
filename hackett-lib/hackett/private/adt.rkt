@@ -3,7 +3,8 @@
 (require racket/require hackett/private/util/require)
 
 (require (for-syntax (multi-in racket [base contract format list match syntax])
-                     (multi-in syntax/parse [class/local-value experimental/specialize])
+                     (multi-in syntax/parse [class/local-value class/paren-shape
+                                             experimental/specialize])
 
                      hackett/private/infix
                      hackett/private/util/list
@@ -21,13 +22,18 @@
 (begin-for-syntax
   (define-splicing-syntax-class type-constructor-spec
     #:attributes [tag [arg 1] len nullary? fixity]
+    #:commit
     #:description #f
     [pattern {~seq tag:id {~optional :fixity-annotation}}
              #:attr [arg 1] '()
              #:attr len 0
              #:attr nullary? #t]
-    [pattern {~seq (tag:id arg:id ...+) {~optional :fixity-annotation}}
+    [pattern {~seq (~parens tag:id arg:id ...+) {~optional :fixity-annotation}}
              #:attr len (length (attribute arg))
+             #:attr nullary? #f]
+    [pattern {~seq {~braces a:id tag:id b:id} {~optional :fixity-annotation}}
+             #:with [arg ...] #'[a b]
+             #:attr len 2
              #:attr nullary? #f]
     [pattern {~and (tag:id)
                    {~fail (~a "types without arguments should not be enclosed in parentheses; perhaps"
@@ -39,13 +45,18 @@
 
   (define-splicing-syntax-class data-constructor-spec
     #:attributes [tag [arg 1] len nullary? fixity]
+    #:commit
     #:description #f
     [pattern {~seq tag:id {~optional :fixity-annotation}}
              #:attr [arg 1] '()
              #:attr len 0
              #:attr nullary? #t]
-    [pattern {~seq (tag:id arg ...+) {~optional :fixity-annotation}}
+    [pattern {~seq (~parens tag:id arg ...+) {~optional :fixity-annotation}}
              #:attr len (length (attribute arg))
+             #:attr nullary? #f]
+    [pattern {~seq {~braces a tag:id b} {~optional :fixity-annotation}}
+             #:with [arg ...] #'[a b]
+             #:attr len 2
              #:attr nullary? #f]
     [pattern {~and (tag:id)
                    {~fail (~a "data constructors without arguments should not be enclosed in "
