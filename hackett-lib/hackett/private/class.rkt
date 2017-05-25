@@ -41,8 +41,7 @@
    #:with var-id- (generate-temporary #'var-id)
    #:with var-id-expr (preservable-property->expression (τ:var #'var-id-))
    #:with (let-values () (let-values () method-t:type ... _))
-          (local-expand-type #'(let-syntax ([var-id (make-variable-like-transformer
-                                                     (τ-stx-token var-id-expr))])
+          (local-expand-type #'(let-syntax ([var-id (make-type-variable-transformer var-id-expr)])
                                  bare-t ... (void)))
    #:with [method-id- ...] (generate-temporaries #'[method-id ...])
    #:with [method-id/prefix ...] (generate-temporaries #'[method-id ...])

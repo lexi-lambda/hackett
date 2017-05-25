@@ -435,10 +435,11 @@
 (define (type-transforming?) (type-transforming?-param))
 
 (define-syntax-class type
-  #:attributes [τ]
+  #:attributes [τ expansion]
   #:opaque
   [pattern t:expr
-           #:attr τ (syntax-property (local-expand-type #'t) 'τ)
+           #:with expansion (local-expand-type #'t)
+           #:attr τ (syntax-property (attribute expansion) 'τ)
            #:when (τ? (attribute τ))])
 
 (define (parse-type stx)
@@ -457,9 +458,9 @@
 
 ;; -------------------------------------------------------------------------------------------------
 
-(define/contract (τ-stx-token t)
-  (-> τ? syntax?)
-  (syntax-property #'(void) 'τ t))
+(define/contract (τ-stx-token t #:expansion [stx #'(void)])
+  (->* [τ?] [#:expansion syntax?] syntax?)
+  (syntax-property stx 'τ t))
 (define/contract (attach-type stx t)
   (-> syntax? τ? syntax?)
   (syntax-property stx ': t))

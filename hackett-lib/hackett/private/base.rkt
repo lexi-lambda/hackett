@@ -47,14 +47,17 @@
   [(_ x:id t)
    #:with x- (generate-temporary #'x)
    #:with x/τ (preservable-property->expression (τ:var #'x-))
-   #:with (let-values _ (let-values _ t-:type))
-          (local-expand-type #'(let-syntax ([x (make-variable-like-transformer
-                                                (τ-stx-token x/τ))])
+   #:with {~and expansion (let-values _ {~and inner-let (let-values _ t-:type)})}
+          (local-expand-type #'(let-syntax ([x (make-type-variable-transformer x/τ)])
                                  t))
-   (τ-stx-token (τ:∀ #'x- (attribute t-.τ)))])
+   (~> (τ-stx-token (τ:∀ #'x- (attribute t-.τ))
+                    #:expansion #'(void- t-.expansion))
+       (syntax-property 'disappeared-binding (syntax-property #'inner-let 'disappeared-binding)))])
 (define-syntax-parser =>
   [(_ (class-id:id t:type) a:type)
-   (τ-stx-token (τ:qual (constr:class #'class-id (attribute t.τ)) (attribute a.τ)))])
+   (~> (τ-stx-token (τ:qual (constr:class #'class-id (attribute t.τ)) (attribute a.τ))
+                    #:expansion #'(void- t.expansion a.expansion))
+       (syntax-property 'disappeared-use (syntax-local-introduce #'class-id)))])
 
 (define (@%dictionary-placeholder . args)
   (error '@%dictionary-placeholder "should never appear at runtime"))
@@ -213,7 +216,9 @@
 
 (define-syntax-parser :
   [(_ e t-expr:type)
-   (attach-type (τ⇐! #'e (attribute t-expr.τ)) (apply-current-subst (attribute t-expr.τ)))])
+   (attach-type #`(let- ([for-check-syntax (λ- () t-expr.expansion)])
+                    #,(τ⇐! #'e (attribute t-expr.τ)))
+                (apply-current-subst (attribute t-expr.τ)))])
 
 (define-syntax-parser :/top-level
   [(_ e t-expr:type)
@@ -251,7 +256,8 @@
   (if (type-transforming?)
       (syntax-parse stx
         [(_ a:type b:type)
-         (τ-stx-token (τ:app (attribute a.τ) (attribute b.τ)))])
+         (τ-stx-token (τ:app (attribute a.τ) (attribute b.τ))
+                      #:expansion #'(void- a.expansion b.expansion))])
       (syntax-parse stx
         [(_ f:expr e:expr)
          #:do [(define-values [f- t_f] (τ⇒! #'f))
