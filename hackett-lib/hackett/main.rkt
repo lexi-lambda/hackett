@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require hackett/prelude
-         (only-in hackett/private/adt case)
+         (only-in hackett/private/adt case _)
          (only-in hackett/private/class instance)
          hackett/private/kernel
          hackett/private/provide)

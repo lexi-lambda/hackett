@@ -12,10 +12,10 @@ Here are some of the features that Hackett supports **right now**:
   - Higher-rank polymorphism
   - Type-aware/type-directed macros
   - Laziness
+  - Syntax for infix operators
 
 Here are some of the features that still need to be implemented for a minimal release:
 
-  - Syntax for infix operators
   - Superclasses
   - Default class methods
   - Exhaustiveness checking

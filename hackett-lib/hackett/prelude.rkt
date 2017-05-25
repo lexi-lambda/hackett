@@ -105,19 +105,19 @@
 
 (instance ∀ [a] [(Show a)] => (Show (List a))
   [show (λ [xs] (case xs [nil "nil"]
-                         [(:: y ys) {"{" ++ (show y) ++ " :: " ++ (show ys) ++ "}"}]))])
+                         [{y :: ys} {"{" ++ (show y) ++ " :: " ++ (show ys) ++ "}"}]))])
 
 (instance ∀ [a] (Semigroup (List a))
   [++ (λ [xs ys] (case xs
                    [nil ys]
-                   [(:: z zs)
+                   [{z :: zs}
                     {z :: {zs ++ ys}}]))])
 
 (instance ∀ [a] (Monoid (List a))
   [mempty nil])
 
 (instance (Functor List)
-  [map (λ [f x] (case x [(:: y ys) {(f y) :: (map f ys)}]
+  [map (λ [f x] (case x [{y :: ys} {(f y) :: (map f ys)}]
                         [nil nil]))])
 
 (instance (Applicative List)
@@ -127,13 +127,13 @@
 (instance (Monad List)
   [join (λ [xss] (case xss
                    [nil nil]
-                   [(:: ys yss) (case ys
+                   [{ys :: yss} (case ys
                                   [nil (join yss)]
-                                  [(:: z zs) {z :: (join {zs :: yss})}])]))])
+                                  [{z :: zs} {z :: (join {zs :: yss})}])]))])
 
 (def sequence : (∀ [f a] (=> [(Functor f) (Applicative f)] {(List (f a)) -> (f (List a))}))
   (λ [xs] (case xs [nil (pure nil)]
-                   [(:: y ys) {:: <$> y <*> (sequence ys)}])))
+                   [{y :: ys} {:: <$> y <*> (sequence ys)}])))
 
 (def traverse : (∀ [f a b] (=> [(Functor f) (Applicative f)]
                                {{a -> (f b)} -> (List a) -> (f (List b))}))

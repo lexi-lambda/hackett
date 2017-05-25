@@ -4,7 +4,7 @@
 
 (require (for-syntax (multi-in racket [base contract format list match syntax])
                      (multi-in syntax/parse [class/local-value class/paren-shape
-                                             experimental/specialize])
+                                             experimental/template experimental/specialize])
                      threading
 
                      hackett/private/infix
@@ -18,7 +18,7 @@
          (only-in hackett/private/kernel [#%app @%app]))
 
 (provide (for-syntax data-constructor-spec)
-         data case)
+         data case _)
 
 (begin-for-syntax
   (define-splicing-syntax-class type-constructor-spec
@@ -126,6 +126,7 @@
   (define-syntax-class pat
     #:description "a pattern"
     #:attributes [pat disappeared-uses]
+    #:commit
     [pattern {~and constructor:data-constructor-val ~!}
              #:do [(define val (attribute constructor.local-value))
                    (define arity (data-constructor-arity val))]
@@ -134,7 +135,7 @@
                                "constructor with arity " arity)
              #:attr pat (pat-con this-syntax val '())
              #:attr disappeared-uses (list (syntax-local-introduce #'constructor))]
-    [pattern (constructor:data-constructor-val ~! arg:pat ...+)
+    [pattern (~parens constructor:data-constructor-val ~! arg:pat ...+)
              #:do [(define val (attribute constructor.local-value))
                    (define arity (data-constructor-arity val))]
              #:fail-when (zero? arity)
@@ -147,8 +148,41 @@
                          (~a "too many arguments provided for constructor ‘"
                              (syntax-e #'constructor) "’, which has arity " arity)
              #:attr pat (pat-con this-syntax (attribute constructor.local-value) (attribute arg.pat))
-             #:attr disappeared-uses (list* (syntax-local-introduce #'constructor)
-                                            (append* (attribute arg.disappeared-uses)))]
+             #:attr disappeared-uses (cons (syntax-local-introduce #'constructor)
+                                           (append* (attribute arg.disappeared-uses)))]
+    [pattern {~braces a:pat constructor:data-constructor-val b:pat}
+             #:do [(define val (attribute constructor.local-value))
+                   (define arity (data-constructor-arity val))]
+             #:fail-when (zero? arity)
+                         (~a "cannot match ‘" (syntax-e #'constructor) "’ infix; it is a value "
+                             "and should matched as a bare identifier")
+             #:fail-when (not (= arity 2))
+                         (~a "cannot match ‘" (syntax-e #'constructor) "’ infix; it has arity "
+                             arity ", but constructors matched infix must have arity 2")
+             #:attr pat (pat-con this-syntax (attribute constructor.local-value)
+                                 (list (attribute a.pat) (attribute b.pat)))
+             #:attr disappeared-uses (cons (syntax-local-introduce #'constructor)
+                                           (append (attribute a.disappeared-uses)
+                                                   (attribute b.disappeared-uses)))]
+    [pattern {~braces a:pat ctor:data-constructor-val b:pat
+                      {~seq ctors:data-constructor-val bs:expr} ...}
+             #:when (eq? 'left (data-constructor-fixity (attribute ctor.local-value)))
+             #:with ~! #f
+             #:fail-unless (andmap #{eq? % 'left}
+                                   (map data-constructor-fixity (attribute ctors.local-value)))
+                           (~a "cannot mix left- and right-associative operators in the same infix "
+                               "pattern")
+             #:with :pat (template {{a ctor b} {?@ ctors bs} ...})]
+    [pattern {~braces {~seq as:expr ctors:data-constructor-val} ...
+                      a:pat ctor:data-constructor-val b:pat
+                      }
+             #:when (eq? 'right (data-constructor-fixity (attribute ctor.local-value)))
+             #:with ~! #f
+             #:fail-unless (andmap #{eq? % 'right}
+                                   (map data-constructor-fixity (attribute ctors.local-value)))
+                           (~a "cannot mix left- and right-associative operators in the same infix "
+                               "pattern")
+             #:with :pat (template {{?@ as ctors} ... {a ctor b}})]
     [pattern {~literal _}
              #:attr pat (pat-hole this-syntax)
              #:attr disappeared-uses (list (syntax-local-introduce this-syntax))]
