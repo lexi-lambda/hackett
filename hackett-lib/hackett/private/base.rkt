@@ -302,7 +302,7 @@
           #'(define-syntax- id (make-typed-var-transformer #'id- t-expr))
           (attribute fixity.fixity)))]
   [(_ id:id
-      {~optional {~optional fixity:fixity-annotation}}
+      {~optional fixity:fixity-annotation}
       e:expr)
    #:do [(define-values [e-stx- t]
            (let-values ([(e-stx- t) (τ⇒! #'e)])
@@ -311,7 +311,7 @@
    #:with id/prefix (generate-temporary #'id)
    #:with e- (elaborate-dictionaries e-stx-)
    #:with t-expr (preservable-property->expression (generalize t))
-   #'(begin-
+   #`(begin-
        (define- id- e-)
        #,(indirect-infix-definition
           #'(define-syntax- id
