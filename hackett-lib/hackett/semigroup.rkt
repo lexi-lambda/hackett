@@ -1,6 +1,8 @@
 #lang hackett/private/kernel
 
-(require (except-in hackett/private/class class)
+(require (except-in hackett/private/adt data)
+         (except-in hackett/private/class class)
+         hackett/data/list
          (only-in hackett/private/prim append/String)
          hackett/private/provide)
 
@@ -12,3 +14,7 @@
 
 (instance (Semigroup String)
   [++ append/String])
+
+(instance (∀ [a] (Semigroup (List a)))
+  [++ (λ* [[{z :: zs} ys] {z :: {zs ++ ys}}]
+          [[nil       ys] ys])])

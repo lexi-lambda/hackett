@@ -85,12 +85,34 @@
                       (list (cons #'method-id method-t-expr) ...))
                      (list super-constr-expr ...))))])
 
+(begin-for-syntax
+  (define-syntax-class instance-head
+    #:description "instance head"
+    #:attributes [class class.local-value bare-t]
+    [pattern (class:class-id bare-t)])
+
+  (define-syntax-class instance-spec
+    #:description "instance spec"
+    #:attributes [[var-id 1] [constr 1] ∀/use =>/use class class.local-value bare-t]
+    #:literals [∀ =>]
+    #:commit
+    [pattern {~post :instance-head}
+             #:attr ∀/use #f
+             #:attr =>/use #f
+             #:attr [var-id 1] '()
+             #:attr [constr 1] '()]
+    [pattern (∀/use:∀ ~!
+              [var-id ...]
+              {~optional {~seq constr ... =>/use:=>}
+                         #:defaults ([[constr 1] '()])}
+              ~! :instance-head)]
+    [pattern (constr ... =>/use:=> :instance-head)
+             #:attr ∀/use #f
+             #:attr [var-id 1] '()]))
+
 (define-syntax-parser instance
   #:literals [∀ =>]
-  [(_ {~optional {~seq ∀/use:∀ [var-id:id ...]} #:defaults ([[var-id 1] '()])}
-      {~optional {~seq constr ... =>/use:=>} #:defaults ([[constr 1] '()])}
-      (class:class-id bare-t)
-      [method-id:id impl:expr] ...)
+  [(_ :instance-spec [method-id:id impl:expr] ...)
 
    ; Ensure all the provided methods belong to the class being implemented and ensure that none of the
    ; methods are unimplemented.

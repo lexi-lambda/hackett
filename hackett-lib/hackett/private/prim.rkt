@@ -5,11 +5,14 @@
 
          (for-syntax (multi-in racket [base provide-transform]))
          (postfix-in - (combine-in racket/base
-                                   racket/promise))
+                                   racket/match
+                                   racket/promise
+                                   racket/string))
          syntax/parse/define
 
          (for-syntax hackett/private/util/stx)
          hackett/data/bool
+         hackett/data/list
          hackett/data/tuple
          hackett/data/unit
          (except-in hackett/private/base @%app)
@@ -40,7 +43,8 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
-(provide IO main
+(provide IO main typed-out
+         (rename-out [#%app type-#%app])
          (typed-out
           [+ : {Integer -> Integer -> Integer}]
           [- : {Integer -> Integer -> Integer}]
@@ -55,11 +59,17 @@
           [>= : {Integer -> Integer -> Bool}]
           [equal?/String : {String -> String -> Bool}]
           [append/String : {String -> String -> String}]
+          [string-split : {String -> String -> (List String)}]
           [print : {String -> (IO Unit)}]
           [error! : (∀ a {String -> a})]))
 
 (define (boolean->Bool x)
   (if- x true false))
+
+(define list->List
+  (match-lambda-
+    [(cons x xs) (:: x (list->List xs))]
+    ['()         nil]))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Integer
@@ -83,6 +93,7 @@
 
 (define ((equal?/String x) y) (string=?- (force- x) (force- y)))
 (define ((append/String x) y) (string-append- (force- x) (force- y)))
+(define ((string-split x) y) (list->List (string-split- (force- y) (force- x))))
 
 ;; ---------------------------------------------------------------------------------------------------
 

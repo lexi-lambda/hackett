@@ -1,6 +1,8 @@
 #lang hackett/private/kernel
 
-(require (except-in hackett/private/class class)
+(require (except-in hackett/private/adt data)
+         (except-in hackett/private/class class)
+         hackett/data/list
          hackett/private/provide
          hackett/semigroup)
 
@@ -11,3 +13,6 @@
 
 (instance (Monoid String)
   [mempty ""])
+
+(instance (∀ [a] (Monoid (List a)))
+  [mempty nil])
