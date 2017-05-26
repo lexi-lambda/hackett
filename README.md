@@ -16,7 +16,6 @@ Here are some of the features that Hackett supports **right now**:
 
 Here are some of the features that still need to be implemented for a minimal release:
 
-  - Superclasses
   - Default class methods
   - Exhaustiveness checking
   - Scoped type variables

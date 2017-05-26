@@ -3,7 +3,8 @@
 (require racket/require hackett/private/util/require)
 
 (require (for-syntax (multi-in racket [base format list match syntax])
-                     (multi-in syntax/parse [class/local-value experimental/specialize])
+                     (multi-in syntax/parse [class/local-value experimental/specialize
+                                             experimental/template])
                      syntax/id-table
                      threading)
          (postfix-in - (combine-in racket/base
@@ -12,8 +13,8 @@
 
          (for-syntax hackett/private/infix
                      hackett/private/util/stx)
-         (except-in hackett/private/base ∀ =>)
-         (only-in hackett/private/kernel ∀ =>))
+         (except-in hackett/private/base ∀ => @%app)
+         (only-in hackett/private/kernel ∀ => [#%app @%app]))
 
 (provide (for-syntax class-id)
          class instance)
@@ -23,8 +24,9 @@
     (local-value class:info? #:failure-message "identifier was not bound to a class")))
 
 (define-syntax-parser class
-  #:literals [: let-values]
-  [(_ (name:id var-id:id)
+  #:literals [: => let-values #%plain-app]
+  [(_ {~optional {~seq [constr ...] =>/use:=>}}
+      (name:id var-id:id)
       [method-id:id
        {~or {~once {~seq : bare-t}}
             {~optional fixity:fixity-annotation}}
@@ -38,27 +40,39 @@
    ; The type for show stored in the method table should be (-> a a), not
    ; (∀ [a] (=> [(Show a)] (-> a a))). However, in order to expand the user-provided (-> a a) type in
    ; a context where ‘a’ is bound, we need to bind it with let-syntax and manually call local-expand.
+   ; We also want to do the same thing with superclass constraints so that the same variable is bound
+   ; in both situations.
    #:with var-id- (generate-temporary #'var-id)
    #:with var-id-expr (preservable-property->expression (τ:var #'var-id-))
-   #:with (let-values () (let-values () method-t:type ... _))
-          (local-expand-type #'(let-syntax ([var-id (make-type-variable-transformer var-id-expr)])
-                                 bare-t ... (void)))
+   #:with (let-values () {~and inner-let (let-values ()
+                                           [#%plain-app _ method-t:type ...]
+                                           [#%plain-app _ super-constr:type ...])})
+          (local-expand-type (template
+                              (let-syntax- ([var-id (make-type-variable-transformer var-id-expr)])
+                                (void- bare-t ...)
+                                (void- {?? {?@ constr ...}}))))
    #:with [method-id- ...] (generate-temporaries #'[method-id ...])
-   #:with [method-id/prefix ...] (generate-temporaries #'[method-id ...])
    #:with [method-t-expr ...] (map preservable-property->expression (attribute method-t.τ))
+   #:with [super-constr-expr ...] (map preservable-property->expression
+                                       (attribute super-constr.τ))
 
    ; Now that we’ve manually expanded the types above for the purpose of inclusion in the class’s
    ; method table, we want to reexpand the type with the proper quantifier and constraint, since uses
    ; of the method should actually see that type.
-   #:with [quantified-t:type ...] #'[(∀ [var-id] (=> [(name var-id)] bare-t)) ...]
+   #:with name-t (τ-stx-token (τ:con #'name #f))
+   #:with [quantified-t:type ...] #'[(∀ [var-id] (=> [(@%app name-t var-id)] bare-t)) ...]
    #:with [quantified-t-expr ...] (map preservable-property->expression (attribute quantified-t.τ))
 
    #`(begin-
-       (define-values- [] (begin- (λ- () quantified-t.expansion) ... (values-)))
+       (define-values- []
+         #,(~> #'(begin- (λ- () method-t.expansion) ...
+                         (λ- () super-constr.expansion) ...
+                         (values-))
+               (syntax-property 'disappeared-binding
+                                (syntax-property #'inner-let 'disappeared-binding))))
        (define- (method-id- dict) (free-id-table-ref- dict #'method-id)) ...
        #,@(for/list ([method-id (in-list (attribute method-id))]
                      [method-id- (in-list (attribute method-id-))]
-                     [method-id/prefix (in-list (attribute method-id/prefix))]
                      [fixity (in-list (attribute fixity.fixity))]
                      [quantified-t-expr (in-list (attribute quantified-t-expr))])
             (indirect-infix-definition
@@ -66,8 +80,10 @@
                  (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))
              fixity))
        (define-syntax- name
-         (class:info #'var-id- (make-immutable-free-id-table
-                                (list (cons #'method-id method-t-expr) ...)))))])
+         (class:info #'var-id-
+                     (make-immutable-free-id-table
+                      (list (cons #'method-id method-t-expr) ...))
+                     (list super-constr-expr ...))))])
 
 (define-syntax-parser instance
   #:literals [∀ =>]
@@ -78,7 +94,8 @@
 
    ; Ensure all the provided methods belong to the class being implemented and ensure that none of the
    ; methods are unimplemented.
-   #:do [(define method-table (class:info-method-table (attribute class.local-value)))
+   #:do [(define class-info (attribute class.local-value))
+         (define method-table (class:info-method-table class-info))
          (define expected-methods (free-id-table-keys method-table))
          (define invalid-methods (filter-not #{member % expected-methods free-identifier=?}
                                              (attribute method-id)))
@@ -115,61 +132,57 @@
                    (skolemize-loop (rest skolems-left)
                                    (inst t id (τ:skolem (first skolems-left))))))))]
    #:do [(define expected-ts
-           (let ([x (class:info-var (attribute class.local-value))])
+           (let ([x (class:info-var class-info)])
              (for/list ([method-id (in-list (attribute method-id))])
                (let ([t (free-id-table-ref method-table method-id)])
                  (inst t x bare-t-)))))]
 
    #:with t-expr (preservable-property->expression (attribute t.τ))
 
-   ; Generate some temporaries for the necessary runtime bindings.
-   #:with [impl-id- ...] (generate-temporaries #'[impl ...])
-   #:with [subdict-id- ...] (generate-temporaries #'[constr ...])
-   #:with [impl-fn-spec- ...] (if (empty? (attribute constr))
-                                  (attribute impl-id-)
-                                  (map #{begin #`(#,% subdict-id- ...)} (attribute impl-id-)))
+   ; Generate some temporaries and expressions needed in the output.
    #:with dict-id- (generate-temporary #'class)
-   #:with dict-fn-spec- (foldl #{begin #`(#,%2 #,%1)} #'dict-id- (attribute subdict-id-))
    #:with [expected-t-expr ...] (map preservable-property->expression expected-ts)
    #:with [constr-expr ...] (map preservable-property->expression constrs-)
+   #:with [superclass-constr-expr ...] (map (λ~> (inst (class:info-var class-info) bare-t-)
+                                                 preservable-property->expression)
+                                            (class:info-superclasses class-info))
 
-   (~> #'(begin-
+   (~> #`(begin-
            (begin-for-syntax-
              (register-global-class-instance!
               (class:instance (syntax-local-value #'class)
                               t-expr
                               #'dict-id-)))
            (define-values- [] (begin- (λ- () t.expansion) (values-)))
-           (define- impl-fn-spec-
-             (:/class-method impl expected-t-expr
-                             #:constraints [constr-expr ...]
-                             #:subdict-ids [subdict-id- ...]))
-           ...
-           (define- dict-fn-spec-
-             (make-immutable-free-id-table-
-              (list- (cons- #'method-id impl-fn-spec-) ...))))
+           (define- dict-id-
+             #,(syntax/loc this-syntax
+                 (:/instance-dictionary
+                  #:methods ([method-id : expected-t-expr impl] ...)
+                  #:instance-constrs [constr-expr ...]
+                  #:superclass-constrs [superclass-constr-expr ...]))))
        (syntax-property 'disappeared-use
                         (~>> (map syntax-local-introduce (attribute method-id))
                              (cons (syntax-local-introduce #'class)))))])
 
-(define-syntax-parser :/class-method
-  [(_ e-expr:expr t-expr:expr
-      #:constraints [constraint-expr:expr ...]
-      #:subdict-ids [subdict-id-expr:id ...])
-   #'(let-syntax
-         ([result
-           (let ([e #'e-expr]
-                 [t t-expr]
-                 [constraints (list constraint-expr ...)]
-                 [subdict-ids (list #'subdict-id-expr ...)])
-             (let ([subgoal-instances
-                    (for/list ([constr (in-list constraints)]
-                               [subdict-id (in-list subdict-ids)])
-                      (match-let ([(constr:class class-id t) constr])
-                        (class:instance (syntax-local-value class-id) t subdict-id)))])
-               (make-variable-like-transformer
-                (parameterize ([local-class-instances
-                                (append subgoal-instances (local-class-instances))])
-                  (local-expand (elaborate-dictionaries (local-expand (τ⇐! e t) 'expression '()))
-                                'expression '())))))])
-       result)])
+(define-syntax-parser :/instance-dictionary
+  #:literals [:]
+  [(_ #:methods ([method-id : method-t-expr method-impl] ...)
+      #:instance-constrs [instance-constr-expr ...]
+      #:superclass-constrs [superclass-constr-expr ...])
+
+   #:with [method-t ...] (generate-temporaries (attribute method-t-expr))
+   #:with [superclass-dict-placeholder ...]
+          (for/list ([constr-expr (in-list (attribute superclass-constr-expr))])
+            (quasisyntax/loc this-syntax
+              (@%dictionary-placeholder #,constr-expr)))
+
+   (~> #'(let-syntax- ([method-t (make-type-variable-transformer method-t-expr)] ...)
+           (make-immutable-free-id-table-
+            (list- (cons- (quote-syntax @%superclasses-key)
+                          (vector-immutable- superclass-dict-placeholder ...))
+                   (cons- (quote-syntax method-id) (: method-impl method-t)) ...)))
+       ; Wrap the entire expression with lambdas for the appropriate subgoal dictionaries
+       (foldr #{begin #`(@%with-dictionary #,%1 #,%2)} _ (attribute instance-constr-expr))
+       ; Perform dictionary elaboration on the whole expression
+       (local-expand 'expression '())
+       elaborate-dictionaries)])

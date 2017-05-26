@@ -23,7 +23,7 @@
          (rename-out [#%module-begin @%module-begin]
                      [#%top @%top]
                      [∀ forall])
-         @%datum @%app @%top-interaction
+         @%datum @%app @%top-interaction @%superclasses-key @%dictionary-placeholder @%with-dictionary
          define-primop define-base-type
          -> ∀ => Integer String
          : :/top-level with-dictionary-elaboration λ1 def)
@@ -53,17 +53,20 @@
    (~> (τ-stx-token (τ:∀ #'x- (attribute t-.τ))
                     #:expansion #'(void- t-.expansion))
        (syntax-property 'disappeared-binding (syntax-property #'inner-let 'disappeared-binding)))])
+
 (define-syntax-parser =>
-  [(_ (class-id:id t:type) a:type)
-   (~> (τ-stx-token (τ:qual (constr:class #'class-id (attribute t.τ)) (attribute a.τ))
-                    #:expansion #'(void- t.expansion a.expansion))
-       (syntax-property 'disappeared-use (syntax-local-introduce #'class-id)))])
+  [(_ constr:type t:type)
+   (τ-stx-token (τ:qual (attribute constr.τ) (attribute t.τ))
+                #:expansion #'(void- constr.expansion t.expansion))])
 
 (define (@%dictionary-placeholder . args)
   (error '@%dictionary-placeholder "should never appear at runtime"))
 
 (define (@%with-dictionary . args)
   (error '@%with-dictionary "should never appear at runtime"))
+
+(define-syntax (@%superclasses-key stx)
+  (raise-syntax-error #f "cannot be used as an expression" stx))
 
 (begin-for-syntax
   (define/contract (τ⇒/λ! e bindings)
@@ -159,6 +162,26 @@
       (let-values ([(e- t) (τ⇒! e)])
         (values (snoc es- e-) (snoc ts t)))))
 
+  ; Given a constraint, calculate the instances it brings in scope, including instances that can be
+  ; derived via superclasses. For example, the constraint (Monad m) brings in three instances, one for
+  ; Monad and two for Functor and Applicative.
+  (define/contract constraint->instances
+    (-> constr? syntax? (listof class:instance?))
+    (match-lambda**
+     [[(τ:app (τ:con class-id _) t) dict-expr]
+      (let* ([class-info (syntax-local-value class-id)]
+             [instance (class:instance class-info (apply-current-subst t) dict-expr)]
+             ; instantiate the superclass constraints, so for (Monad Unit), we get (Applicative Unit)
+             ; instead of (Applicative m)
+             [super-constrs (~>> (class:info-superclasses class-info)
+                                 (map #{inst % (class:info-var class-info) t}))]
+             [superclass-dict-expr #`(free-id-table-ref- #,dict-expr #'@%superclasses-key)]
+             [super-instances (for/list ([(super-constr i) (in-indexed (in-list super-constrs))])
+                                (constraint->instances
+                                 super-constr
+                                 #`(vector-ref- #,superclass-dict-expr '#,i)))])
+        (cons instance (append* super-instances)))]))
+
   (define/contract (elaborate-dictionaries stx)
     (-> syntax? syntax?)
     (syntax-parse stx
@@ -170,19 +193,20 @@
           ([dict-expr
             (let*-values ([(constr) constr-expr]
                           [(instance constrs) (lookup-instance! constr #:src this)]
-                          [(dict-id) (class:instance-dict-id instance)])
+                          [(dict-expr) (class:instance-dict-expr instance)])
               ; It’s possible that the dictionary itself requires dictionaries for classes with
               ; subgoals, like (instance ∀ [a] [(Show a)] => (Show (List a)) ...). If there are not
               ; any constraints, we should just produce a bare identifier. Otherwise, we should
               ; produce an application to sub-dictionaries, which need to be recursively elaborated.
               (if (empty? constrs)
-                  (make-rename-transformer dict-id)
+                  (make-variable-like-transformer dict-expr)
                   (make-variable-like-transformer
                    (elaborate-dictionaries
-                    (local-expand #`(#,dict-id #,@(for/list ([constr (in-list constrs)])
-                                                    (quasisyntax/loc this
-                                                      (@%dictionary-placeholder
-                                                       #,(preservable-property->expression constr)))))
+                    (local-expand #`(#,dict-expr
+                                     #,@(for/list ([constr (in-list constrs)])
+                                          (quasisyntax/loc this
+                                            (@%dictionary-placeholder
+                                             #,(preservable-property->expression constr)))))
                                   'expression '())))))])
            dict-expr)]
       [(#%plain-app @%with-dictionary constr-expr e)
@@ -191,13 +215,10 @@
        #'(λ- (dict-id)
            (let-syntax-
             ([abs-expr
-              (match-let* ([(constr:class class-id t) constr-expr]
-                           [class-info (syntax-local-value class-id)]
-                           [instance (class:instance class-info (apply-current-subst t) #'dict-id)])
+              (let ([instances (constraint->instances constr-expr #'dict-id)])
                 (make-variable-like-transformer
-                 (parameterize ([local-class-instances (cons instance (local-class-instances))])
-                   (let ([elaborated (elaborate-dictionaries (quote-syntax e))])
-                     (local-expand elaborated 'expression '())))))])
+                 (parameterize ([local-class-instances (append instances (local-class-instances))])
+                   (local-expand (elaborate-dictionaries (quote-syntax e)) 'expression '()))))])
             abs-expr))]
       [(a . b)
        (datum->syntax this-syntax

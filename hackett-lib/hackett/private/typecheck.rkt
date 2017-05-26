@@ -26,16 +26,17 @@
                        [struct τ:app ([a τ?] [b τ?])]
                        [struct τ:∀ ([x identifier?] [t τ?])]
                        [struct τ:qual ([constr constr?] [t τ?])]
-                       [struct constr:class ([class-id identifier?] [t τ?])]
                        [struct ctx:var ([x identifier?])]
                        [struct ctx:var^ ([x^ identifier?])]
                        [struct ctx:skolem ([x^ identifier?])]
                        [struct ctx:assump ([x identifier?] [t τ?])]
                        [struct ctx:solution ([x^ identifier?] [t τ?])]
-                       [struct class:info ([var identifier?] [method-table immutable-free-id-table?])]
-                       [struct class:instance ([class class:info?] [t τ?] [dict-id identifier?])])
-         τ? τ:-> τ:->? τ:->* τ=? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf! generalize inst
-         τ<:/full! τ<:/elaborate! τ<:! τ-inst-l! τ-inst-r!
+                       [struct class:info ([var identifier?]
+                                           [method-table immutable-free-id-table?]
+                                           [superclasses (listof constr?)])]
+                       [struct class:instance ([class class:info?] [t τ?] [dict-expr syntax?])])
+         τ? τ:-> τ:->? τ:->* τ=? constr? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf!
+         generalize inst τ<:/full! τ<:/elaborate! τ<:! τ-inst-l! τ-inst-r!
          ctx-elem? ctx? ctx-elem=? ctx-member? ctx-remove
          ctx-find-solution current-ctx-solution apply-subst apply-current-subst
          current-type-context modify-type-context
@@ -52,7 +53,7 @@
 (struct τ:∀ (x t) #:prefab)
 (struct τ:qual (constr t) #:prefab)
 
-(struct constr:class (class-id t) #:prefab)
+;(struct constr:class (class-id t) #:prefab)
 
 (define τ:-> (τ:con #'-> #f))
 
@@ -80,12 +81,7 @@
    [[(τ:∀ x a) (τ:∀ y b)] (and (free-identifier=? x y) (τ=? a b))]
    [[_ _] #f]))
 
-(define (constr? x) (constr:class? x))
-(define/contract constr=?
-  (-> constr? constr? boolean?)
-  (match-lambda**
-   [[(constr:class class-a t-a) (constr:class class-b t-b)]
-    (and (free-identifier=? class-a class-b) (τ=? t-a t-b))]))
+(define (constr? x) (τ? x)) ; TODO: change this when we add kinds to check that x has kind Constraint
 
 (define/contract τ-mono?
   (-> τ? boolean?)
@@ -96,7 +92,7 @@
     [(τ:con _ _) #t]
     [(τ:app a b) (and (τ-mono? a) (τ-mono? b))]
     [(τ:∀ _ _) #f]
-    [(τ:qual (constr:class _ a) b) (and (τ-mono? a) (τ-mono? b))]))
+    [(τ:qual a b) (and (τ-mono? a) (τ-mono? b))]))
 
 (define/contract τ-vars^
   (-> τ? (listof identifier?))
@@ -107,7 +103,7 @@
     [(τ:con _ _) '()]
     [(τ:app a b) (remove-duplicates (append (τ-vars^ a) (τ-vars^ b)) free-identifier=?)]
     [(τ:∀ _ t) (τ-vars^ t)]
-    [(τ:qual (constr:class _ a) b)
+    [(τ:qual a b)
      (remove-duplicates (append (τ-vars^ a) (τ-vars^ b)) free-identifier=?)]))
 
 (define/contract (τ->string t)
@@ -137,17 +133,7 @@
                         [t t])
        (match t
          [(τ:qual constr t) (flatten-qual (cons constr constrs) t)]
-         [other `(=> ,(map constr->datum (reverse constrs)) ,(τ->datum t))]))]))
-
-(define/contract (constr->string constr)
-  (-> constr? string?)
-  (format "~a" (constr->datum constr)))
-
-(define/contract (constr->datum constr)
-  (-> constr? any/c)
-  (match constr
-    [(constr:class id t)
-     `(,(syntax-e id) ,(τ->datum t))]))
+         [other `(=> ,(map τ->datum (reverse constrs)) ,(τ->datum t))]))]))
 
 (struct ctx:var (x) #:prefab)
 (struct ctx:var^ (x^) #:prefab)
@@ -200,7 +186,7 @@
     [(τ:con _ _) (void)]
     [(τ:app a b) (τ-wf! ctx a) (τ-wf! ctx b)]
     [(τ:∀ x t) (τ-wf! (snoc ctx (ctx:var x)) t)]
-    [(τ:qual (constr:class _ a) b) (τ-wf! ctx a) (τ-wf! ctx b)]))
+    [(τ:qual a b) (τ-wf! ctx a) (τ-wf! ctx b)]))
 (define/contract (current-τ-wf! t)
   (-> τ? void?)
   (τ-wf! (current-type-context) t))
@@ -215,8 +201,7 @@
     [(τ:con _ _) t]
     [(τ:app a b) (τ:app (apply-subst ctx a) (apply-subst ctx b))]
     [(τ:∀ x t) (τ:∀ x (apply-subst ctx t))]
-    [(τ:qual (constr:class id a) b) (τ:qual (constr:class id (apply-subst ctx a))
-                                            (apply-subst ctx b))]))
+    [(τ:qual a b) (τ:qual (apply-subst ctx a) (apply-subst ctx b))]))
 (define (apply-current-subst t)
   (apply-subst (current-type-context) t))
 
@@ -236,15 +221,23 @@
     [(τ:con _ _) t]
     [(τ:app a b) (τ:app (inst a x s) (inst b x s))]
     [(τ:∀ v t*) (τ:∀ v (inst t* x s))]
-    [(τ:qual (constr:class id a) b) (τ:qual (constr:class id (inst a x s)) (inst b x s))]))
+    [(τ:qual a b) (τ:qual (inst a x s) (inst b x s))]))
 
 (define/contract current-type-context (parameter/c ctx?) (make-parameter '()))
 (define/contract (modify-type-context f)
   (-> (-> ctx? ctx?) void?)
   (current-type-context (f (current-type-context))))
 
-(struct class:info (var method-table) #:transparent)
-(struct class:instance (class t dict-id) #:transparent)
+(struct class:info (var method-table superclasses) #:transparent
+  #:property prop:procedure
+  (λ (info stx)
+    ((make-type-variable-transformer
+      (τ:con (syntax-parse stx
+               [id:id #'id]
+               [(id:id . _) #'id])
+             #f))
+     stx)))
+(struct class:instance (class t dict-expr) #:transparent)
 
 (define global-class-instances (make-gvector))
 (define/contract (register-global-class-instance! instance)
@@ -416,8 +409,8 @@
      #f]))
 
 (define/contract (lookup-instance! constr #:src src)
-  (-> constr:class? #:src syntax? (values class:instance? (listof constr?)))
-  (match-define (constr:class class-id (app apply-current-subst t)) constr)
+  (-> constr? #:src syntax? (values class:instance? (listof constr?)))
+  (match-define (τ:app (τ:con class-id _) (app apply-current-subst t)) constr)
   (define class (syntax-local-value class-id)) ; FIXME: handle when this isn’t a class:info
   (apply values
          (or (for/or ([instance (in-list (current-instances-of-class class))])
@@ -426,7 +419,7 @@
                    (if constrs (list instance constrs)
                        (begin (current-type-context old-type-context) #f)))))
              (raise-syntax-error 'typechecker
-                                 (~a "could not deduce " (constr->string (constr:class class-id t)))
+                                 (~a "could not deduce " (τ->string (apply-current-subst constr)))
                                  src))))
 
 ;; ---------------------------------------------------------------------------------------------------

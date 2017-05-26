@@ -131,10 +131,9 @@
                                   [nil (join yss)]
                                   [{z :: zs} {z :: (join {zs :: yss})}])]))])
 
-(def sequence : (∀ [f a] (=> [(Functor f) (Applicative f)] {(List (f a)) -> (f (List a))}))
+(def sequence : (∀ [f a] (=> [(Applicative f)] {(List (f a)) -> (f (List a))}))
   (λ [xs] (case xs [nil (pure nil)]
                    [{y :: ys} {:: <$> y <*> (sequence ys)}])))
 
-(def traverse : (∀ [f a b] (=> [(Functor f) (Applicative f)]
-                               {{a -> (f b)} -> (List a) -> (f (List b))}))
+(def traverse : (∀ [f a b] (=> [(Applicative f)] {{a -> (f b)} -> (List a) -> (f (List b))}))
   (λ [f xs] (sequence (map f xs))))

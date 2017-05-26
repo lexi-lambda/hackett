@@ -11,13 +11,13 @@
 
 (provide (class Monad) =<< >>= <- do ap)
 
-(class (Monad m)
+(class [(Applicative m)] => (Monad m)
   [join : (∀ [a] {(m (m a)) -> (m a)})])
 
-(def =<< : (∀ [m a b] (=> [(Functor m) (Monad m)] {{a -> (m b)} -> (m a) -> (m b)}))
+(def =<< : (∀ [m a b] (=> [(Monad m)] {{a -> (m b)} -> (m a) -> (m b)}))
   (λ [f x] (join (map f x))))
 
-(def >>= : (∀ [m a b] (=> [(Functor m) (Monad m)] {(m a) -> {a -> (m b)} -> (m b)}))
+(def >>= : (∀ [m a b] (=> [(Monad m)] {(m a) -> {a -> (m b)} -> (m b)}))
   (flip =<<))
 
 (define-syntax (<- stx) (raise-syntax-error #f "cannot be used as an expression" stx))
@@ -32,7 +32,7 @@
    (syntax/loc #'e
      (>>= e (λ [x] (do rest ...))))])
 
-(def ap : (∀ [m a b] (=> [(Functor m) (Applicative m) (Monad m)] {(m {a -> b}) -> (m a) -> (m b)}))
+(def ap : (∀ [m a b] (=> [(Monad m)] {(m {a -> b}) -> (m a) -> (m b)}))
   (λ [mf mx] (do [f <- mf]
                  [x <- mx]
                  (pure (f x)))))
