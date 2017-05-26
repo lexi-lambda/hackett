@@ -333,4 +333,4 @@
   [(_ . e)
    (define-values [e- τ_e] (τ⇒! #'e))
    (printf ": ~a\n" (τ->string (apply-current-subst τ_e)))
-   (elaborate-dictionaries e-)])
+   #`(force- #,(elaborate-dictionaries e-))])
