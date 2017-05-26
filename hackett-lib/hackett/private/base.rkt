@@ -131,7 +131,7 @@
       [(τ:var^ x^)
        (let ([x1^ (generate-temporary x^)]
              [x2^ (generate-temporary x^)])
-         (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var x1^) (τ:var x2^))))})
+         (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^))))})
          (values (quasisyntax/loc src
                    (lazy- (#%app- (force- #,e_fn) #,(τ⇐! e_arg (τ:var^ x1^)))))
                  (τ:var^ x2^)))]
