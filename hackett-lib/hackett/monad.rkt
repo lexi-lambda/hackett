@@ -6,6 +6,7 @@
          hackett/applicative
          hackett/function
          hackett/functor
+         (only-in hackett/private/adt defn)
          hackett/private/provide
          syntax/parse/define)
 
@@ -14,8 +15,8 @@
 (class (Applicative m) => (Monad m)
   [join : (∀ [a] {(m (m a)) -> (m a)})])
 
-(def =<< : (∀ [m a b] (Monad m) => {{a -> (m b)} -> (m a) -> (m b)})
-  (λ [f x] (join (map f x))))
+(defn =<< : (∀ [m a b] (Monad m) => {{a -> (m b)} -> (m a) -> (m b)})
+  [[f x] (join (map f x))])
 
 (def >>= : (∀ [m a b] (Monad m) => {(m a) -> {a -> (m b)} -> (m b)})
   (flip =<<))
@@ -31,7 +32,7 @@
    (syntax/loc #'e
      (>>= e (λ [x] (do rest ...))))])
 
-(def ap : (∀ [m a b] (Monad m) => {(m {a -> b}) -> (m a) -> (m b)})
-  (λ [mf mx] (do [f <- mf]
-                 [x <- mx]
-                 (pure (f x)))))
+(defn ap : (∀ [m a b] (Monad m) => {(m {a -> b}) -> (m a) -> (m b)})
+  [[mf mx] (do [f <- mf]
+               [x <- mx]
+               (pure (f x)))])

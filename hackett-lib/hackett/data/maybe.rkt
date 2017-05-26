@@ -12,21 +12,21 @@
 
 (data (Maybe a) (just a) nothing)
 
-(def maybe : (∀ [a b] {b -> {a -> b} -> (Maybe a) -> b})
-  (λ [v f m] (case m [(just x) (f x)]
-                     [nothing v])))
+(defn maybe : (∀ [a b] {b -> {a -> b} -> (Maybe a) -> b})
+  [[_ f (just x)] (f x)]
+  [[v _ nothing ] v])
 
-(def from-maybe : (∀ [a b] {a -> (Maybe a) -> a})
-  (λ [v] (maybe v id)))
+(defn from-maybe : (∀ [a b] {a -> (Maybe a) -> a})
+  [[v] (maybe v id)])
 
 (instance (Functor Maybe)
-  [map (λ [f m] (case m [(just x) (just (f x))]
-                        [nothing nothing]))])
+  [map (λ* [[f (just x)] (just (f x))]
+           [[_ nothing ] nothing])])
 
 (instance (Applicative Maybe)
   [pure just]
   [<*> ap])
 
 (instance (Monad Maybe)
-  [join (λ [x] (case x [(just (just x)) (just x)]
-                       [_ nothing]))])
+  [join (λ* [[(just (just x))] (just x)]
+            [[_              ] nothing])])

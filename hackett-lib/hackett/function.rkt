@@ -1,15 +1,17 @@
 #lang hackett/private/kernel
 
+(require hackett/private/adt)
+
 (provide id compose const flip)
 
-(def id : (∀ [a] {a -> a})
-  (λ [x] x))
+(defn id : (∀ [a] {a -> a})
+  [[x] x])
 
-(def compose : (∀ [a b c] {{b -> c} -> {a -> b} -> a -> c})
-  (λ [f g x] (f (g x))))
+(defn compose : (∀ [a b c] {{b -> c} -> {a -> b} -> a -> c})
+  [[f g x] (f (g x))])
 
-(def const : (∀ [a b] {a -> b -> a})
-  (λ [x y] x))
+(defn const : (∀ [a b] {a -> b -> a})
+  [[x _] x])
 
-(def flip : (∀ [a b c] {{a -> b -> c} -> b -> a -> c})
-  (λ [f x y] (f y x)))
+(defn flip : (∀ [a b c] {{a -> b -> c} -> b -> a -> c})
+  [[f x y] (f y x)])

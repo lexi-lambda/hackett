@@ -41,7 +41,7 @@ Here’s what some Hackett code *might* eventually look like:
   nothing
   (just a))
 
-(def x : Int
+(def x : Integer
   (let ([y 3]
         [z 7])
     {y + z}))
@@ -49,13 +49,12 @@ Here’s what some Hackett code *might* eventually look like:
 (class (Show a)
   [show : {a -> String}])
 
-(instance (forall [a] (Show a) => (Show (Maybe a)))
-  (def+ show
-    [nothing  -> "nothing"]
-    [(just x) -> {"just " <> (show x)}]))
+(instance ∀ [a] (Show a) => (Show (Maybe a))
+  [show (λ* [[(just x)] {"(just " ++ (show x) ++ ")"}]
+            [[nothing ] "nothing"])])
 ```
 
-Some of the above syntax is already implemented, but most things are not.
+Most of the above syntax is already implemented, but some things are not.
 
 ## Trying Hackett
 

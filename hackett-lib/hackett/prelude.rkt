@@ -47,11 +47,11 @@
   [show : {a -> String}])
 
 (instance (Show Unit)
-  [show (λ [x] (case x [unit "unit"]))])
+  [show (λ [unit] "unit")])
 
 (instance (Show Bool)
-  [show (λ [x] (case x [true "true"]
-                       [false "false"]))])
+  [show (λ* [[true ] "true"]
+            [[false] "false"])])
 
 (instance (Show Integer)
   [show show/Integer])
@@ -60,11 +60,11 @@
   [show (λ [str] {"\"" ++ str ++ "\""})])
 
 (instance ∀ [a] (Show a) => (Show (Maybe a))
-  [show (λ [x] (case x [nothing "nothing"]
-                       [(just x) {"(just " ++ (show x) ++ ")"}]))])
+  [show (λ* [[(just x)] {"(just " ++ (show x) ++ ")"}]
+            [[nothing ] "nothing"])])
 
 (instance ∀ [a b] (Show a) (Show b) => (Show (Tuple a b))
-  [show (λ [x] (case x [(tuple a b) {"(tuple " ++ (show a) ++ " " ++ (show b) ++ ")"}]))])
+  [show (λ [(tuple a b)] {"(tuple " ++ (show a) ++ " " ++ (show b) ++ ")"})])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Eq
@@ -73,11 +73,11 @@
   [== : {a -> a -> Bool}])
 
 (instance (Eq Unit)
-  [== (λ [x y] (case x [unit (case y [unit true])]))])
+  [== (λ [unit unit] true)])
 
 (instance (Eq Bool)
-  [== (λ [x y] (case x [true y]
-                       [false (not y)]))])
+  [== (λ* [[true  y] y]
+          [[false y] (not y)])])
 
 (instance (Eq Integer)
   [== equal?/Integer])
@@ -86,15 +86,12 @@
   [== equal?/String])
 
 (instance ∀ [a] (Eq a) => (Eq (Maybe a))
-  [== (λ [x y] (case x [(just a)
-                        (case y [(just b) (== a b)]
-                                [nothing false])]
-                       [nothing
-                        (case y [(just _) false]
-                                [nothing true])]))])
+  [== (λ* [[(just a) (just b)] (== a b)]
+          [[nothing  nothing ] true]
+          [[_        _       ] false])])
 
 (instance ∀ [a b] (Eq a) (Eq b) => (Eq (Tuple a b))
-  [== (λ [x y] (case x [(tuple a b) (case y [(tuple c d) (and (== a c) (== b d))])]))])
+  [== (λ [(tuple a b) (tuple c d)] (and (== a c) (== b d)))])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; List
@@ -104,36 +101,32 @@
   nil)
 
 (instance ∀ [a] (Show a) => (Show (List a))
-  [show (λ [xs] (case xs [nil "nil"]
-                         [{y :: ys} {"{" ++ (show y) ++ " :: " ++ (show ys) ++ "}"}]))])
+  [show (λ* [[{y :: ys}] {"{" ++ (show y) ++ " :: " ++ (show ys) ++ "}"}]
+            [[nil      ] "nil"])])
 
 (instance ∀ [a] (Semigroup (List a))
-  [++ (λ [xs ys] (case xs
-                   [nil ys]
-                   [{z :: zs}
-                    {z :: {zs ++ ys}}]))])
+  [++ (λ* [[{z :: zs} ys] {z :: {zs ++ ys}}]
+          [[nil       ys] ys])])
 
 (instance ∀ [a] (Monoid (List a))
   [mempty nil])
 
 (instance (Functor List)
-  [map (λ [f x] (case x [{y :: ys} {(f y) :: (map f ys)}]
-                        [nil nil]))])
+  [map (λ* [[f {y :: ys}] {(f y) :: (map f ys)}]
+           [[_ nil      ] nil])])
 
 (instance (Applicative List)
   [pure (λ [x] {x :: nil})]
   [<*> ap])
 
 (instance (Monad List)
-  [join (λ [xss] (case xss
-                   [nil nil]
-                   [{ys :: yss} (case ys
-                                  [nil (join yss)]
-                                  [{z :: zs} {z :: (join {zs :: yss})}])]))])
+  [join (λ* [[{{z :: zs} :: yss}] {z :: (join {zs :: yss})}]
+            [[{nil       :: yss}] (join yss)]
+            [[nil               ] nil])])
 
-(def sequence : (∀ [f a] (Applicative f) => {(List (f a)) -> (f (List a))})
-  (λ [xs] (case xs [nil (pure nil)]
-                   [{y :: ys} {:: <$> y <*> (sequence ys)}])))
+(defn sequence : (∀ [f a] (Applicative f) => {(List (f a)) -> (f (List a))})
+  [[{y :: ys}] {:: <$> y <*> (sequence ys)}]
+  [[nil      ] (pure nil)])
 
-(def traverse : (∀ [f a b] (Applicative f) => {{a -> (f b)} -> (List a) -> (f (List b))})
-  (λ [f xs] (sequence (map f xs))))
+(defn traverse : (∀ [f a b] (Applicative f) => {{a -> (f b)} -> (List a) -> (f (List b))})
+  [[f xs] (sequence (map f xs))])

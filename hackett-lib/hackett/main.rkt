@@ -1,9 +1,9 @@
 #lang racket/base
 
 (require hackett/prelude
-         (only-in hackett/private/adt case* case defn _)
+         (only-in hackett/private/adt case* case λ λ* lambda lambda* defn _)
          (only-in hackett/private/class instance)
-         hackett/private/kernel
+         (except-in hackett/private/kernel λ lambda)
          hackett/private/provide)
 (provide (all-from-out hackett/prelude)
          (all-from-out hackett/private/adt)

@@ -8,21 +8,21 @@
 
 (data Bool true false)
 
-(def not : {Bool -> Bool}
-  (λ [x] (case x [true false]
-                 [false true])))
+(defn not : {Bool -> Bool}
+  [[true ] false]
+  [[false] true])
 
-(def or : {Bool -> Bool -> Bool}
-  (λ [x y] (case x [true true]
-                   [false y])))
+(defn or : {Bool -> Bool -> Bool}
+  [[true  _] true]
+  [[false y] y])
 
-(def and : {Bool -> Bool -> Bool}
-  (λ [x y] (case x [true y]
-                   [false false])))
+(defn and : {Bool -> Bool -> Bool}
+  [[true  y] y]
+  [[false _] false])
 
-(def if : (∀ [a] {Bool -> a -> a -> a})
-  (λ [b x y] (case b [true x]
-                     [false y])))
+(defn if : (∀ [a] {Bool -> a -> a -> a})
+  [[true  x _] x]
+  [[false _ y] y])
 
-(def bool : (∀ [a] {a -> a -> Bool -> a})
-  (λ [x y b] (if b x y)))
+(defn bool : (∀ [a] {a -> a -> Bool -> a})
+  [[x y b] (if b x y)])

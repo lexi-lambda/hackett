@@ -15,10 +15,11 @@
          syntax/parse/define
 
          (except-in hackett/private/base @%app)
-         (only-in hackett/private/kernel λ [#%app @%app]))
+         (only-in hackett/private/kernel [λ plain-λ] [#%app @%app]))
 
 (provide (for-syntax data-constructor-spec)
-         data case* case defn _)
+         (rename-out [λ lambda] [λ* lambda*])
+         data case* case λ λ* defn _)
 
 (begin-for-syntax
   (define-splicing-syntax-class type-constructor-spec
@@ -393,19 +394,34 @@
      (case* [val]
        [[pat] body] ...))])
 
+(define-syntax-parser λ
+  [(_ [pat:pat ...+] e:expr)
+   (syntax/loc this-syntax
+     (λ* [[pat ...] e]))])
+
+(begin-for-syntax
+  (define-splicing-syntax-class λ*-clauses
+    #:description "a pattern-matching clause"
+    #:attributes [[arg-id 1] [clause 1]]
+    [pattern {~seq {~and clause [[pat:pat ...+] e:expr]} ...+}
+             #:do [(define num-pats (length (first (attribute pat))))]
+             #:fail-when (ormap #{and (not (= %1 num-pats)) %2}
+                                (rest (map length (attribute pat)))
+                                (rest (attribute clause)))
+                         "all clauses must have the same number of patterns"
+             #:with [arg-id ...] (generate-temporaries (first (attribute pat)))]))
+
+(define-syntax-parser λ*
+  [(_ clauses:λ*-clauses)
+   (syntax/loc this-syntax
+     (plain-λ [clauses.arg-id ...]
+       (case* [clauses.arg-id ...]
+          clauses.clause ...)))])
+
 (define-syntax-parser defn
   #:literals [:]
-  [(_ id:id {~optional {~seq : t:type}}
-      {~describe "a pattern-matching clause"
-                 {~and clause [[pat:pat ...+] e:expr]}} ...+)
-   #:do [(define num-pats (length (first (attribute pat))))]
-   #:fail-when (ormap #{and (not (= %1 num-pats)) %2}
-                      (rest (map length (attribute pat)))
-                      (rest (attribute clause)))
-               "all clauses must have the same number of patterns"
-   #:with [arg-id ...] (generate-temporaries (first (attribute pat)))
-   (template
+  [(_ id:id {~optional {~seq : t:type}} clauses:λ*-clauses)
+   (quasitemplate
     (def id {?? {?@ : t}}
-      (λ [arg-id ...]
-        (case* [arg-id ...]
-          clause ...))))])
+      #,(syntax/loc this-syntax
+          (λ* clauses.clause ...))))])
