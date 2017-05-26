@@ -59,11 +59,11 @@
 (instance (Show String)
   [show (λ [str] {"\"" ++ str ++ "\""})])
 
-(instance ∀ [a] [(Show a)] => (Show (Maybe a))
+(instance ∀ [a] (Show a) => (Show (Maybe a))
   [show (λ [x] (case x [nothing "nothing"]
                        [(just x) {"(just " ++ (show x) ++ ")"}]))])
 
-(instance ∀ [a b] [(Show a) (Show b)] => (Show (Tuple a b))
+(instance ∀ [a b] (Show a) (Show b) => (Show (Tuple a b))
   [show (λ [x] (case x [(tuple a b) {"(tuple " ++ (show a) ++ " " ++ (show b) ++ ")"}]))])
 
 ;; ---------------------------------------------------------------------------------------------------
@@ -85,7 +85,7 @@
 (instance (Eq String)
   [== equal?/String])
 
-(instance ∀ [a] [(Eq a)] => (Eq (Maybe a))
+(instance ∀ [a] (Eq a) => (Eq (Maybe a))
   [== (λ [x y] (case x [(just a)
                         (case y [(just b) (== a b)]
                                 [nothing false])]
@@ -93,7 +93,7 @@
                         (case y [(just _) false]
                                 [nothing true])]))])
 
-(instance ∀ [a b] [(Eq a) (Eq b)] => (Eq (Tuple a b))
+(instance ∀ [a b] (Eq a) (Eq b) => (Eq (Tuple a b))
   [== (λ [x y] (case x [(tuple a b) (case y [(tuple c d) (and (== a c) (== b d))])]))])
 
 ;; ---------------------------------------------------------------------------------------------------
@@ -103,7 +103,7 @@
   {a :: (List a)} #:fixity right
   nil)
 
-(instance ∀ [a] [(Show a)] => (Show (List a))
+(instance ∀ [a] (Show a) => (Show (List a))
   [show (λ [xs] (case xs [nil "nil"]
                          [{y :: ys} {"{" ++ (show y) ++ " :: " ++ (show ys) ++ "}"}]))])
 
@@ -131,9 +131,9 @@
                                   [nil (join yss)]
                                   [{z :: zs} {z :: (join {zs :: yss})}])]))])
 
-(def sequence : (∀ [f a] (=> [(Applicative f)] {(List (f a)) -> (f (List a))}))
+(def sequence : (∀ [f a] (Applicative f) => {(List (f a)) -> (f (List a))})
   (λ [xs] (case xs [nil (pure nil)]
                    [{y :: ys} {:: <$> y <*> (sequence ys)}])))
 
-(def traverse : (∀ [f a b] (=> [(Applicative f)] {{a -> (f b)} -> (List a) -> (f (List b))}))
+(def traverse : (∀ [f a b] (Applicative f) => {{a -> (f b)} -> (List a) -> (f (List b))})
   (λ [f xs] (sequence (map f xs))))

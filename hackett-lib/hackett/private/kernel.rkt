@@ -34,13 +34,18 @@
                (λ [xs ...] e))))])
 
 (define-syntax-parser ∀
+  #:literals [=>]
   [(_ [x:id] t)
    (syntax/loc this-syntax
      (∀1 x t))]
   [(_ [x:id xs:id ...+] t)
    (quasisyntax/loc this-syntax
      (∀1 x #,(syntax/loc this-syntax
-               (∀ [xs ...] t))))])
+               (∀ [xs ...] t))))]
+  [(_ [x:id ...+] constr ... => t)
+   (quasisyntax/loc this-syntax
+     (∀ [x ...] #,(syntax/loc this-syntax
+                    (=> [constr ...] t))))])
 
 (define-syntax-parser =>
   [(_ [x] t)

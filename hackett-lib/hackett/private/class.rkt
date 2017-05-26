@@ -25,7 +25,7 @@
 
 (define-syntax-parser class
   #:literals [: => let-values #%plain-app]
-  [(_ {~optional {~seq [constr ...] =>/use:=>}}
+  [(_ {~optional {~seq constr ... =>/use:=>}}
       (name:id var-id:id)
       [method-id:id
        {~or {~once {~seq : bare-t}}
@@ -88,7 +88,7 @@
 (define-syntax-parser instance
   #:literals [∀ =>]
   [(_ {~optional {~seq ∀/use:∀ [var-id:id ...]} #:defaults ([[var-id 1] '()])}
-      {~optional {~seq [constr ...] =>/use:=>} #:defaults ([[constr 1] '()])}
+      {~optional {~seq constr ... =>/use:=>} #:defaults ([[constr 1] '()])}
       (class:class-id bare-t)
       [method-id:id impl:expr] ...)
 

@@ -5,6 +5,6 @@
 
 (provide (class Applicative))
 
-(class [(Functor f)] => (Applicative f)
+(class (Functor f) => (Applicative f)
   [pure : (∀ [a] {a -> (f a)})]
   [<*> : (∀ [a b] {(f {a -> b}) -> (f a) -> (f b)})])

@@ -53,8 +53,6 @@
 (struct τ:∀ (x t) #:prefab)
 (struct τ:qual (constr t) #:prefab)
 
-;(struct constr:class (class-id t) #:prefab)
-
 (define τ:-> (τ:con #'-> #f))
 
 (define (mk-τ:-> a b) (τ:app (τ:app τ:-> a) b))
