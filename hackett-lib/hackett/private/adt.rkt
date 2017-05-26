@@ -121,8 +121,9 @@
   (struct pat-var pat-base (id) #:transparent)
   (struct pat-hole pat-base () #:transparent)
   (struct pat-con pat-base (constructor pats) #:transparent)
+  (struct pat-str pat-base (str) #:transparent)
 
-  (define (pat? x) (or (pat-var? x) (pat-hole? x) (pat-con? x)))
+  (define (pat? x) (or (pat-var? x) (pat-hole? x) (pat-con? x) (pat-str? x)))
 
   (define-syntax-class pat
     #:description "a pattern"
@@ -189,6 +190,9 @@
              #:attr disappeared-uses (list (syntax-local-introduce this-syntax))]
     [pattern id:id
              #:attr pat (pat-var this-syntax #'id)
+             #:attr disappeared-uses '()]
+    [pattern str:str
+             #:attr pat (pat-str this-syntax #'str)
              #:attr disappeared-uses '()])
 
   (define/contract (pat⇒! pat)
@@ -208,6 +212,8 @@
        (let ([a^ (generate-temporary)])
          (modify-type-context #{snoc % (ctx:var^ a^)})
          (values (τ:var^ a^) '() #{values #'_ %}))]
+      [(pat-str _ str)
+       (values (τ:con #'String #f) '() #{values str %})]
       [(pat-con _ con pats)
        (let*-values ([(τs_args τ_result) (data-constructor-args/result! con)]
                      [(assumps mk-pats) (pats⇐! pats τs_args)])
@@ -409,7 +415,9 @@
                                 (rest (map length (attribute pat)))
                                 (rest (attribute clause)))
                          "all clauses must have the same number of patterns"
-             #:with [arg-id ...] (generate-temporaries (first (attribute pat)))]))
+             #:with [arg-id ...] (map #{datum->syntax %1 (syntax-e %1) %2}
+                                      (generate-temporaries (first (attribute pat)))
+                                      (first (attribute pat)))]))
 
 (define-syntax-parser λ*
   [(_ clauses:λ*-clauses)
