@@ -1,48 +1,17 @@
 #lang racket/base
 
-(require racket/require
-         hackett/private/util/require
-
-         (for-syntax (multi-in racket [base provide-transform]))
+(require hackett/private/util/require
          (postfix-in - (combine-in racket/base
                                    racket/match
                                    racket/promise
                                    racket/string))
-         syntax/parse/define
-
-         (for-syntax hackett/private/util/stx)
-         (except-in hackett/private/base @%app)
-         (only-in hackett/private/kernel [#%app @%app])
-         hackett/private/prim/base
-         hackett/private/prim/io)
+         (except-in hackett/private/base)
+         hackett/private/prim/type
+         hackett/private/prim/type-provide)
 
 ;; ---------------------------------------------------------------------------------------------------
 
-; use the right #%app when type transforming
-(define-syntax (#%app stx)
-  (syntax-parse stx
-    [(_ . more)
-     #`(#,(if (type-transforming?) #'@%app #'#%app-)
-        . more)]))
-
-(define-syntax typed-out
-  (make-provide-pre-transformer
-   (λ (stx modes)
-     (syntax-parse stx
-       #:literals [:]
-       [(_ [id:id : t-expr:type] ...)
-        #:with [id* ...] (generate-temporaries (attribute id))
-        #:with [t ...] (map preservable-property->expression (attribute t-expr.τ))
-        #:do [(for-each syntax-local-lift-module-end-declaration
-                        (syntax->list
-                         #'((define-syntax id* (make-typed-var-transformer #'id t)) ...)))]
-        (pre-expand-export #'(rename-out [id* id] ...) modes)]))))
-
-;; ---------------------------------------------------------------------------------------------------
-
-(provide main typed-out
-         (rename-out [#%app type-#%app])
-         (typed-out
+(provide (typed-out
           [+ : {Integer -> Integer -> Integer}]
           [- : {Integer -> Integer -> Integer}]
           [* : {Integer -> Integer -> Integer}]
@@ -98,11 +67,6 @@
 ;; ---------------------------------------------------------------------------------------------------
 
 (define ((seq x) y) (force- x) y)
-
-(define-syntax-parser main
-  [(_ e:expr)
-   #'(module+ main
-       (void- (with-dictionary-elaboration (force- (@%app unsafe-run-io! e)))))])
 
 (define (print str)
   (io (λ- (rw)

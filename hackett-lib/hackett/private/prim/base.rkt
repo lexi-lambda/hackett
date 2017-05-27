@@ -8,27 +8,23 @@
          (except-in hackett/private/adt data)
          (except-in hackett/private/class class)
          hackett/private/provide
+         hackett/private/prim/op
+         hackett/private/prim/type
          syntax/parse/define)
 
-(provide (data Unit) (data Bool) (data Tuple) (data Maybe) (data List)
-         not or and if fst snd
+(provide not or and if fst snd unsafe-run-io!
 
          id compose const flip
+
+         (class Eq) (class Show)
+         (class Semigroup) (class Monoid)
 
          (class Functor) (rename-out [map <$>]) <&> <$ $> ignore
          (class Applicative) sequence traverse
          (class Monad) =<< >>= do ap)
 
 ;; ---------------------------------------------------------------------------------------------------
-;; datatypes
-
-(data Unit unit)
-(data Bool true false)
-(data (Tuple a b) (tuple a b))
-(data (Maybe a) (just a) nothing)
-(data (List a)
-  {a :: (List a)} #:fixity right
-  nil)
+;; basic operations
 
 (defn not : {Bool -> Bool}
   [[true ] false]
@@ -52,6 +48,9 @@
 (defn snd : (∀ [a b] {(Tuple a b) -> b})
   [[(tuple _ x)] x])
 
+(defn unsafe-run-io! : (∀ [a] {(IO a) -> a})
+  [[(io f)] (snd (f real-world))])
+
 ;; ---------------------------------------------------------------------------------------------------
 ;; function combinators
 
@@ -66,6 +65,86 @@
 
 (defn flip : (∀ [a b c] {{a -> b -> c} -> b -> a -> c})
   [[f x y] (f y x)])
+
+;; ---------------------------------------------------------------------------------------------------
+;; Show
+
+(class (Show a)
+  [show : {a -> String}])
+
+(instance (Show Unit)
+  [show (λ [unit] "unit")])
+
+(instance (Show Bool)
+  [show (λ* [[true ] "true"]
+            [[false] "false"])])
+
+(instance (Show Integer)
+  [show show/Integer])
+
+(instance (Show String)
+  [show (λ [str] {"\"" ++ str ++ "\""})])
+
+(instance (∀ [a] (Show a) => (Show (Maybe a)))
+  [show (λ* [[(just x)] {"(just " ++ (show x) ++ ")"}]
+            [[nothing ] "nothing"])])
+
+(instance (∀ [a b] (Show a) (Show b) => (Show (Tuple a b)))
+  [show (λ [(tuple a b)] {"(tuple " ++ (show a) ++ " " ++ (show b) ++ ")"})])
+
+(instance (∀ [a] (Show a) => (Show (List a)))
+  [show (λ* [[{y :: ys}] {"{" ++ (show y) ++ " :: " ++ (show ys) ++ "}"}]
+            [[nil      ] "nil"])])
+
+;; ---------------------------------------------------------------------------------------------------
+;; Eq
+
+(class (Eq a)
+  [== : {a -> a -> Bool}])
+
+(instance (Eq Unit)
+  [== (λ [unit unit] true)])
+
+(instance (Eq Bool)
+  [== (λ* [[true  y] y]
+          [[false y] (not y)])])
+
+(instance (Eq Integer)
+  [== equal?/Integer])
+
+(instance (Eq String)
+  [== equal?/String])
+
+(instance (∀ [a] (Eq a) => (Eq (Maybe a)))
+  [== (λ* [[(just a) (just b)] (== a b)]
+          [[nothing  nothing ] true]
+          [[_        _       ] false])])
+
+(instance (∀ [a b] (Eq a) (Eq b) => (Eq (Tuple a b)))
+  [== (λ [(tuple a b) (tuple c d)] (and (== a c) (== b d)))])
+
+;; ---------------------------------------------------------------------------------------------------
+;; Semigroup / Monoid
+
+(class (Semigroup a)
+  [++ : {a -> a -> a}
+      #:fixity right])
+
+(instance (Semigroup String)
+  [++ append/String])
+
+(instance (∀ [a] (Semigroup (List a)))
+  [++ (λ* [[{z :: zs} ys] {z :: {zs ++ ys}}]
+          [[nil       ys] ys])])
+
+(class (Semigroup a) => (Monoid a)
+  [mempty : a])
+
+(instance (Monoid String)
+  [mempty ""])
+
+(instance (∀ [a] (Monoid (List a)))
+  [mempty nil])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Functor
@@ -93,6 +172,12 @@
   [map (λ* [[f {y :: ys}] {(f y) :: (map f ys)}]
            [[_ nil      ] nil])])
 
+(instance (Functor IO)
+  [map (λ [f (io mx)]
+         (io (λ [rw]
+               (case (mx rw)
+                 [(tuple rw* a) (tuple rw* (f a))]))))])
+
 ;; ---------------------------------------------------------------------------------------------------
 ;; Applicative
 
@@ -114,6 +199,10 @@
 
 (instance (Applicative List)
   [pure (λ [x] {x :: nil})]
+  [<*> ap])
+
+(instance (Applicative IO)
+  [pure (λ [x] (io (λ [rw] (tuple rw x))))]
   [<*> ap])
 
 ;; ---------------------------------------------------------------------------------------------------
@@ -152,3 +241,12 @@
   [join (λ* [[{{z :: zs} :: yss}] {z :: (join {zs :: yss})}]
             [[{nil       :: yss}] (join yss)]
             [[nil               ] nil])])
+
+(instance (Monad IO)
+  [join (λ [(io outer)]
+          (io (λ [rw]
+                (case (outer rw)
+                  [(tuple rw* m-inner)
+                   (case m-inner
+                     [(io inner)
+                      (inner rw*)])]))))])

@@ -25,8 +25,8 @@
 (module untyped racket/base
   (require (prefix-in hackett: (combine-in hackett (submod ".." shared)))
            (only-in hackett : -> Integer String IO Unit)
-           (only-in hackett/private/prim [type-#%app #%app] typed-out)
-           (only-in hackett/private/prim/io io)
+           hackett/private/prim/type-provide
+           (only-in hackett/private/prim/type io)
            racket/string
            racket/promise
            net/url-structs
