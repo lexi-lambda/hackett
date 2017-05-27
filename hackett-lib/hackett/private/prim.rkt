@@ -59,6 +59,7 @@
           [>= : {Integer -> Integer -> Bool}]
           [equal?/String : {String -> String -> Bool}]
           [append/String : {String -> String -> String}]
+          [string-length : {String -> Integer}]
           [string-split : {String -> String -> (List String)}]
           [seq : (∀ a (∀ b b))]
           [print : {String -> (IO Unit)}]
@@ -69,7 +70,7 @@
 
 (define list->List
   (match-lambda-
-    [(cons x xs) (:: x (list->List xs))]
+    [(cons x xs) ((:: x) (list->List xs))]
     ['()         nil]))
 
 ;; ---------------------------------------------------------------------------------------------------
@@ -94,6 +95,7 @@
 
 (define ((equal?/String x) y) (string=?- (force- x) (force- y)))
 (define ((append/String x) y) (string-append- (force- x) (force- y)))
+(define (string-length x) (string-length- (force- x)))
 (define ((string-split x) y) (list->List (string-split- (force- y) (force- x))))
 
 ;; ---------------------------------------------------------------------------------------------------

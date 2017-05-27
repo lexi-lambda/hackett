@@ -31,7 +31,7 @@
 
          IO main seq print println error! undefined!
          + - * quotient! remainder! < > <= >=
-         string-split
+         string-length string-split
 
          (class Show)
          (class Eq))
