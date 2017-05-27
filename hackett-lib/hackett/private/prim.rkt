@@ -60,6 +60,7 @@
           [equal?/String : {String -> String -> Bool}]
           [append/String : {String -> String -> String}]
           [string-split : {String -> String -> (List String)}]
+          [seq : (∀ a (∀ b b))]
           [print : {String -> (IO Unit)}]
           [error! : (∀ a {String -> a})]))
 
@@ -96,6 +97,8 @@
 (define ((string-split x) y) (list->List (string-split- (force- y) (force- x))))
 
 ;; ---------------------------------------------------------------------------------------------------
+
+(define ((seq x) y) (force- x) y)
 
 (define-syntax-parser main
   [(_ e:expr)

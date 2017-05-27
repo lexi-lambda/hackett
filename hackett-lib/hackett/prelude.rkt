@@ -29,7 +29,7 @@
          (all-from-out hackett/monoid)
          (all-from-out hackett/semigroup)
 
-         IO main print error! undefined!
+         IO main seq print println error! undefined!
          + - * quotient! remainder! < > <= >=
          string-split
 
@@ -40,6 +40,10 @@
 
 (def undefined! : (∀ [a] a)
   (error! "undefined!"))
+
+(defn println : {String -> (IO Unit)}
+  [[str] (do (print str)
+             (print "\n"))])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Show
