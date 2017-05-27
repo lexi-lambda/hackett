@@ -390,7 +390,8 @@
    ; Finally, we can actually emit the result syntax, using racket/match.
    #:with [match-pat- ...] match-pats-
    #:with [body- ...] bodies-
-   (~> #'(match*- [val- ...] [match-pat- body-] ...)
+   (~> (syntax/loc this-syntax
+         (match*- [val- ...] [match-pat- body-] ...))
        (attach-type t_result)
        (syntax-property 'disappeared-use (attribute clause.pat.disappeared-uses)))])
 
@@ -421,10 +422,11 @@
 
 (define-syntax-parser λ*
   [(_ clauses:λ*-clauses)
-   (syntax/loc this-syntax
+   (quasisyntax/loc this-syntax
      (plain-λ [clauses.arg-id ...]
-       (case* [clauses.arg-id ...]
-          clauses.clause ...)))])
+       #,(syntax/loc this-syntax
+           (case* [clauses.arg-id ...]
+             clauses.clause ...))))])
 
 (define-syntax-parser defn
   #:literals [:]
