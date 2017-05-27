@@ -1,11 +1,8 @@
 #lang hackett/private/kernel
 
-(require hackett/data/tuple
-         hackett/functor
-         hackett/applicative
-         hackett/monad
-         (except-in hackett/private/adt data)
+(require (except-in hackett/private/adt data)
          (except-in hackett/private/class class)
+         hackett/private/prim/base
          hackett/private/provide)
 
 (provide (data IO) Real-World unsafe-run-io!)

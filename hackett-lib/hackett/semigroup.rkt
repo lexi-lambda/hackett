@@ -2,8 +2,8 @@
 
 (require (except-in hackett/private/adt data)
          (except-in hackett/private/class class)
-         hackett/data/list
          (only-in hackett/private/prim append/String)
+         hackett/data/list
          hackett/private/provide)
 
 (provide (class Semigroup))

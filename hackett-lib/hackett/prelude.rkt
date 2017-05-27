@@ -1,35 +1,34 @@
 #lang hackett/private/kernel
 
-(require (only-in racket/base module all-from-out except-in)
-         hackett/applicative
-         hackett/data/bool
-         hackett/data/list
-         hackett/data/maybe
-         hackett/data/tuple
-         hackett/data/unit
-         hackett/function
-         hackett/functor
-         hackett/monad
-         hackett/monoid
-         hackett/semigroup
+(require (only-in racket/base all-from-out)
+
          (except-in hackett/private/adt data)
          (except-in hackett/private/class class)
+
+         hackett/data/list
+         hackett/data/maybe
+         hackett/monoid
+         hackett/semigroup
+
          hackett/private/prim
          hackett/private/provide)
 
-(provide (all-from-out hackett/applicative)
-         (all-from-out hackett/data/bool)
-         (all-from-out hackett/data/list)
+(provide (all-from-out hackett/data/list)
          (all-from-out hackett/data/maybe)
-         (all-from-out hackett/data/tuple)
-         (all-from-out hackett/data/unit)
-         (all-from-out hackett/function)
-         (all-from-out hackett/functor)
-         (all-from-out hackett/monad)
          (all-from-out hackett/monoid)
          (all-from-out hackett/semigroup)
 
-         IO main seq print println error! undefined!
+         (data Unit) (data Bool) (data Tuple) (data Maybe) (data List)
+         not or and if fst snd
+
+         id compose const flip
+
+         (class Functor) (rename-out [map <$>]) <&> <$ $> ignore
+         (class Applicative) sequence traverse
+         (class Monad) =<< >>= do ap
+
+         seq error! undefined!
+         IO main print println
          + - * quotient! remainder! < > <= >=
          string-length string-split
 

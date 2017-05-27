@@ -1,30 +1,29 @@
 #lang hackett/private/kernel
 
 (require (except-in hackett/private/adt data)
-         (except-in hackett/private/class class)
-         hackett/functor
-         hackett/applicative
-         hackett/monad
+         hackett/data/maybe
+         hackett/private/prim
          hackett/private/provide)
 
-(provide (data List) sequence traverse)
+(provide (data List) head tail head! tail! zip-with)
 
-(data (List a)
-  {a :: (List a)} #:fixity right
-  nil)
+(defn head : (∀ [a] {(List a) -> (Maybe a)})
+  [[{x :: _}] (just x)]
+  [[nil     ] nothing])
 
-(instance (Functor List)
-  [map (λ* [[f {y :: ys}] {(f y) :: (map f ys)}]
-           [[_ nil      ] nil])])
+(defn tail : (∀ [a] {(List a) -> (Maybe (List a))})
+  [[{_ :: xs}] (just xs)]
+  [[nil      ] nothing])
 
-(instance (Applicative List)
-  [pure (λ [x] {x :: nil})]
-  [<*> ap])
+(defn head! : (∀ [a] {(List a) -> a})
+  [[xs] (from-maybe (error! "head!: empty list") (head xs))])
 
-(instance (Monad List)
-  [join (λ* [[{{z :: zs} :: yss}] {z :: (join {zs :: yss})}]
-            [[{nil       :: yss}] (join yss)]
-            [[nil               ] nil])])
+(defn tail! : (∀ [a] {(List a) -> (List a)})
+  [[xs] (from-maybe (error! "tail!: empty list") (tail xs))])
+
+(defn zip-with : (∀ [a b c] {{a -> b -> c} -> (List a) -> (List b) -> (List c)})
+  [[f {x :: xs} {y :: ys}] {(f x y) :: (zip-with f xs ys)}]
+  [[_ _         _        ] nil])
 
 (defn sequence : (∀ [f a] (Applicative f) => {(List (f a)) -> (f (List a))})
   [[{y :: ys}] {:: <$> y <*> (sequence ys)}]

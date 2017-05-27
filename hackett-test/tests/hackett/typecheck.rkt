@@ -38,11 +38,7 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
-(require hackett/data/bool
-         hackett/data/maybe
-         hackett/data/tuple
-         hackett/function
-         (submod "." assertions))
+(require (submod "." assertions))
 
 (typecheck-succeed unit)
 (typecheck-succeed (: unit Unit))
@@ -81,13 +77,6 @@
 (typecheck-fail (: (tuple unit unit) (Tuple Integer Integer)))
 (typecheck-fail (: (tuple unit unit) (Tuple Unit Integer)))
 (typecheck-fail (: (tuple unit unit) (Tuple Integer Unit)))
-
-(typecheck-succeed (tuple-cata (λ [x y] x) (tuple unit 1)))
-(typecheck-succeed (: (tuple-cata (λ [x y] x) (tuple unit 1)) Unit))
-(typecheck-succeed (tuple-cata (λ [x y] y) (tuple unit 1)))
-(typecheck-succeed (: (tuple-cata (λ [x y] y) (tuple unit 1)) Integer))
-(typecheck-succeed (tuple-cata + (tuple 1 1)))
-(typecheck-succeed (: (tuple-cata + (tuple 1 1)) Integer))
 
 (typecheck-succeed (: (λ [x] x) (∀ [a] {a -> a})))
 (typecheck-fail (: (λ [x] 1) (∀ [a] {a -> a})))
