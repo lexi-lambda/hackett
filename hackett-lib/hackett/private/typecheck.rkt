@@ -1,7 +1,6 @@
 #lang curly-fn racket/base
 
-(require (for-template racket/base
-                       hackett/private/delay-expansion)
+(require (for-template racket/base)
          (for-syntax racket/base
                      syntax/parse
                      syntax/transformer)
