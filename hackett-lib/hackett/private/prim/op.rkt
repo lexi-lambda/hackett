@@ -2,6 +2,7 @@
 
 (require hackett/private/util/require
          (postfix-in - (combine-in racket/base
+                                   racket/flonum
                                    racket/match
                                    racket/promise
                                    racket/string))
@@ -23,6 +24,17 @@
           [> : {Integer -> Integer -> Bool}]
           [<= : {Integer -> Integer -> Bool}]
           [>= : {Integer -> Integer -> Bool}]
+          [d+ : {Double -> Double -> Double}]
+          [d- : {Double -> Double -> Double}]
+          [d* : {Double -> Double -> Double}]
+          [d/ : {Double -> Double -> Double}]
+          [show/Double : {Double -> String}]
+          [equal?/Double : {Double -> Double -> Bool}]
+          [d< : {Double -> Double -> Bool}]
+          [d> : {Double -> Double -> Bool}]
+          [d<= : {Double -> Double -> Bool}]
+          [d>= : {Double -> Double -> Bool}]
+          [integer->double : {Integer -> Double}]
           [equal?/String : {String -> String -> Bool}]
           [append/String : {String -> String -> String}]
           [string-length : {String -> Integer}]
@@ -55,6 +67,23 @@
 (define ((> a) b) (boolean->Bool (>- (force- a) (force- b))))
 (define ((<= a) b) (boolean->Bool (<=- (force- a) (force- b))))
 (define ((>= a) b) (boolean->Bool (>=- (force- a) (force- b))))
+
+;; ---------------------------------------------------------------------------------------------------
+;; Double
+
+(define ((d+ x) y) (fl+- (force- x) (force- y)))
+(define ((d- x) y) (fl-- (force- x) (force- y)))
+(define ((d* x) y) (fl*- (force- x) (force- y)))
+(define ((d/ x) y) (fl/- (force- x) (force- y)))
+
+(define (show/Double x) (format "~a" (force- x)))
+(define ((equal?/Double x) y) (boolean->Bool (fl=- (force- x) (force- y))))
+(define ((d< x) y) (boolean->Bool (fl<- (force- x) (force- y))))
+(define ((d> x) y) (boolean->Bool (fl>- (force- x) (force- y))))
+(define ((d<= x) y) (boolean->Bool (fl<=- (force- x) (force- y))))
+(define ((d>= x) y) (boolean->Bool (fl>=- (force- x) (force- y))))
+
+(define (integer->double x) (real->double-flonum- (force- x)))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; String

@@ -28,6 +28,7 @@
          seq error! undefined!
          IO main print println
          + - * quotient! remainder! < > <= >=
+         d+ d- d* d/ d< d> d<= d>= integer->double
          string-length string-split
 
          (class Show)

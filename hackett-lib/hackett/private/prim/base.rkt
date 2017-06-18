@@ -82,6 +82,9 @@
 (instance (Show Integer)
   [show show/Integer])
 
+(instance (Show Double)
+  [show show/Double])
+
 (instance (Show String)
   [show (λ [str] {"\"" ++ str ++ "\""})])
 
@@ -111,6 +114,9 @@
 
 (instance (Eq Integer)
   [== equal?/Integer])
+
+(instance (Eq Double)
+  [== equal?/Double])
 
 (instance (Eq String)
   [== equal?/String])
