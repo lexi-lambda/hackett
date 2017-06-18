@@ -25,13 +25,14 @@
                      [∀ forall])
          @%datum @%app @%top-interaction @%superclasses-key @%dictionary-placeholder @%with-dictionary
          define-primop define-base-type
-         -> ∀ => Integer String
+         -> ∀ => Integer Double String
          : :/top-level with-dictionary-elaboration λ1 def)
 
 (define-simple-macro (define-base-type name:id)
   (define-syntax name (make-type-variable-transformer (τ:con #'name #f))))
 
 (define-base-type Integer)
+(define-base-type Double)
 (define-base-type String)
 
 (define-syntax-parser define-primop
@@ -233,8 +234,11 @@
       [_ this-syntax])))
 
 (define-syntax-parser @%datum
-  [(_ . n:integer)
+  [(_ . n:exact-integer)
    (attach-type #'(#%datum . n) (parse-type #'Integer))]
+  [(_ . n:number)
+   #:when (double-flonum? (syntax-e #'n))
+   (attach-type #'(#%datum . n) (parse-type #'Double))]
   [(_ . s:str)
    (attach-type #'(#%datum . s) (parse-type #'String))]
   [(_ . x)

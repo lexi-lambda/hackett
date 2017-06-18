@@ -20,7 +20,7 @@
                      [∀ forall])
          require combine-in except-in only-in prefix-in rename-in
          provide combine-out except-out prefix-out rename-out
-         : def λ ∀ -> => Integer String)
+         : def λ ∀ -> => Integer Double String)
 
 (module reader syntax/module-reader hackett/private/kernel)
 

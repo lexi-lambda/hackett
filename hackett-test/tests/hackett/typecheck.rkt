@@ -49,6 +49,17 @@
 (typecheck-fail (unit unit))
 (typecheck-fail (1 1))
 
+(typecheck-succeed 1.0)
+(typecheck-succeed (: 1.0 Double))
+(typecheck-fail (: 1.0 Integer))
+(typecheck-succeed 0.1)
+(typecheck-succeed (: 0.1 Double))
+(typecheck-fail (: 0.1 Integer))
+
+(typecheck-succeed "hello")
+(typecheck-succeed (: "hello" String))
+(typecheck-fail (: "hello" Unit))
+
 (typecheck-succeed (λ [x] x))
 (typecheck-succeed (λ [x y] x))
 (typecheck-succeed ((λ [x] x) unit))
