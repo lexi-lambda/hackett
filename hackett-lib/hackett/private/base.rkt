@@ -35,9 +35,14 @@
 (define-base-type String)
 
 (define-syntax-parser define-primop
-  [(_ op:id op-:id t-expr:type)
+  #:literals [:]
+  [(_ op:id op-:id colon:: t-expr:type)
    #:with t (preservable-property->expression (attribute t-expr.τ))
-   #'(define-syntax op (make-typed-var-transformer #'op- t))])
+   (~> #'(begin-
+           (define-values- [] (begin- (λ- () t-expr.expansion) (values-)))
+           (define-syntax op (make-typed-var-transformer #'op- t)))
+       (syntax-property 'disappeared-use (list (syntax-local-introduce #'op-)
+                                               (syntax-local-introduce #'colon))))])
 
 (define-syntax ->/prefix (make-type-variable-transformer τ:->))
 (define-syntax -> (infix-operator-impl #'->/prefix 'right))
