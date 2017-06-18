@@ -14,7 +14,7 @@
 
 (provide not or and if fst snd unsafe-run-io!
 
-         id compose const flip
+         . id const flip
 
          (class Eq) (class Show)
          (class Semigroup) (class Monoid)
@@ -57,7 +57,7 @@
 (defn id : (∀ [a] {a -> a})
   [[x] x])
 
-(defn compose : (∀ [a b c] {{b -> c} -> {a -> b} -> a -> c})
+(defn . : (∀ [a b c] {{b -> c} -> {a -> b} -> a -> c})
   [[f g x] (f (g x))])
 
 (defn const : (∀ [a b] {a -> b -> a})
@@ -162,7 +162,7 @@
   (flip map))
 
 (def <$ : (∀ [f a b] (Functor f) => {a -> (f b) -> (f a)})
-  (compose map const))
+  {map . const})
 
 (def $> : (∀ [f a b] (Functor f) => {(f b) -> a -> (f a)})
   (flip <$))

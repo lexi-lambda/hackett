@@ -164,6 +164,6 @@
                                  [nothing nothing]))
                       (∀ [a b] {{a -> b} -> (Maybe a) -> (Maybe b)})))
 
-(typecheck-succeed (compose just (+ 1)))
-(typecheck-succeed (: (compose just (+ 1)) {Integer -> (Maybe Integer)}))
-(typecheck-fail (compose just 1))
+(typecheck-succeed {just . (+ 1)})
+(typecheck-succeed (: {just . (+ 1)} {Integer -> (Maybe Integer)}))
+(typecheck-fail {just . 1})

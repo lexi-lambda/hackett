@@ -11,4 +11,6 @@
          (all-from-out hackett/private/kernel)
          (all-from-out hackett/private/provide))
 
-(module reader syntax/module-reader hackett/main)
+(module reader syntax/module-reader hackett/main
+  #:wrapper1 call-with-hackett-reading-parameterization
+  (require hackett/private/reader))

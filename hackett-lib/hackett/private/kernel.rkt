@@ -22,7 +22,9 @@
          provide combine-out except-out prefix-out rename-out
          : def λ ∀ -> => Integer Double String)
 
-(module reader syntax/module-reader hackett/private/kernel)
+(module reader syntax/module-reader hackett/private/kernel
+  #:wrapper1 call-with-hackett-reading-parameterization
+  (require hackett/private/reader))
 
 (define-syntax-parser λ
   [(_ [x:id] e:expr)
