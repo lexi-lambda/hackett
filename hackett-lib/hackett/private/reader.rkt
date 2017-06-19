@@ -39,5 +39,6 @@
 (define (call-with-hackett-reading-parameterization proc)
   (parameterize ([read-accept-dot #f]
                  [read-accept-infix-dot #f]
+                 [read-accept-bar-quote #f]
                  [current-readtable (make-dot-readtable (current-readtable))])
     (proc)))

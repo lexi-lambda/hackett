@@ -5,7 +5,8 @@
          hackett/private/prim
          hackett/private/provide)
 
-(provide (data List) head tail head! tail! take foldr zip-with cycle!)
+(provide (data List) head tail head! tail! take drop foldr foldl reverse zip-with repeat cycle!
+         or and any? all? elem? not-elem? delete delete-by)
 
 (defn head : (∀ [a] {(List a) -> (Maybe a)})
   [[{x :: _}] (just x)]
@@ -29,15 +30,62 @@
   [[_ nil]
    nil])
 
+(defn drop : (∀ [a] {Integer -> (List a) -> (List a)})
+  [[n {x :: xs}]
+   (if {n == 0}
+       {x :: xs}
+       (drop {n - 1} xs))]
+  [[_ nil]
+   nil])
+
 (defn foldr : (∀ [a b] {{a -> b -> b} -> b -> (List a) -> b})
   [[f a {x :: xs}] (f x (foldr f a xs))]
   [[_ a nil      ] a])
+
+(defn foldl : (∀ [a b] {{b -> a -> b} -> b -> (List a) -> b})
+  [[f a {x :: xs}] (case (f a x) [b {b seq (foldl f b xs)}])]
+  [[_ a nil      ] a])
+
+(def reverse : (∀ [a] {(List a) -> (List a)})
+  (foldl (flip ::) nil))
 
 (defn zip-with : (∀ [a b c] {{a -> b -> c} -> (List a) -> (List b) -> (List c)})
   [[f {x :: xs} {y :: ys}] {(f x y) :: (zip-with f xs ys)}]
   [[_ _         _        ] nil])
 
-; TODO: make this a circular structure instead of an infinite stream (need letrec to implement)
+; TODO: make repeat/cycle! a circular structure instead of an infinite stream (need letrec)
+(defn repeat : (∀ [a] {a -> (List a)})
+  [[x] {x :: (repeat x)}])
+
 (defn cycle! : (∀ [a] {(List a) -> (List a)})
   [[nil] (error! "cycle!: empty list")]
   [[xs ] {xs ++ (cycle! xs)}])
+
+(def or : {(List Bool) -> Bool}
+  (foldr || false))
+
+(def and : {(List Bool) -> Bool}
+  (foldr && true))
+
+(defn any? : (∀ [a] {{a -> Bool} -> (List a) -> Bool})
+  [[f] {or . (map f)}])
+
+(defn all? : (∀ [a] {{a -> Bool} -> (List a) -> Bool})
+  [[f] {and . (map f)}])
+
+(defn elem? : (∀ [a] (Eq a) => {a -> (List a) -> Bool})
+  [[x] (any? (== x))])
+
+(defn not-elem? : (∀ [a] (Eq a) => {a -> (List a) -> Bool})
+  [[x] (all? {not . (== x)})])
+
+(def delete : (∀ [a] (Eq a) => {a -> (List a) -> (List a)})
+  (delete-by ==))
+
+(defn delete-by : (∀ [a] {{a -> a -> Bool} -> a -> (List a) -> (List a)})
+  [[=? x {y :: ys}]
+   (if {y =? x}
+       ys
+       {y :: (delete-by =? x ys)})]
+  [[_ _ nil]
+   nil])

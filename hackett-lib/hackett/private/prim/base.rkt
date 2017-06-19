@@ -12,7 +12,7 @@
          hackett/private/prim/type
          syntax/parse/define)
 
-(provide not or and if fst snd unsafe-run-io!
+(provide not || && if fst snd unsafe-run-io!
 
          . id const flip
 
@@ -30,11 +30,11 @@
   [[true ] false]
   [[false] true])
 
-(defn or : {Bool -> Bool -> Bool}
+(defn || : {Bool -> Bool -> Bool} #:fixity right
   [[true  _] true]
   [[false y] y])
 
-(defn and : {Bool -> Bool -> Bool}
+(defn && : {Bool -> Bool -> Bool} #:fixity right
   [[true  y] y]
   [[false _] false])
 
@@ -127,7 +127,7 @@
           [[_        _       ] false])])
 
 (instance (∀ [a b] (Eq a) (Eq b) => (Eq (Tuple a b)))
-  [== (λ [(tuple a b) (tuple c d)] (and (== a c) (== b d)))])
+  [== (λ [(tuple a b) (tuple c d)] {{a == c} && {b == d}})])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Semigroup / Monoid

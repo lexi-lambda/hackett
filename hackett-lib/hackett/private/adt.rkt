@@ -430,8 +430,12 @@
 
 (define-syntax-parser defn
   #:literals [:]
-  [(_ id:id {~optional {~seq : t:type}} clauses:λ*-clauses)
+  [(_ id:id
+      {~or {~optional {~seq : t:type}}
+           {~optional fixity:fixity-annotation}}
+      ...
+      clauses:λ*-clauses)
    (quasitemplate
-    (def id {?? {?@ : t}}
+    (def id {?? {?@ : t}} {?? {?@ . fixity}}
       #,(syntax/loc this-syntax
           (λ* clauses.clause ...))))])

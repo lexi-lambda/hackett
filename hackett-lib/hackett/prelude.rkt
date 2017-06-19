@@ -15,7 +15,7 @@
          (all-from-out hackett/data/maybe)
 
          (data Unit) (data Bool) (data Tuple) (data Maybe) (data List)
-         not or and if fst snd
+         || && not if fst snd
 
          . id const flip
 
