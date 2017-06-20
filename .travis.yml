@@ -9,6 +9,8 @@ env:
     - RACKET_VERSION: HEAD
 
 before_install:
+  - export DISPLAY=:99.0
+  - sh -e /etc/init.d/xvfb start
   - git clone https://github.com/greghendershott/travis-racket.git
   - cat travis-racket/install-racket.sh | bash
   - export PATH="${RACKET_DIR}/bin:${PATH}"
