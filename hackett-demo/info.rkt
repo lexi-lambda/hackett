@@ -6,7 +6,9 @@
   '("base"
     "draw-lib"
     "hackett-lib"
+    "htdp-lib"
     "pict-lib"
+    "threading-lib"
     "web-server-lib"))
 (define build-deps
   '())

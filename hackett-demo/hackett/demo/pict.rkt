@@ -4,7 +4,7 @@
 
 (module shared hackett
   (provide (data Color) color-red color-green color-blue color-alpha
-           red orange yellow green blue purple)
+           white black red orange yellow green blue purple)
 
   (data Color (color Integer Integer Integer Double))
   (defn color-red : {Color -> Integer} [[(color x _ _ _)] x])
@@ -12,6 +12,8 @@
   (defn color-blue : {Color -> Integer} [[(color _ _ x _)] x])
   (defn color-alpha : {Color -> Double} [[(color _ _ _ x)] x])
 
+  (def white : Color (color 255 255 255 1.0))
+  (def black : Color (color 0 0 0 1.0))
   (def red : Color (color 255 0 0 1.0))
   (def orange : Color (color 255 165 0 1.0))
   (def yellow : Color (color 255 255 0 1.0))
@@ -71,6 +73,8 @@
             [hbl-append : {Pict -> Pict -> Pict}]
             [hb-append : {Pict -> Pict -> Pict}]
 
+            [pin-over : {Pict -> Double -> Double -> Pict -> Pict}]
+
             [scale : {Double -> Pict -> Pict}]
             [scale* : {Double -> Double -> Pict -> Pict}]
 
@@ -124,6 +128,9 @@
   (define ((hc-append x) y) (hc-append- (force- x) (force- y)))
   (define ((hbl-append x) y) (hbl-append- (force- x) (force- y)))
   (define ((hb-append x) y) (hb-append- (force- x) (force- y)))
+
+  (define ((((pin-over base) dx) dy) pict)
+    (pin-over- (force- base) (force- dx) (force- dy) (force- pict)))
 
   (define ((scale x) p) (scale- (force- p) (force- x)))
   (define (((scale* w) h) p) (scale- (force- p) (force- w) (force- h)))
