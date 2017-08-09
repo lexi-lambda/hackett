@@ -4,8 +4,9 @@ env:
   global:
     - RACKET_DIR: '~/racket'
   matrix:
-    - RACKET_VERSION: 6.8
-    - RACKET_VERSION: 6.9
+    - RACKET_VERSION: '6.8'
+    - RACKET_VERSION: '6.9'
+    - RACKET_VERSION: '6.10'
     - RACKET_VERSION: HEAD
 
 before_install:
@@ -18,6 +19,7 @@ before_install:
 install:
   - raco pkg install --installation --auto --link
       $TRAVIS_BUILD_DIR/hackett-demo
+      $TRAVIS_BUILD_DIR/hackett-doc
       $TRAVIS_BUILD_DIR/hackett-lib
       $TRAVIS_BUILD_DIR/hackett-test
 

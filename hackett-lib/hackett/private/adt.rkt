@@ -17,7 +17,7 @@
          (except-in hackett/private/base @%app)
          (only-in hackett/private/kernel [λ plain-λ] [#%app @%app]))
 
-(provide (for-syntax data-constructor-spec)
+(provide (for-syntax type-constructor-spec data-constructor-spec)
          (rename-out [λ lambda] [λ* lambda*])
          data case* case λ λ* defn _)
 

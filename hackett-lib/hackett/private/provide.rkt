@@ -15,9 +15,8 @@
 (begin-for-syntax
   (define (make-renaming-transformer id-stx)
     (syntax-parser
-      [{~or id:id (id:id . args)}
-       #`(splicing-let-syntax ([id (make-rename-transformer (quote-syntax #,id-stx))])
-           #,this-syntax)])))
+      [id:id id-stx]
+      [(id:id . args) #`(#,id-stx . args)])))
 
 (begin-for-syntax
   (struct data-transformer ()

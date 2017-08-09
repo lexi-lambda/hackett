@@ -3,7 +3,8 @@
 (define collection 'multi)
 
 (define deps
-  '("hackett-lib"))
+  '("hackett-doc"
+    "hackett-lib"))
 (define build-deps
   '())
 

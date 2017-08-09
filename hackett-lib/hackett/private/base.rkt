@@ -338,8 +338,30 @@
        displayln)
    #'(void)])
 
+(begin-for-syntax
+  ; A syntax class that determines if a fully-expanded piece of syntax ends with an expression, not a
+  ; definition. Used by (and is mutually recursive with) ends-with-expression*.
+  (define-syntax-class ends-with-expression*
+    #:description #f
+    #:attributes []
+    #:literals [begin- define-syntaxes- define-values-]
+    #:commit
+    [pattern (begin- ~! _ ... _:ends-with-expression)]
+    [pattern ({~or define-syntaxes- define-values-} ~! . _) #:when #f]
+    [pattern _])
+
+  ; A syntax class that determines if a piece of syntax, when fully expanded, ends with an expression,
+  ; not a definition. Uses ends-with-expression* to pattern-match on the fully-expanded expression.
+  (define-syntax-class ends-with-expression
+    #:description #f
+    #:attributes []
+    [pattern
+     e:expr
+     #:with _:ends-with-expression* (local-expand #'e (syntax-local-context) #f)]))
+
 (define-syntax-parser @%top-interaction
-  [(_ . e)
+  [(_ . e:ends-with-expression)
    (define-values [e- τ_e] (τ⇒! #'e))
    (printf ": ~a\n" (τ->string (apply-current-subst τ_e)))
-   #`(force- #,(elaborate-dictionaries e-))])
+   #`(force- #,(elaborate-dictionaries e-))]
+  [(_ . e) #'e])
