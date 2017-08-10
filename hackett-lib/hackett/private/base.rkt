@@ -23,7 +23,7 @@
          (rename-out [#%module-begin @%module-begin]
                      [#%top @%top]
                      [∀ forall])
-         @%datum @%app @%top-interaction @%superclasses-key @%dictionary-placeholder @%with-dictionary
+         @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary
          define-primop define-base-type
          -> ∀ => Integer Double String
          : :/top-level with-dictionary-elaboration λ1 def)
@@ -337,9 +337,3 @@
        τ->string
        displayln)
    #'(void)])
-
-(define-syntax-parser @%top-interaction
-  [(_ . e)
-   (define-values [e- τ_e] (τ⇒! #'e))
-   (printf ": ~a\n" (τ->string (apply-current-subst τ_e)))
-   #`(force- #,(elaborate-dictionaries e-))])

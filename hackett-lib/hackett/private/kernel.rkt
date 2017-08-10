@@ -9,7 +9,8 @@
          (rename-in hackett/private/base
                     [@%app @%app1]
                     [∀ ∀1]
-                    [=> =>1]))
+                    [=> =>1])
+         hackett/private/toplevel)
 
 (provide (rename-out [@%module-begin #%module-begin]
                      [@%top #%top]

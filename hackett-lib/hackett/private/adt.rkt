@@ -17,7 +17,7 @@
          (except-in hackett/private/base @%app)
          (only-in hackett/private/kernel [λ plain-λ] [#%app @%app]))
 
-(provide (for-syntax data-constructor-spec)
+(provide (for-syntax type-constructor-spec data-constructor-spec)
          (rename-out [λ lambda] [λ* lambda*])
          data case* case λ λ* defn _)
 
@@ -302,14 +302,10 @@
 
 (define-syntax-parser data
   [(_ τ:type-constructor-spec constructor:data-constructor-spec ...)
-   #:with τ-base (generate-temporary #'τ.tag)
-   #:with τ/prefix (generate-temporary #'τ.tag)
-   #:with [τ-arg ...] (generate-temporaries (attribute τ.arg))
-   #:with [τ-arg.τ ...] (map #{begin #`(attribute #,(format-id % "~a.τ" %))} (attribute τ-arg))
    #`(begin-
-       (define-for-syntax- τ-base (τ:con #'τ.tag (list #'constructor ...)))
        #,(indirect-infix-definition
-          #'(define-syntax- τ.tag (make-type-variable-transformer τ-base))
+          #'(define-syntax- τ.tag (make-type-variable-transformer
+                                   (τ:con #'τ.tag (list #'constructor ...))))
           (attribute τ.fixity))
        (define-data-constructor τ constructor) ...)])
 
