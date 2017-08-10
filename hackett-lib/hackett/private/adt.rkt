@@ -302,14 +302,10 @@
 
 (define-syntax-parser data
   [(_ τ:type-constructor-spec constructor:data-constructor-spec ...)
-   #:with τ-base (generate-temporary #'τ.tag)
-   #:with τ/prefix (generate-temporary #'τ.tag)
-   #:with [τ-arg ...] (generate-temporaries (attribute τ.arg))
-   #:with [τ-arg.τ ...] (map #{begin #`(attribute #,(format-id % "~a.τ" %))} (attribute τ-arg))
    #`(begin-
-       (define-for-syntax- τ-base (τ:con #'τ.tag (list #'constructor ...)))
        #,(indirect-infix-definition
-          #'(define-syntax- τ.tag (make-type-variable-transformer τ-base))
+          #'(define-syntax- τ.tag (make-type-variable-transformer
+                                   (τ:con #'τ.tag (list #'constructor ...))))
           (attribute τ.fixity))
        (define-data-constructor τ constructor) ...)])
 
