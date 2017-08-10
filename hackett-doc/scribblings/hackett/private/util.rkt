@@ -6,6 +6,7 @@
 
          racket/sandbox
          scribble/example
+         scribble/manual
          scribble/manual/hackett
          syntax/parse/define)
 
@@ -13,7 +14,12 @@
          (all-from-out scribble/manual/hackett)
          close-eval
 
-         make-hackett-eval hackett-examples hackett-interaction)
+         make-hackett-eval hackett-examples hackett-interaction
+
+         tech/racket-reference)
+
+;; ---------------------------------------------------------------------------------------------------
+;; evaluation
 
 (define (make-hackett-eval [body '()])
   (parameterize ([sandbox-output 'string]
@@ -42,3 +48,10 @@
 
 (define-simple-macro (hackett-interaction body ...)
   (hackett-examples #:label #f body ...))
+
+;; ---------------------------------------------------------------------------------------------------
+;; cross-manual references
+
+(define (tech/racket-reference #:key [key #f] #:normalize? [normalize? #t] . pre-content)
+  (apply tech #:doc '(lib "scribblings/reference/reference.scrbl")
+         #:key key #:normalize? normalize? pre-content))

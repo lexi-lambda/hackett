@@ -15,8 +15,8 @@
 (begin-for-syntax
   (define (make-renaming-transformer id-stx)
     (syntax-parser
-      [id:id id-stx]
-      [(id:id . args) #`(#,id-stx . args)])))
+      [_:id id-stx]
+      [(_:id . args) #`(#,id-stx . args)])))
 
 (begin-for-syntax
   (struct data-transformer ()

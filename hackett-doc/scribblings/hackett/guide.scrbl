@@ -28,7 +28,7 @@ with either Haskell or Racket. Familiarity with either language will, of course,
 
 @local-table-of-contents[]
 
-@section[#:tag "guide-introduction"]{An introduction to Hackett}
+@section[#:tag "guide-quick-start"]{Quick Start}
 
 The easiest way to get started with Hackett is by experimenting in the REPL. Using DrRacket, you can
 quickly get a REPL by writing @hash-lang[] @racketmodname[hackett] at the top of the definitions
@@ -102,7 +102,7 @@ also applies to any number of arguments greater than two. This makes applying mu
 considerably more palatable, as otherwise the number of parentheses required by nested applications
 would be difficult to visually parse.
 
-@subsection[#:tag "guide-introduction-definitions"]{Simple Definitions}
+@subsection[#:tag "guide-quick-start-definitions"]{Simple Definitions}
 
 Simply evaluating expressions is not terribly exciting. For any practical program it is necessary to
 be able to write your own definitions. A binding can be defined with the @racket[def] form:
@@ -160,3 +160,234 @@ expected type, the typechecker will raise an error at compile time:
 
 @(hackett-interaction
   (eval:error (def x : Integer "not an integer")))
+
+@section[#:tag "guide-hackett-essentials"]{Hackett Essentials}
+
+Before leaping into Hackett’s language features, this section will establish some essential concepts
+and terminology. Readers already familiar with both Scheme and Haskell can safely skip this section,
+but it can be a useful overview.
+
+Hackett, like most programming languages, is a language for manipulation of @deftech{values}. A value
+is anything that exists at runtime, like a number, a string, a list, or a function. Every valid
+Hackett value also has a @deftech{type}, which can be thought of as a “description” of the value. When
+an expression is evaluated in the Hackett REPL, the value’s type will be printed just before the value
+itself:
+
+@(hackett-interaction
+  42
+  "Hello, world!")
+
+Generally, a single type describes many values, sometimes infinitely many! Hackett can represent any
+integer that will fit in memory, and all of them have the @racket[Integer] type. Similarly, there are
+infinitely many possible arrangements of characters, and all of them have the @racket[String] type.
+
+In Hackett, types are @emph{exclusively} a compile-time concept; they never persist at runtime. After
+a program has passed the typechecker, type information is thrown away; this process is known as
+@deftech{type erasure}. It is not possible to dynamically query the type of a value at runtime, since
+that information simply does not exist. Type erasure is possible because any program that would
+incorrectly use a value as the wrong type will be detected and prevented by the typechecker; programs
+that pass the typechecking process are considered @deftech{well-typed}.
+
+Hackett programs are built out of series of nested @deftech{function applications}, which have the
+following syntax:
+
+@specform[(_function-expr arg-expr)]{
+
+@(hackett-examples
+  (not true)
+  (not (not true))
+  ((+ 1) 2))}
+
+The above syntax @italic{applies} @racket[_function-expr] to @racket[_arg-expr], evaluating to the
+function’s body. As mentioned in @secref["guide-quick-start"], Hackett functions are @tech{curried},
+which means they only ever take a single argument, but multi-argument functions are simulated by
+functions that return other functions. To make curried functions more pleasant to work with, function
+application syntax actually accepts more than one argument at a time:
+
+@specform[(_function-expr arg-expr ...+)]{
+
+@(hackett-examples
+  (+ 1 2))}
+
+This syntax will be translated into a sequence of nested function applications, each of which only
+involves application of a single @racket[_arg-expr] at a time.
+
+In certain locations in Hackett programs, such as when providing a type annotation using @racket[:],
+the programmer is expected to specify a type rather than a value. The syntax of types is similar to
+the syntax of values, but be careful to never confuse the two: remember that types are evaluated at
+compile-time, and they will never mix with runtime values, they simply describe them.
+
+The simplest types are just names. For example, @racket[Integer], @racket[Bool], and @racket[String]
+are all types. These can be successfully used anywhere a type is expected:
+
+@(hackett-interaction
+  (: 42 Integer)
+  (: false Bool))
+
+Some types, however, are more complex. For example, consider the type of a @tech{list}. It would be
+silly to have many different types for all the different sorts of list one might need—that would
+require completely separate types for things like @racket[Integer-List], @racket[Bool-List], and
+@racket[String-List]. Instead, there is only a single @racket[List] type, but @racket[List] is not
+actually a type on its own. Rather, @racket[List] is combined with another type to produce a new type,
+such as @racket[(List Integer)] or @racket[(List String)].
+
+This means that @racket[List] isn’t really a type, since types describe values, and @racket[List] is
+not a valid type on its own. Instead, @racket[List] is known as a @deftech{type constructor}, which
+can be applied to other types to produce a type.
+
+@section[#:tag "guide-working-with-data"]{Working with data}
+
+Hackett is a @emph{pure} programming language, which means functions cannot have side-effects. This
+makes Hackett functions truly functions in the mathematical sense—the output is always the same for a
+given input, and a function’s evaluation cannot do anything but produce a value as output. This
+encourages a very @emph{data-oriented} style of programming, assembling pipelines of pure functions
+that operate on data structures.
+
+For that reason, the basic building blocks of Hackett are built around producing and consuming data,
+and Hackett makes it easy to define new data structures. You’ve already seen integers, but Hackett
+provides a myriad of built-in datatypes. This section will cover some of those datatypes, how to
+produce and consume them, and how to build your own.
+
+@subsection[#:tag "guide-enumerations"]{Enumerations}
+
+@(define enumerations-eval (make-hackett-eval))
+
+One of the most fundamental sorts of data that can be represented in Hackett are
+@italic{enumerations}, often called “enums” in other languages. An enumeration is a type that can be
+one of a set of predefined values. For example, the days of the week form an obvious enumeration. We
+can define that enumeration in Hackett using the @racket[data] form:
+
+@(hackett-interaction
+  #:eval enumerations-eval
+  #:no-prompt
+  (data Weekday
+    sunday monday tuesday wednesday
+    thursday friday saturday))
+
+This declaration defines two things: a @tech{type} and a set of @tech{values}. Specifically, it
+defines a new type named @racket[Weekday], and it defines 7 values, @racket[monday] through
+@racket[sunday]. You can see that each of these names are bound to values of the @racket[Weekday]
+type by evaluating them in the REPL:
+
+@(hackett-interaction
+  #:eval enumerations-eval
+  monday
+  thursday)
+
+Of course, these values are not very interesting on their own. Presumably, once we have an
+enumeration, we would like to be able to @emph{do something} with its values. For example, we might
+wish to write a function that determines if a weekday is a weekend—that is, if it is @racket[sunday]
+or @racket[saturday]. To do this, we need some way to check if a weekday is a particular value.
+
+We can do this by using @italic{pattern matching}, which makes it possible to make a decision based on
+the different values of an enumeration. Here’s one way to write our @racket[is-weekend?] function:
+
+@(hackett-interaction
+  #:eval enumerations-eval
+  (defn is-weekend? : (-> Weekday Bool)
+    [[sunday] true]
+    [[monday] false]
+    [[tuesday] false]
+    [[wednesday] false]
+    [[thursday] false]
+    [[friday] false]
+    [[saturday] true])
+  (is-weekend? saturday)
+  (is-weekend? wednesday))
+
+This works! Each clause in @racket[defn] provides a @tech{pattern} to match against. If a pattern is
+the name of an enumeration value, it only matches if the supplied argument is that specific value.
+
+Sadly, while the above definition works, it’s a little wordy. To simplify it a little, it’s possible
+to use the special @racket[_] pattern, which matches @emph{any} value. This can be used to create a
+sort of “fallthrough” case:
+
+@(hackett-interaction
+  #:eval enumerations-eval
+  (defn is-weekend? : (-> Weekday Bool)
+    [[sunday] true]
+    [[saturday] true]
+    [[_] false])
+  (is-weekend? saturday)
+  (is-weekend? wednesday))
+
+This works because patterns in @racket[defn] are matched from top to bottom, picking the first one
+that successfully matches.
+
+@section[#:tag "guide-bottoms"]{Partial Functions and Nontermination}
+
+In Hackett, functions are generally expected to be @deftech[#:key "total function"]{total}, which
+means they should produce a result for all possible inputs. For example, @racket[not] is obviously
+defined for both @racket[true] and @racket[false], which are the only possible values of the
+@racket[Bool] type. Total functions allow a programmer to reason about programs using the types alone;
+a function with the type @racket[{A -> B}] implies that is is always possible to get a @racket[B] when
+you have an @racket[A].
+
+Sometimes, however, this is impractical. Sometimes the type system is not expressive enough to
+constrain the input type as much as the programmer would like. In other cases, the burden of assigning
+a precise type to a value might be too high. In these situations, Hackett allows the programmer to
+define @deftech{partial functions}. Partial functions should be used extremely judiciously—when a
+partial function is evaluated at runtime, the program will @emph{crash}, producing an error message.
+
+Hackett provides a built-in partial function named @racket[error!] for signaling unrecoverable errors.
+This function is not only partial, it is actually undefined for @emph{all} possible values! This
+partiality can be observed in @racket[error!]’s type:
+
+@(hackett-interaction
+  error!)
+
+The @racket[error!] function seems impossible, since it promises to produce @emph{anything}, of any
+type, when given nothing but a string. Indeed, this type signature lies; it promises it will produce
+anything, but this is only possible because it will never actually return anything. When
+@racket[error!]’s result is needed, the program will simply crash.
+
+@(hackett-interaction
+  (eval:error (error! "urk!")))
+
+Partial functions in Hackett are idiomatically indicated by including a @litchar{!} symbol at the end
+of their names, but this is only a convention; it is not enforced by the compiler or typechecker.
+
+The @racket[error!] function can be considered a way to subvert the type system. Its primary purpose
+is to provide a programmer the ability to mark cases which are “impossible” based on the logic of the
+program, but the typechecker cannot determine that is true. Of course, in practice, things that where
+once truly impossible may eventually become possible as code changes, so using some other notion of
+failure (such as returning a value wrapped in @racket[Maybe]) is generally preferred whenever
+possible.
+
+In addition to @racket[error!], another partial value provided by Hackett is @racket[undefined!]. This
+is a value, not a function, and it miraculously has any type. The @racket[undefined!] value will crash
+the program as soon as it is evaluated, but it is often useful for getting something to typecheck
+before you have finished implementing all of the cases. Generally, @racket[undefined!] can be useful
+as a tool while iteratively writing code, but all uses of @racket[undefined!] should be replaced by
+“real” implementations before the code is considered complete.
+
+Interestingly, while @racket[error!] and @racket[undefined!] crash the program, it is not impossible
+to write a functions with the same type signatures, but which do @emph{not} crash the program. How?
+Well, it’s true that a function that promises to return a value of any type the caller asks for can
+never return, but there is another possibility besides halting: the function can simply infinitely
+loop. Here is an example of such a function, called @racket[diverge!]:
+
+@(racketblock
+  (defn diverge! : (forall [a] (-> String a))
+    [[x] (diverge! x)]))
+
+This sort of function is often @emph{also} considered partial, since it does not return a value for
+all of its inputs.
+
+It’s important to keep in mind that Hackett is lazy, and use of partial functions does not change
+that! This can result in curious behavior, where an impartial function does not cause a program to
+halt or diverge, simply because it isn’t evaluated:
+
+@(hackett-interaction
+  (const unit (error! "never gets here")))
+
+In fact, a partial function can “lurk” in an unevaluated thunk for quite a long time, but forcing its
+evaluation will cause its effects to become visible. These unpredictable effects are another reason to
+use partial functions extremely sparingly.
+
+Partial values that, once evaluated, will trigger partial behavior are known as @deftech{bottoms}.
+Documentation of certain forms and functions may note that something is true “ignoring bottom”. This
+is because many guarantees can technically be broken when partial functions are involved, but it is
+often more useful to temporarily pretend they do not exist in order to reason about some code using
+types alone. This is a powerful property of Hackett’s type system; do not squander that power with
+reckless use of partiality.
