@@ -3,6 +3,7 @@ language: c
 env:
   global:
     - RACKET_DIR: '~/racket'
+    - GH_REF: 'github.com/lexi-lambda/hackett.git'
     - secure: 'Ch9Hmf41Xy2Rt4qf7fzE+M+UVZiynYbETKxqHrHU+kDS4Li2sry89AvDbW6AJC1B6+ZE6lAUPG0s5E7sj+r7BfZok/PllQ76qj9S/pW4gvD1/kvPb6bgMFswh28+yvCgWZZmepol1EXLeIIYv/sopmDY2YjQpJd/zSGnpxGwXlMk+a+KemxHWk8J1eA6O2JvnfGSFyLlJkdyMU1vEwbxPIMvYfevXxyP3So1bFBxEQHnzoow4h6rHnhbrGDr63FaLA70fUwWIzq4LNlOAPC42tnSDoQqZbZ2BfVbZI6wfG/Ggj9L+zIHYAXK27Edm21octdgVixez3WHwAtXTFk7s7Cf0lar4yNsQMmjYSeQKEU4L2n26CagUSvl9qCp7GZB1r9DtzHH1QwFIlA30UyMKwkdSRbZUyOFmG+CnU+EzQAamXI9qSlBaHo8wvvnfk4mFR7piGqVBg/W/aHovS5Lis5wcMJBo9Y57ws/VEtrcJkmL5X0udkqox3p7x0Heom7WqXNDiuatf/GY9zG2K2yeaSBBocsHseM5zVUAMaFJGDXSH50cSiOU/XVlgPQQSzEb1mOfCo9OSUN7RuxdnLlJz63L46r2tK6YnILogxozAISl7MWp4IE/3Woc6tyHCRCjMpeLKMvtyiNNWwH/ExWwhFrCeqym9wbxdKjM3VL6YI='
   matrix:
     - RACKET_VERSION: '6.8'
