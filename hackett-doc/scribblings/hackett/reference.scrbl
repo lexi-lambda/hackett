@@ -294,9 +294,9 @@ in @hash-lang[] @racketmodname[racket] or the @tt{void} return “type” in man
 
 The boolean type, representing two binary states.}
 
-@defthing[not {Boolean -> Boolean}]{
+@defthing[not {Bool -> Bool}]{
 
-Inverts the value it is applied to; this is, produces @racket[false] when given @racket[true] and
+Inverts the value it is applied to; that is, produces @racket[false] when given @racket[true] and
 produces @racket[true] when given @racket[false].}
 
 @subsection[#:tag "reference-optionals"]{Optionals}
