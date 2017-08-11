@@ -375,8 +375,8 @@ This sort of function is often @emph{also} considered partial, since it does not
 all of its inputs.
 
 It’s important to keep in mind that Hackett is lazy, and use of partial functions does not change
-that! This can result in curious behavior, where an impartial function does not cause a program to
-halt or diverge, simply because it isn’t evaluated:
+that! This can result in curious behavior, where a partial function does not cause a program to halt
+or diverge, simply because it isn’t evaluated:
 
 @(hackett-interaction
   (const unit (error! "never gets here")))
