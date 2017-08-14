@@ -51,8 +51,8 @@ The above expressions were very simple, just simple constants, so they are immed
 without any additional evaluation. Calling some functions is slightly more interesting:
 
 @(hackett-interaction
-  (+ 1 2)
-  (not true))
+  (eval:check (+ 1 2) 3)
+  (eval:check (not true) false))
 
 In Hackett, like any other Lisp, function calls are syntactically represented by surrounding
 subexpressions with parentheses. In any expression @racket[(_f _x _y _z)], @racket[_f] is a function
@@ -109,7 +109,7 @@ be able to write your own definitions. A binding can be defined with the @racket
 
 @(hackett-interaction
   (def x 5)
-  (* x x))
+  (eval:check (* x x) 25))
 
 All bindings in Hackett are immutable: once something has been defined, its value cannot be changed.
 This may sound like a severe limitation, but it is not as austere as you might think. In practice, it
@@ -130,7 +130,7 @@ This can be accomplished using the similar @racket[defn] form:
   #:eval square-no-sig-eval
   (defn square
     [[x] (* x x)])
-  (square 5))
+  (eval:check (square 5) 25))
 
 This defines a one-argument function called @racket[square], which (unsurprisingly) squares its
 argument. Notably, we did not provide a type signature for @racket[square], but its type was still
@@ -152,7 +152,7 @@ It’s possible to add a type signature to any definition by placing a type anno
 @(hackett-interaction
   (defn square : (-> Integer Integer)
     [[x] (* x x)])
-  (square 5))
+  (eval:check (square 5) 25))
 
 This definition is equivalent to the previous definition of @racket[square], but its type is validated
 by the typechecker. If a type annotation is provided, but the expression does not actually have the
