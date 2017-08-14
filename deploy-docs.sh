@@ -1,7 +1,7 @@
 #!/bin/bash
 set -ev # exit with nonzero exit code if anything fails
 
-if [[ "$RACKET_VERSION" != '6.8' || "$TRAVIS_PULL_REQUEST" != 'false' || "$TRAVIS_BRANCH" != 'master' ]]; then
+if [[ "$RACKET_VERSION" != 'HEAD' || "$TRAVIS_PULL_REQUEST" != 'false' || "$TRAVIS_BRANCH" != 'master' ]]; then
   exit 0;
 fi
 
@@ -9,7 +9,7 @@ fi
 rm -rf docs || exit 0;
 
 # build the documentation files
-scribble +m --redirect-main http://docs.racket-lang.org/ --htmls --dest ./docs ./hackett-doc/scribblings/hackett/main.scrbl
+scribble +m --redirect-main http://docs.racket-lang.org/ --htmls --dest docs hackett-doc/scribblings/hackett/main.scrbl
 
 # go to the documentation directory and create a *new* Git repo
 cd docs/main
