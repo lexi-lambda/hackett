@@ -21,13 +21,13 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; evaluation
 
-(define (make-hackett-eval [body '()])
+(define (make-hackett-eval)
   (parameterize ([sandbox-output 'string]
                  [sandbox-error-output 'string])
-    (make-module-evaluator
-     #:language 'hackett
-     `(module m hackett
-        ,@body))))
+    ; Evaluators produced by racket/sandbox do not automatically require the configure-runtime
+    ; submodule of the specified language, so we need to load it explicitly in order to set up the
+    ; custom printer.
+    (make-evaluator 'hackett #:requires '((submod hackett configure-runtime)))))
 
 (define-simple-macro (hackett-examples
                       {~or {~optional {~seq #:eval eval:expr}}

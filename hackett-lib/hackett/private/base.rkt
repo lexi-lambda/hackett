@@ -20,7 +20,7 @@
 (provide (for-syntax (all-from-out hackett/private/typecheck)
                      τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒! elaborate-dictionaries)
          #%module-begin #%top
-         (rename-out [#%module-begin @%module-begin]
+         (rename-out [#%plain-module-begin @%module-begin]
                      [#%top @%top]
                      [∀ forall])
          @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary

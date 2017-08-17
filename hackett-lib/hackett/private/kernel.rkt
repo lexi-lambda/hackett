@@ -7,6 +7,7 @@
          syntax/parse/define
 
          (rename-in hackett/private/base
+                    [@%module-begin @%module-begin/nonconfigured]
                     [@%app @%app1]
                     [∀ ∀1]
                     [=> =>1])
@@ -26,6 +27,13 @@
 (module reader syntax/module-reader hackett/private/kernel
   #:wrapper1 call-with-hackett-reading-parameterization
   (require hackett/private/reader))
+
+(define-simple-macro (@%module-begin body ...)
+  (@%module-begin/nonconfigured
+   (module configure-runtime racket/base
+     (require (only-in hackett/private/toplevel make-hackett-print))
+     (current-print (make-hackett-print)))
+   body ...))
 
 (define-syntax-parser λ
   [(_ [x:id] e:expr)

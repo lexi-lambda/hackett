@@ -68,7 +68,7 @@
          racket/promise
          syntax/parse/define)
 
-(provide @%top-interaction)
+(provide @%top-interaction make-hackett-print)
 
 (struct repl-result [value type])
 
@@ -91,13 +91,11 @@
                   ((λ (type) #`(repl-result (force expr) '#,type))))
           #'expr)])])
 
-(define print-value (current-print))
-(define (print-type-and-value y)
+(define ((make-hackett-print #:printer [orig-print (current-print)]) y)
   (match y
     [(repl-result v t)
      (begin
        (printf ": ~a\n" t)
-       (print-value v))]
+       (orig-print v))]
     [_
-     (print-value y)]))
-(current-print print-type-and-value)
+     (orig-print y)]))
