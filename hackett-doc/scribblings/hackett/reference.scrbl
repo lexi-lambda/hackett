@@ -63,7 +63,7 @@ inferred from @racket[val-expr].
 
 @(hackett-examples
   (def x 7)
-  x
+  (eval:check x 7)
   (def y : Integer 7)
   (eval:error (def z : String 7)))}
 
@@ -88,7 +88,7 @@ The @racket[defn] form is generally preferred when defining top-level functions.
 @(hackett-examples
   (defn square : (-> Integer Integer)
     [[x] (* x x)])
-  (square 5))}
+  (eval:check (square 5) 25))}
 
 @subsection[#:tag "reference-anonymous-functions"]{Anonymous Functions}
 
@@ -101,7 +101,7 @@ number of @racket[arg-pat]s provided. When the function is applied, the provided
 matched against each @racket[arg-pat], and the function’s result will be @racket[body-expr].
 
 @(hackett-examples
-  ((λ [x y] (+ x (* y 2))) 5 10))}
+  (eval:check ((λ [x y] (+ x (* y 2))) 5 10) 25))}
 
 @deftogether[
  [@defform[(lambda* [[arg-pat ...+] body-expr] ...+)]
@@ -116,9 +116,10 @@ combination of @racket[lambda] and @racket[case*]:
       [[arg-pat ...] body-expr] ...)))
 
 @(hackett-examples
-  ((λ* [[(just x)] x]
-       [[nothing] 0])
-   (just 42)))}
+  (eval:check ((λ* [[(just x)] x]
+                   [[nothing] 0])
+               (just 42))
+              42))}
 
 @subsection[#:tag "reference-pattern-matching"]{Pattern Matching}
 
@@ -129,9 +130,10 @@ Matches @racket[val-expr] against each @racket[pat], in order. The result of the
 result of the @racket[body-expr] for the first matching @racket[pat].
 
 @(hackett-examples
-  (case (just 42)
-    [(just x) x]
-    [nothing 0]))}
+  (eval:check (case (just 42)
+                [(just x) x]
+                [nothing 0])
+              42))}
 
 @defform[(case* [val-expr ...+]
            [[pat ...+] body-expr] ...+)]{
@@ -140,11 +142,12 @@ Like @racket[case], but matches against multiple values at once. Each case only 
 @racket[pat]s succeed.
 
 @(hackett-examples
-  (case* [(just 1) (just 2)]
-         [[(just _) nothing] "first"]
-         [[nothing (just _)] "second"]
-         [[(just _) (just _)] "both"]
-         [[nothing nothing] "neither"]))}
+  (eval:check (case* [(just 1) (just 2)]
+                [[(just _) nothing] "first"]
+                [[nothing (just _)] "second"]
+                [[(just _) (just _)] "both"]
+                [[nothing nothing] "neither"])
+              "both"))}
 
 @section[#:tag "reference-datatypes"]{Datatypes}
 
@@ -252,8 +255,8 @@ The identity function. Returns its argument unchanged.}
 Accepts two arguments and returns the first, ignoring the second.
 
 @(hackett-examples
-  (const "hello" "goodbye")
-  (const unit (error! "never gets here")))}
+  (eval:check (const "hello" "goodbye") "hello")
+  (eval:check (const unit (error! "never gets here")) unit))}
 
 @subsection[#:tag "reference-quantification"]{Quantification and Constrained Types}
 

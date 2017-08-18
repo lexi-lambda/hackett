@@ -1,4 +1,4 @@
-#lang racket/base
+#lang curly-fn racket/base
 
 ; This module implements #%top-interaction for the Hackett REPL. It does some tricks to make Hackett
 ; forms cooperate more nicely with the top level while still being able to do things like print the
@@ -64,10 +64,13 @@
                      threading
 
                      hackett/private/typecheck)
+         racket/match
          racket/promise
          syntax/parse/define)
 
-(provide @%top-interaction)
+(provide @%top-interaction make-hackett-print)
+
+(struct repl-result [value type])
 
 (define-syntax-parser @%top-interaction
   [(_ . form)
@@ -82,8 +85,17 @@
       (syntax/loc this-syntax
         (begin form ... (@%top-interaction . form*)))]
      [expr
-      (and~>> (get-type #'expr)
-              apply-current-subst
-              τ->string
-              (printf ": ~a\n"))
-      #'(force expr)])])
+      (or (and~>> (get-type #'expr)
+                  apply-current-subst
+                  τ->string
+                  ((λ (type) #`(repl-result (force expr) '#,type))))
+          #'expr)])])
+
+(define ((make-hackett-print #:printer [orig-print (current-print)]) y)
+  (match y
+    [(repl-result v t)
+     (begin
+       (printf ": ~a\n" t)
+       (orig-print v))]
+    [_
+     (orig-print y)]))
