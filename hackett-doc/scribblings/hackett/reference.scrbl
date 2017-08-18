@@ -346,6 +346,95 @@ The @deftech{list} type, which describes lazy linked lists. Since a list is lazy
 as long as the entire list is never demanded. The @racket[::] constructor is pronounced “cons”, and it
 is generally intended to be used infix.}
 
+@section[#:tag "reference-typeclasses"]{Typeclasses}
+
+@subsection[#:tag "reference-defining-typeclasses"]{Defining typeclasses and typeclass instances}
+
+@defform[#:literals [: =>]
+         (class maybe-superclasses (class-id var-id)
+           [method-id : method-type] ...)
+         #:grammar
+         ([maybe-superclasses (code:line superclass-constraint ... =>)
+                              (code:line)])]{
+
+Defines a @deftech{typeclass}. As the name implies, a typeclass describes a @italic{class}, or set, of
+@tech{types}. Types that belong to the class are known as @tech[#:key "typeclass instance"]{instances}
+or @italic{members} of the class, which are defined using the associated @racket[instance] form.
+
+A typeclass defines a set of @deftech{typeclass methods}, each named @racket[method-id], which are
+operations that must be implemented by all members of the class. Implementations of typeclass methods
+must match the provided @racket[method-type], with the @racket[var-id] replaced by the type the
+instance is being defined for.}
+
+@defform[#:literals [forall =>]
+         (instance instance-spec
+           [method-id method-expr] ...)
+         #:grammar
+         ([instance-spec (class-id instance-type)
+                         (forall [var-id ...] maybe-constraints
+                                 (class-id instance-type))]
+          [maybe-constraints (code:line instance-constraint ... =>)
+                             (code:line)])]{
+
+Defines a @deftech{typeclass instance}, which declares that the given @racket[instance-type] belongs
+to the @tech{typeclass} bound to @racket[class-id].}
+
+@subsection[#:tag "reference-show"]{Printing for debugging}
+
+@defclass[(Show a)
+          [show {a -> String}]]{
+
+A class for converting values to @racket[String] representations for the purposes of debugging.
+Generally, the @racket[Show] instance for a type should produce a valid Hackett expression that, when
+evaluated, produces the value.
+
+@defmethod[show {a -> String}]{
+
+@(hackett-examples
+  (show 42)
+  (show "hello")
+  (show (just 11))
+  (show {1 :: 2 :: 3 :: nil}))}}
+
+@subsection[#:tag "reference-semigroup-monoid"]{Semigroups and monoids}
+
+@defclass[(Semigroup a)
+          [++ {a -> a -> a}]]{
+
+The class of @deftech{semigroups}, types with an associative binary operation, @racket[++]. Generally,
+@racket[++] defines some notion of combining or appending, as is the case with the instances for
+@racket[String] and @racket[(List _a)], but this is not necessarily true.
+
+@defmethod[++ {a -> a -> a}]{
+
+An associative operation. That is, @racket[++] must obey the following law:
+
+@racketblock[
+  @#,racket[{{_a ++ _b} ++ _c}] @#,elem[#:style 'roman]{=} @#,racket[{_a ++ {_b ++ _c}}]]
+
+@(hackett-examples
+  {"hello" ++ ", " ++ "world!"}
+  {{1 :: 2 :: nil} ++ {3 :: 4 :: nil}})}}
+
+@defclass[#:super [(Semigroup a)]
+          (Monoid a)
+          [mempty a]]{
+
+A @deftech{monoid} extends the notion of a @tech{semigroup} with the notion of an identity element,
+@racket[mempty].
+
+@defmethod[mempty a]{
+
+An identity element for @racket[++]. That is, @racket[mempty] must obey the following laws:
+
+@racketblock[
+  @#,racket[{_a ++ mempty}] @#,elem[#:style 'roman]{=} @#,racket[_a]
+  @#,racket[{mempty ++ _a}] @#,elem[#:style 'roman]{=} @#,racket[_a]]
+
+@(hackett-examples
+  (: mempty String)
+  (: mempty (List Integer)))}}
+
 @section[#:tag "reference-controlling-evaluation"]{Controlling Evaluation}
 
 @defthing[seq (forall [a b] {a -> b -> b})]{

@@ -6,7 +6,7 @@
 
          racket/sandbox
          scribble/example
-         scribble/manual
+         (except-in scribble/manual defclass defmethod)
          scribble/manual/hackett
          syntax/parse/define)
 

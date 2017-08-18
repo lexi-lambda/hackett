@@ -2,7 +2,7 @@
 
 (require (for-label hackett)
 
-         (for-syntax racket/base syntax/parse)
+         (for-syntax racket/base)
 
          racket/list
          scribble/struct
@@ -11,8 +11,9 @@
          scribble/manual
          scribble/decode
          scribble/html-properties
-         (only-in scribble/core make-style make-table-columns nested-flow)
+         syntax/parse/define
 
+         (only-in scribble/core make-style make-table-columns nested-flow)
          (only-in scribble/private/manual-vars add-background-label)
          (only-in scribble/private/manual-bind
                   id-to-target-maker with-exporting-libraries
@@ -20,7 +21,7 @@
 
          (only-meta-in 1 hackett/private/adt))
 
-(provide defdata)
+(provide defdata defclass defmethod)
 
 (begin-for-syntax
   (define-splicing-syntax-class kind-kw
@@ -44,23 +45,45 @@
                         #:defaults ([key #'#f]
                                     [expr #'#f])))))
 
-(define-syntax (defdata stx)
-  (syntax-parse stx
-    [(_ kind:kind-kw 
-        lt:link-target?-kw
-        type:type-constructor-spec
-        constructor:data-constructor-spec ...
-        desc ...)
-     #'(let-syntax ([type.arg (make-variable-id 'type.arg)] ...)
-         (*defdata kind.kind
-                   lt.expr
-                   (quote-syntax type.tag)
-                   'type.tag
-                   (list (racket type.arg) ...)
-                   (list (quote-syntax constructor.tag) ...)
-                   (list 'constructor.tag ...)
-                   (list (list (racket constructor.arg) ...) ...)
-                   (lambda () (list desc ...))))]))
+(define-syntax-parser defdata
+  [(_ kind:kind-kw 
+      lt:link-target?-kw
+      type:type-constructor-spec
+      constructor:data-constructor-spec ...
+      desc ...)
+   #'(let-syntax ([type.arg (make-variable-id 'type.arg)] ...)
+       (*defdata kind.kind
+                 lt.expr
+                 (quote-syntax type.tag)
+                 'type.tag
+                 (list (racket type.arg) ...)
+                 (list (quote-syntax constructor.tag) ...)
+                 (list 'constructor.tag ...)
+                 (list (list (racket constructor.arg) ...) ...)
+                 (lambda () (list desc ...))))])
+
+(define-syntax-parser defclass
+  [(_ kind:kind-kw 
+      lt:link-target?-kw
+      {~optional {~seq #:super [super-constraint ...]}
+                 #:defaults ([[super-constraint 1] '()])}
+      (name:id var-id:id)
+      [method-id:id method-type:expr] ...
+      desc ...)
+   #'(let-syntax ([var-id (make-variable-id 'var-id)])
+       (*defclass kind.kind
+                  lt.expr
+                  (quote-syntax name)
+                  'name
+                  (list (racket super-constraint) ...)
+                  (racket var-id)
+                  (list (racket method-id) ...)
+                  (list (racket method-type) ...)
+                  (lambda () (list desc ...))))])
+
+(define-syntax-parser defmethod
+  [(_ body ...)
+   #'(nested #:style 'inset (defthing body ...))])
 
 ;; copied from scribble/private/manual-vars.rkt
 (define boxed-style 
@@ -114,6 +137,59 @@
                                                 (list (linebreak)
                                                       (hspace 2)
                                                       (make-constructor ctor-id ctor-name ctor-args)))
+                                              (racketparenfont ")")))))))))))))
+    (content-thunk))))
+
+(define (*defclass kind link? class-id class-name super-constraints var-id method-ids method-types
+                   content-thunk)
+  (define class-head
+    (let* ([content (to-element (make-just-context class-name class-id) #:defn? #t)]
+           [ref-content (to-element (make-just-context class-name class-id))]
+           [thing-id ((id-to-target-maker class-id #t)
+                      content
+                      (λ (tag)
+                        (make-toc-target2-element
+                         #f
+                         (make-index-element
+                          #f
+                          content
+                          tag
+                          (list (symbol->string class-name))
+                          (list ref-content)
+                          (with-exporting-libraries
+                           (λ (libs) (make-thing-index-desc class-name libs))))
+                         tag
+                         ref-content)))])
+      (list (racketparenfont "(") thing-id (hspace 1) var-id (racketparenfont ")"))))
+  (make-splice
+   (cons
+    (make-blockquote
+     (make-style 'vertical-inset null)
+     (list
+      (make-table
+       boxed-style
+       (list (list ((add-background-label (or kind "typeclass"))
+                    (top-align "argcontract"
+                               (list
+                                (list
+                                 (list (make-omitable-paragraph
+                                        (list (racketparenfont "(")
+                                              (racket class) (hspace 1)
+                                              (if (empty? super-constraints) '()
+                                                  (list (add-between super-constraints (hspace 1))
+                                                        (hspace 1) (racket =>) (hspace 1)))
+                                              class-head
+                                              (for/list ([method-id (in-list method-ids)]
+                                                         [method-type (in-list method-types)])
+                                                (list (linebreak)
+                                                      (hspace 2)
+                                                      (racketparenfont "[")
+                                                      method-id
+                                                      (hspace 1)
+                                                      (racket :)
+                                                      (hspace 1)
+                                                      method-type
+                                                      (racketparenfont "]")))
                                               (racketparenfont ")")))))))))))))
     (content-thunk))))
 
