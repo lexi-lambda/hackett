@@ -32,7 +32,9 @@
 (define-simple-macro (hackett-examples
                       {~or {~optional {~seq #:eval eval:expr}}
                            {~optional {~and #:once once}}
-                           {~optional {~seq #:label label:expr}}}
+                           {~optional {~seq #:label label:expr}}
+                           {~optional {~and #:no-preserve-source-locations
+                                            no-preserve-source-locations}}}
                       ...
                       body ...)
   #:with eval* (or (attribute eval) #'(make-hackett-eval))
@@ -40,8 +42,11 @@
                            [(attribute eval) #'[]]
                            [else             #'[#:once]])
   #:with [label* ...] (if (attribute label) #'[#:label label] #'[])
+  #:with [preserve-source-locations ...] (if (attribute no-preserve-source-locations) #'[]
+                                             #'[#:preserve-source-locations])
   (examples
    #:eval eval*
+   preserve-source-locations ...
    once* ...
    label* ...
    body ...))

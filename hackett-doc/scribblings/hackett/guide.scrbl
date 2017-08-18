@@ -1,6 +1,7 @@
 #lang scribble/manual
 
-@(require scribblings/hackett/private/util)
+@(require scribble/bnf
+          scribblings/hackett/private/util)
 
 @title[#:tag "guide" #:style 'toc]{The Hackett Guide}
 
@@ -71,6 +72,7 @@ attempt to apply something that is not a function, like @racket[3], the typechec
 expression as ill-typed:
 
 @(hackett-interaction
+  #:no-preserve-source-locations
   (eval:error (3 true)))
 
 The type of @racket[+] is slightly more complicated:
@@ -159,6 +161,7 @@ by the typechecker. If a type annotation is provided, but the expression does no
 expected type, the typechecker will raise an error at compile time:
 
 @(hackett-interaction
+  #:no-preserve-source-locations
   (eval:error (def x : Integer "not an integer")))
 
 @section[#:tag "guide-hackett-essentials"]{Hackett Essentials}
@@ -314,6 +317,105 @@ sort of “fallthrough” case:
 This works because patterns in @racket[defn] are matched from top to bottom, picking the first one
 that successfully matches.
 
+@section[#:tag "guide-infix-syntax"]{Infix Syntax}
+
+Hackett supports a limited form of infix syntax, which allows binary functions (that is, functions
+that accept two arguments) to be applied by placing the function between its two operands, rather than
+before them as in the usual prefix notation generally used by Hackett. This means that a function
+application of the following form:
+
+@(racketblock
+  @#,BNF-seq[@litchar{(} @nonterm{function expr} @nonterm{arg expr} @nonterm{arg expr} @litchar{)}])
+
+…can be equivalently written in an alternate form:
+
+@(racketblock
+  @#,BNF-seq[
+    @litchar{@"{"} @nonterm{arg expr} @nonterm{function expr} @nonterm{arg expr} @litchar{@"}"}])
+
+Note the curly braces (@litchar{@"{}"}), which are significant in Hackett. When used as expressions,
+parentheses and curly braces are @emph{not} interchangeable. Use of curly braces in an expression
+enters @deftech{infix mode}, which alters function application syntax to support infix syntax.
+
+Infix syntax is most useful for presenting mathematical notation, which is traditionally written using
+infix symbolic operators. Hackett’s infix syntax can emulate this:
+
+@(hackett-interaction
+  {1 + 2}
+  {2 * 3})
+
+Any function of arity two can be applied using infix syntax, even those defined as entirely normal
+functions; there is no syntactic difference between an “operator” and any other function. For example,
+it would be equally possible to use a function named @racket[add] in an infix expression:
+
+@(hackett-interaction
+  (def add +)
+  {1 add 2})
+
+In fact, there is not even any restriction that functions used in infix expressions must be
+identifiers. Arbitrary expressions that produce functions may also be used infix:
+
+@(hackett-interaction
+  {1 (λ [x _] x) 2})
+
+Infix syntax can also be used to chain multiple operators together in the same expression, so the
+general syntax of infix mode can be described with the following grammar:
+
+@(racketblock
+  @#,BNF-seq[@litchar{@"{"} @nonterm{arg expr}
+             @kleeneplus[@BNF-group[@nonterm{function expr} @nonterm{arg expr}]]
+             @litchar{@"}"}])
+
+…where each @nonterm{function expr} is known as an @deftech{infix operator}.
+
+@(hackett-examples
+  {1 + 2 + 3})
+
+Astute readers might notice that operators chained in this way create a minor ambiguity. Is
+@racket[{_x _f _y _g _z}] grouped like this?
+
+@(racketblock
+  (_g (_f _x _y) _z))
+
+…or like this?
+
+@(racketblock
+  (_f _x (_g _y _z)))
+
+Both interpretations are potentially reasonable. For operators like @racket[+], the grouping does not
+matter, because @racket[+] is associative, so the result will be the same whichever grouping is
+picked. For other operators, however, the grouping is meaningful. For example, @racket[-] can produce
+very different results depending on which grouping is picked:
+
+@(hackett-interaction
+  {{10 - 15} - 6}
+  {10 - {15 - 6}})
+
+How does Hackett determine which grouping to use? Well, it uses a notion of @deftech{operator fixity}
+to decide on a case-by-case basis. Some operators should be grouped the first way (they
+“associate left”) while others should be grouped the second way (they “associate right”). The
+@racket[-] operator, for example, associates left, while the @racket[::] operator associates right:
+
+@(hackett-interaction
+  {10 - 15 - 6}
+  {1 :: 2 :: 3 :: nil})
+
+Operator fixity can be specified when a binding is defined by providing a @deftech{fixity annotation},
+which is either @racket[#:fixity left] or @racket[#:fixity right]. Using a fixity annotation, it is
+possible to write a version of @racket[-] that associates right:
+
+@(hackett-interaction
+  (def -/r #:fixity right -)
+  {10 -/r 15 -/r 6})
+
+If no fixity annotation is specified, the default fixity is @racket[left].
+
+Additionally, infix syntax can be used in types as well as expressions, and it works the same way.
+Type constructors may also have @tech{operator fixity}, most notably @racket[->], which associates
+right. This makes writing type signatures for curried functions much more palatable, since
+@racket[{_a -> _b -> _c}] tends to be easier to visually scan than @racket[(-> _a (-> _b _c))],
+especially when the argument types are long or function types are nested in argument positions.
+
 @section[#:tag "guide-bottoms"]{Partial Functions and Nontermination}
 
 In Hackett, functions are generally expected to be @deftech[#:key "total function"]{total}, which
@@ -342,6 +444,7 @@ anything, but this is only possible because it will never actually return anythi
 @racket[error!]’s result is needed, the program will simply crash.
 
 @(hackett-interaction
+  #:no-preserve-source-locations
   (eval:error (error! "urk!")))
 
 Partial functions in Hackett are idiomatically indicated by including a @litchar{!} symbol at the end

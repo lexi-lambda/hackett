@@ -41,6 +41,7 @@ Annotates @racket[expr] with @racket[type]. If @racket[expr] does not have the g
 error is produced.
 
 @(hackett-examples
+  #:no-preserve-source-locations
   (: 42 Integer)
   (: "hello" String)
   (eval:error (: "hello" Integer)))
@@ -50,11 +51,14 @@ to provide additional locations for type annotations.}
 
 @subsection[#:tag "reference-definitions"]{Definitions}
 
-@defform[#:literals [:]
-         (def id maybe-type val-expr)
+@defform[#:literals [: left right]
+         (def id maybe-type maybe-fixity-ann val-expr)
          #:grammar
          ([maybe-type (code:line : type)
-                      (code:line)])]{
+                      (code:line)]
+          [maybe-fixity-ann (code:line #:fixity fixity)
+                            (code:line)]
+          [fixity left right])]{
 
 Hackett’s basic definition form. Defines a new binding named @racket[id] with the value
 @racket[val-expr]. If @racket[type] is provided, it is used as the type for @racket[id], and
@@ -62,17 +66,28 @@ Hackett’s basic definition form. Defines a new binding named @racket[id] with 
 inferred from @racket[val-expr].
 
 @(hackett-examples
+  #:no-preserve-source-locations
   (def x 7)
   (eval:check x 7)
   (def y : Integer 7)
-  (eval:error (def z : String 7)))}
+  (eval:error (def z : String 7)))
 
-@defform[#:literals [:]
-         (defn id maybe-type
+If @racket[fixity] is specified, it defines @racket[id]’s @tech{operator fixity} when used as an
+@tech{infix operator}.
+
+@(hackett-examples
+  (def -/right #:fixity right -)
+  {10 -/right 15 -/right 6})}
+
+@defform[#:literals [: left right]
+         (defn id maybe-type maybe-fixity-ann
            [[arg-pat ...+] body-expr] ...+)
          #:grammar
          ([maybe-type (code:line : type)
-                      (code:line)])]{
+                      (code:line)]
+          [maybe-fixity-ann (code:line #:fixity fixity)
+                            (code:line)]
+          [fixity left right])]{
 
 A shorthand definition form for defining a function with multiple cases. Essentially equivalent to the
 following combination of @racket[def], @racket[lambda], and @racket[case*]:
@@ -87,7 +102,7 @@ The @racket[defn] form is generally preferred when defining top-level functions.
 
 @(hackett-examples
   (defn square : (-> Integer Integer)
-    [[x] (* x x)])
+    [[x] {x * x}])
   (eval:check (square 5) 25))}
 
 @subsection[#:tag "reference-anonymous-functions"]{Anonymous Functions}
@@ -101,7 +116,7 @@ number of @racket[arg-pat]s provided. When the function is applied, the provided
 matched against each @racket[arg-pat], and the function’s result will be @racket[body-expr].
 
 @(hackett-examples
-  (eval:check ((λ [x y] (+ x (* y 2))) 5 10) 25))}
+  (eval:check ((λ [x y] {x + {y * 2}}) 5 10) 25))}
 
 @deftogether[
  [@defform[(lambda* [[arg-pat ...+] body-expr] ...+)]
@@ -154,12 +169,18 @@ Like @racket[case], but matches against multiple values at once. Each case only 
 @subsection[#:tag "reference-algebraic-datatypes"]{Defining algebraic datatypes}
 
 @(define data-examples-eval (make-hackett-eval))
-@defform[(data type-clause data-clause ...)
+@defform[#:literals [left right]
+         (data type-clause data-clause ...)
          #:grammar
          ([type-clause type-id
-                       (type-constructor-id param-id ...+)]
+                       (code:line (type-constructor-id param-id ...+) maybe-fixity-ann)
+                       (code:line {param-id type-constructor-id param-id} maybe-fixity-ann)]
           [data-clause value-id
-                       (data-constructor-id arg-type ...+)])]{
+                       (code:line (data-constructor-id arg-type ...+) maybe-fixity-ann)
+                       (code:line {arg-type data-constructor-id arg-type} maybe-fixity-ann)]
+          [maybe-fixity-ann (code:line #:fixity fixity)
+                            (code:line)]
+          [fixity left right])]{
 
 Defines a new @deftech{algebraic datatype}. The defined type is distinct from all other types, whether
 or not they have the same shape or name.
@@ -178,11 +199,10 @@ contains the provided values.
 
 @(hackett-examples
   #:eval data-examples-eval
-  (eval:no-prompt
-   (data Foo
-     (foo1 Integer Bool)
-     (foo2 String)
-     foo3))
+  (data Foo
+    (foo1 Integer Bool)
+    (foo2 String)
+    foo3)
   foo1
   (foo1 42 true)
   foo2
@@ -199,7 +219,17 @@ pattern-matching allows extracting values stored “inside” data constructors.
   (case (foo1 42 true)
     [(foo1 n _) n]
     [(foo2 _)   2]
-    [foo3       3]))}
+    [foo3       3]))
+
+Like @racket[def], @racket[data] supports @tech{operator fixity} annotations. Each @racket[fixity]
+specified controls the fixity used by the associated @racket[type-constructor-id] or
+@racket[value-constructor-id] when used as an @tech{infix operator}.
+
+@(hackett-examples
+  (data (Tree a)
+    {(Tree a) :&: (Tree a)} #:fixity right
+    (leaf a))
+  {(leaf 1) :&: (leaf 2) :&: (leaf 3)})}
 @(close-eval data-examples-eval)
 
 @subsection[#:tag "reference-numbers"]{Numbers}
