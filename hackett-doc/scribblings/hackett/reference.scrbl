@@ -444,6 +444,8 @@ will also be evaluated to weak head normal form. This can be used to reduce lazi
 
 @defthing[error! (forall [a] {String -> a})]{
 
+@see-guide-note["guide-bottoms"]{partial functions}
+
 A simple @tech{partial function} that crashes the program with a message when evaluated.}
 
 @defthing[undefined! (forall [a] a)]{

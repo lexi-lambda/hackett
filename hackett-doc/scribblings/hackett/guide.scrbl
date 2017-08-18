@@ -472,6 +472,8 @@ defined for both @racket[true] and @racket[false], which are the only possible v
 a function with the type @racket[{A -> B}] implies that is is always possible to get a @racket[B] when
 you have an @racket[A].
 
+@see-reference-note["reference-controlling-evaluation"]{partial functions}
+
 Sometimes, however, this is impractical. Sometimes the type system is not expressive enough to
 constrain the input type as much as the programmer would like. In other cases, the burden of assigning
 a precise type to a value might be too high. In these situations, Hackett allows the programmer to

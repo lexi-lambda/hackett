@@ -7,5 +7,6 @@
     "hackett-lib"
     ["scribble-lib" #:version "1.16"]))
 (define build-deps
-  '("racket-doc"
+  '("at-exp-lib"
+    "racket-doc"
     "sandbox-lib"))

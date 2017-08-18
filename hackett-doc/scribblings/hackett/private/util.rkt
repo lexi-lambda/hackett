@@ -1,13 +1,16 @@
-#lang racket/base
+#lang at-exp racket/base
 
 (require (for-label hackett)
 
          (for-syntax racket/base)
 
          racket/sandbox
+         scribble/core
          scribble/example
+         scribble/html-properties
          (except-in scribble/manual defclass defmethod)
          scribble/manual/hackett
+         setup/collects
          syntax/parse/define)
 
 (provide (for-label (all-from-out hackett))
@@ -16,7 +19,9 @@
 
          make-hackett-eval hackett-examples hackett-interaction
 
-         tech/racket-reference)
+         tech/racket-reference
+
+         other-reference-note see-guide-note later-guide-note see-reference-note)
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; evaluation
@@ -60,3 +65,35 @@
 (define (tech/racket-reference #:key [key #f] #:normalize? [normalize? #t] . pre-content)
   (apply tech #:doc '(lib "scribblings/reference/reference.scrbl")
          #:key key #:normalize? normalize? pre-content))
+
+;; ---------------------------------------------------------------------------------------------------
+;; internal references
+
+(define css-resource
+  (make-css-addition
+   (path->collects-relative
+    (collection-file-path "other-reference.css" "scribblings" "hackett" "private"))))
+
+(define finger (element (style "margin-note__image-left margin-note__image-left--finger"
+                               (list css-resource))
+                        '()))
+
+(define (flexible-container . content)
+  (element (style "flexible-container" (list css-resource (alt-tag "div"))) content))
+(define (flexible-element . content)
+  (element (style "flexible-element" (list css-resource (alt-tag "div"))) content))
+
+(define (other-reference-note . pre-content)
+  (margin-note (flexible-container finger (apply flexible-element pre-content))))
+
+(define (see-guide-note tag . pre-content)
+  @other-reference-note{
+    @Secref[tag] in @secref["guide"] has additional examples of @|pre-content|.})
+
+(define (later-guide-note tag . pre-content)
+  @other-reference-note{
+    @secref[tag] (later in this guide) explains more about @|pre-content|.})
+
+(define (see-reference-note tag . pre-content)
+  @other-reference-note{
+    @Secref[tag] in @secref["reference"] has additional information on @|pre-content|.})
