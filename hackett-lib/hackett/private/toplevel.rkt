@@ -66,7 +66,9 @@
                      hackett/private/typecheck)
          racket/match
          racket/promise
-         syntax/parse/define)
+         syntax/parse/define
+
+         (only-in hackett/private/base τ⇒! elaborate-dictionaries))
 
 (provide @%top-interaction make-hackett-print)
 
@@ -85,11 +87,9 @@
       (syntax/loc this-syntax
         (begin form ... (@%top-interaction . form*)))]
      [expr
-      (or (and~>> (get-type #'expr)
-                  apply-current-subst
-                  τ->string
-                  ((λ (type) #`(repl-result (force expr) '#,type))))
-          #'expr)])])
+      (let-values ([(e- τ_e) (τ⇒! #'expr)])
+        #`(repl-result (force #,(elaborate-dictionaries e-))
+                       '#,(τ->string τ_e)))])])
 
 (define ((make-hackett-print #:printer [orig-print (current-print)]) y)
   (match y

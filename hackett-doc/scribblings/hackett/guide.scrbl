@@ -262,8 +262,8 @@ Infix syntax is most useful for presenting mathematical notation, which is tradi
 infix symbolic operators. Hackett’s infix syntax can emulate this:
 
 @(hackett-interaction
-  {1 + 2}
-  {2 * 3})
+  (eval:check {1 + 2} 3)
+  (eval:check {2 * 3} 6))
 
 Any function of arity two can be applied using infix syntax, even those defined as entirely normal
 functions; there is no syntactic difference between an “operator” and any other function. For example,
@@ -271,13 +271,13 @@ it would be equally possible to use a function named @racket[add] in an infix ex
 
 @(hackett-interaction
   (def add +)
-  {1 add 2})
+  (eval:check {1 add 2} 3))
 
 In fact, there is not even any restriction that functions used in infix expressions must be
 identifiers. Arbitrary expressions that produce functions may also be used infix:
 
 @(hackett-interaction
-  {1 (λ [x _] x) 2})
+  (eval:check {1 (λ [x _] x) 2} 1))
 
 Infix syntax can also be used to chain multiple operators together in the same expression, so the
 general syntax of infix mode can be described with the following grammar:
@@ -290,7 +290,7 @@ general syntax of infix mode can be described with the following grammar:
 …where each @nonterm{function expr} is known as an @deftech{infix operator}.
 
 @(hackett-examples
-  {1 + 2 + 3})
+  (eval:check {1 + 2 + 3} 6))
 
 Astute readers might notice that operators chained in this way create a minor ambiguity. Is
 @racket[{_x _f _y _g _z}] grouped like this?
@@ -309,8 +309,8 @@ picked. For other operators, however, the grouping is meaningful. For example, @
 very different results depending on which grouping is picked:
 
 @(hackett-interaction
-  {{10 - 15} - 6}
-  {10 - {15 - 6}})
+  (eval:check {{10 - 15} - 6} -11)
+  (eval:check {10 - {15 - 6}} 1))
 
 How does Hackett determine which grouping to use? Well, it uses a notion of @deftech{operator fixity}
 to decide on a case-by-case basis. Some operators should be grouped the first way (they
@@ -318,7 +318,7 @@ to decide on a case-by-case basis. Some operators should be grouped the first wa
 @racket[-] operator, for example, associates left, while the @racket[::] operator associates right:
 
 @(hackett-interaction
-  {10 - 15 - 6}
+  (eval:check {10 - 15 - 6} -11)
   {1 :: 2 :: 3 :: nil})
 
 Operator fixity can be specified when a binding is defined by providing a @deftech{fixity annotation},
@@ -327,7 +327,7 @@ possible to write a version of @racket[-] that associates right:
 
 @(hackett-interaction
   (def -/r #:fixity right -)
-  {10 -/r 15 -/r 6})
+  (eval:check {10 -/r 15 -/r 6} 1))
 
 If no fixity annotation is specified, the default fixity is @racket[left].
 
@@ -386,7 +386,7 @@ the different values of an enumeration. Here’s one way to write our @racket[is
 
 @(hackett-interaction
   #:eval enumerations-eval
-  (defn is-weekend? : (-> Weekday Bool)
+  (defn is-weekend? : {Weekday -> Bool}
     [[sunday] true]
     [[monday] false]
     [[tuesday] false]
@@ -406,7 +406,7 @@ sort of “fallthrough” case:
 
 @(hackett-interaction
   #:eval enumerations-eval
-  (defn is-weekend? : (-> Weekday Bool)
+  (defn is-weekend? : {Weekday -> Bool}
     [[sunday] true]
     [[saturday] true]
     [[_] false])
@@ -415,6 +415,53 @@ sort of “fallthrough” case:
 
 This works because patterns in @racket[defn] are matched from top to bottom, picking the first one
 that successfully matches.
+
+@subsection[#:tag "guide-intro-to-lists"]{An introduction to lists}
+
+While it’s great to be able to represent weekdays with our @racket[Weekday] type, we don’t have any
+way to talk about multiple weekdays at a time. To do this, we need a data structure that can hold
+multiple values of the same type. One such data structure is a @tech{list}, which represents a
+singly-linked list. Lists are @emph{homogenous}, which means they hold a set of values that all have
+the same @tech{type}.
+
+A list is built out of two fundamental pieces: the empty list, named @racket[nil], and the “cons”
+constructor, named @racket[::]. These have the following types:
+
+@margin-note{
+  The use of @racket[forall] in the types of @racket[nil] and @racket[::] indicates that lists are
+  @emph{polymorphic}—that is, they can hold values of any type. This will be covered in more detail
+  in a future section.}
+
+@nested[#:style 'inset]{
+  @deftogether[
+    [@defthing[#:link-target? #f nil (forall [a] (List a))]
+     @defthing[#:link-target? #f :: (forall [a] {a -> (List a) -> (List a)})]]]}
+
+Essentially, @racket[::] prepends a single element to an existing list (known as the “tail” of the
+list), and @racket[nil] is the end of every list. To create a single-element list, use @racket[::]
+to prepend an element to the empty list:
+
+@(hackett-interaction
+  {1 :: nil})
+
+A list of more elements can be created with nested uses of @racket[::]:
+
+@(hackett-interaction
+  {1 :: {2 :: {3 :: nil}}})
+
+Additionally, @racket[::] is an @tech{infix operator} that associates right, so nested braces can be
+elided when constructing lists:
+
+@(hackett-interaction
+  {1 :: 2 :: 3 :: nil})
+
+Once we have a list, we can do various things with it. For example, we can concatenate two lists
+together using the @racket[++] operator:
+
+@(hackett-interaction
+  {{1 :: 2 :: nil} ++ {3 :: 4 :: nil}})
+
+@(close-eval enumerations-eval)
 
 @section[#:tag "guide-bottoms"]{Partial Functions and Nontermination}
 
@@ -471,7 +518,7 @@ never return, but there is another possibility besides halting: the function can
 loop. Here is an example of such a function, called @racket[diverge!]:
 
 @(racketblock
-  (defn diverge! : (forall [a] (-> String a))
+  (defn diverge! : (forall [a] {String -> a})
     [[x] (diverge! x)]))
 
 This sort of function is often @emph{also} considered partial, since it does not return a value for
