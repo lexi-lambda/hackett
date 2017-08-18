@@ -238,86 +238,7 @@ This means that @racket[List] isn’t really a type, since types describe values
 not a valid type on its own. Instead, @racket[List] is known as a @deftech{type constructor}, which
 can be applied to other types to produce a type.
 
-@section[#:tag "guide-working-with-data"]{Working with data}
-
-Hackett is a @emph{pure} programming language, which means functions cannot have side-effects. This
-makes Hackett functions truly functions in the mathematical sense—the output is always the same for a
-given input, and a function’s evaluation cannot do anything but produce a value as output. This
-encourages a very @emph{data-oriented} style of programming, assembling pipelines of pure functions
-that operate on data structures.
-
-For that reason, the basic building blocks of Hackett are built around producing and consuming data,
-and Hackett makes it easy to define new data structures. You’ve already seen integers, but Hackett
-provides a myriad of built-in datatypes. This section will cover some of those datatypes, how to
-produce and consume them, and how to build your own.
-
-@subsection[#:tag "guide-enumerations"]{Enumerations}
-
-@(define enumerations-eval (make-hackett-eval))
-
-One of the most fundamental sorts of data that can be represented in Hackett are
-@italic{enumerations}, often called “enums” in other languages. An enumeration is a type that can be
-one of a set of predefined values. For example, the days of the week form an obvious enumeration. We
-can define that enumeration in Hackett using the @racket[data] form:
-
-@(hackett-interaction
-  #:eval enumerations-eval
-  #:no-prompt
-  (data Weekday
-    sunday monday tuesday wednesday
-    thursday friday saturday))
-
-This declaration defines two things: a @tech{type} and a set of @tech{values}. Specifically, it
-defines a new type named @racket[Weekday], and it defines 7 values, @racket[monday] through
-@racket[sunday]. You can see that each of these names are bound to values of the @racket[Weekday]
-type by evaluating them in the REPL:
-
-@(hackett-interaction
-  #:eval enumerations-eval
-  monday
-  thursday)
-
-Of course, these values are not very interesting on their own. Presumably, once we have an
-enumeration, we would like to be able to @emph{do something} with its values. For example, we might
-wish to write a function that determines if a weekday is a weekend—that is, if it is @racket[sunday]
-or @racket[saturday]. To do this, we need some way to check if a weekday is a particular value.
-
-We can do this by using @italic{pattern matching}, which makes it possible to make a decision based on
-the different values of an enumeration. Here’s one way to write our @racket[is-weekend?] function:
-
-@(hackett-interaction
-  #:eval enumerations-eval
-  (defn is-weekend? : (-> Weekday Bool)
-    [[sunday] true]
-    [[monday] false]
-    [[tuesday] false]
-    [[wednesday] false]
-    [[thursday] false]
-    [[friday] false]
-    [[saturday] true])
-  (is-weekend? saturday)
-  (is-weekend? wednesday))
-
-This works! Each clause in @racket[defn] provides a @tech{pattern} to match against. If a pattern is
-the name of an enumeration value, it only matches if the supplied argument is that specific value.
-
-Sadly, while the above definition works, it’s a little wordy. To simplify it a little, it’s possible
-to use the special @racket[_] pattern, which matches @emph{any} value. This can be used to create a
-sort of “fallthrough” case:
-
-@(hackett-interaction
-  #:eval enumerations-eval
-  (defn is-weekend? : (-> Weekday Bool)
-    [[sunday] true]
-    [[saturday] true]
-    [[_] false])
-  (is-weekend? saturday)
-  (is-weekend? wednesday))
-
-This works because patterns in @racket[defn] are matched from top to bottom, picking the first one
-that successfully matches.
-
-@section[#:tag "guide-infix-syntax"]{Infix Syntax}
+@subsection[#:tag "guide-infix-syntax"]{Infix Syntax}
 
 Hackett supports a limited form of infix syntax, which allows binary functions (that is, functions
 that accept two arguments) to be applied by placing the function between its two operands, rather than
@@ -415,6 +336,85 @@ Type constructors may also have @tech{operator fixity}, most notably @racket[->]
 right. This makes writing type signatures for curried functions much more palatable, since
 @racket[{_a -> _b -> _c}] tends to be easier to visually scan than @racket[(-> _a (-> _b _c))],
 especially when the argument types are long or function types are nested in argument positions.
+
+@section[#:tag "guide-working-with-data"]{Working with data}
+
+Hackett is a @emph{pure} programming language, which means functions cannot have side-effects. This
+makes Hackett functions truly functions in the mathematical sense—the output is always the same for a
+given input, and a function’s evaluation cannot do anything but produce a value as output. This
+encourages a very @emph{data-oriented} style of programming, assembling pipelines of pure functions
+that operate on data structures.
+
+For that reason, the basic building blocks of Hackett are built around producing and consuming data,
+and Hackett makes it easy to define new data structures. You’ve already seen integers, but Hackett
+provides a myriad of built-in datatypes. This section will cover some of those datatypes, how to
+produce and consume them, and how to build your own.
+
+@subsection[#:tag "guide-enumerations"]{Enumerations}
+
+@(define enumerations-eval (make-hackett-eval))
+
+One of the most fundamental sorts of data that can be represented in Hackett are
+@italic{enumerations}, often called “enums” in other languages. An enumeration is a type that can be
+one of a set of predefined values. For example, the days of the week form an obvious enumeration. We
+can define that enumeration in Hackett using the @racket[data] form:
+
+@(hackett-interaction
+  #:eval enumerations-eval
+  #:no-prompt
+  (data Weekday
+    sunday monday tuesday wednesday
+    thursday friday saturday))
+
+This declaration defines two things: a @tech{type} and a set of @tech{values}. Specifically, it
+defines a new type named @racket[Weekday], and it defines 7 values, @racket[monday] through
+@racket[sunday]. You can see that each of these names are bound to values of the @racket[Weekday]
+type by evaluating them in the REPL:
+
+@(hackett-interaction
+  #:eval enumerations-eval
+  monday
+  thursday)
+
+Of course, these values are not very interesting on their own. Presumably, once we have an
+enumeration, we would like to be able to @emph{do something} with its values. For example, we might
+wish to write a function that determines if a weekday is a weekend—that is, if it is @racket[sunday]
+or @racket[saturday]. To do this, we need some way to check if a weekday is a particular value.
+
+We can do this by using @italic{pattern matching}, which makes it possible to make a decision based on
+the different values of an enumeration. Here’s one way to write our @racket[is-weekend?] function:
+
+@(hackett-interaction
+  #:eval enumerations-eval
+  (defn is-weekend? : (-> Weekday Bool)
+    [[sunday] true]
+    [[monday] false]
+    [[tuesday] false]
+    [[wednesday] false]
+    [[thursday] false]
+    [[friday] false]
+    [[saturday] true])
+  (is-weekend? saturday)
+  (is-weekend? wednesday))
+
+This works! Each clause in @racket[defn] provides a @tech{pattern} to match against. If a pattern is
+the name of an enumeration value, it only matches if the supplied argument is that specific value.
+
+Sadly, while the above definition works, it’s a little wordy. To simplify it a little, it’s possible
+to use the special @racket[_] pattern, which matches @emph{any} value. This can be used to create a
+sort of “fallthrough” case:
+
+@(hackett-interaction
+  #:eval enumerations-eval
+  (defn is-weekend? : (-> Weekday Bool)
+    [[sunday] true]
+    [[saturday] true]
+    [[_] false])
+  (is-weekend? saturday)
+  (is-weekend? wednesday))
+
+This works because patterns in @racket[defn] are matched from top to bottom, picking the first one
+that successfully matches.
 
 @section[#:tag "guide-bottoms"]{Partial Functions and Nontermination}
 
