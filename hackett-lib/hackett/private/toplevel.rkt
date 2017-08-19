@@ -89,7 +89,7 @@
      [expr
       (let-values ([(e- τ_e) (τ⇒! #'expr)])
         #`(repl-result (force #,(elaborate-dictionaries e-))
-                       '#,(τ->string τ_e)))])])
+                       '#,(τ->string (apply-current-subst τ_e))))])])
 
 (define ((make-hackett-print #:printer [orig-print (current-print)]) y)
   (match y

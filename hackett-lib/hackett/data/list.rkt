@@ -53,13 +53,12 @@
   [[f {x :: xs} {y :: ys}] {(f x y) :: (zip-with f xs ys)}]
   [[_ _         _        ] nil])
 
-; TODO: make repeat/cycle! a circular structure instead of an infinite stream (need letrec)
 (defn repeat : (∀ [a] {a -> (List a)})
-  [[x] {x :: (repeat x)}])
+  [[x] (letrec ([xs {x :: xs}]) xs)])
 
 (defn cycle! : (∀ [a] {(List a) -> (List a)})
   [[nil] (error! "cycle!: empty list")]
-  [[xs ] {xs ++ (cycle! xs)}])
+  [[xs ] (letrec ([ys {xs ++ ys}]) ys)])
 
 (def or : {(List Bool) -> Bool}
   (foldr || false))

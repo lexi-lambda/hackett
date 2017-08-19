@@ -136,6 +136,29 @@ combination of @racket[lambda] and @racket[case*]:
                (just 42))
               42))}
 
+@subsection[#:tag "reference-local-binding"]{Local Bindings}
+
+@defform[#:literals [:]
+         (letrec ([id maybe-type val-expr] ...+)
+           body-expr)
+         #:grammar
+         ([maybe-type (code:line : type)
+                      (code:line)])]{
+
+Creates a set of potentially mutually-recursive local bindings. Each @racket[id] is bound to the
+result of @racket[val-expr], and each @racket[id] is also in scope within each @racket[val-expr] as
+well as the @racket[body-expr].
+
+This allows @racket[val-expr]s to refer to themselves (to create circular values or recursive
+functions) or other bindings (to create shared or mututally recursive values or functions).
+
+@(hackett-examples
+  (letrec ([xs {1 :: xs}])
+    (take 5 xs))
+  (letrec ([xs {1 :: ys}]
+           [ys {2 :: xs}])
+    (take 5 xs)))}
+
 @subsection[#:tag "reference-pattern-matching"]{Pattern Matching}
 
 @defform[(case val-expr
@@ -345,6 +368,15 @@ represents failure) or values that are not required to be present.}
 The @deftech{list} type, which describes lazy linked lists. Since a list is lazy, it may be infinite,
 as long as the entire list is never demanded. The @racket[::] constructor is pronounced “cons”, and it
 is generally intended to be used infix.}
+
+@defproc[(take [n Integer] [xs (List a)]) (List a)]{
+
+Produces a list with the first @racket[n] elements of @racket[xs]. If @racket[xs] contains fewer than
+@racket[n] elements, @racket[xs] is returned unmodified.
+
+@(hackett-examples
+  (take 2 {1 :: 2 :: 3 :: nil})
+  (take 2 {1 :: nil}))}
 
 @section[#:tag "reference-typeclasses"]{Typeclasses}
 
