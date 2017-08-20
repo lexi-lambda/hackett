@@ -139,15 +139,42 @@ combination of @racket[lambda] and @racket[case*]:
 @subsection[#:tag "reference-local-binding"]{Local Bindings}
 
 @defform[#:literals [:]
+         (let ([id maybe-type val-expr] ...+)
+           body-expr)
+         #:grammar
+         ([maybe-type (code:line : type)
+                      (code:line)])]{
+
+Defines @emph{local} bindings, bindings which are only available within the syntactic extent of the
+@racket[let] block. Each @racket[id] is bound to the result of @racket[val-expr], from top to bottom.
+Each @racket[id] is in scope in @emph{subsequent} @racket[val-expr]s, and all @racket[id]s are in
+scope in @racket[body-expr] (unless shadowed by another binding).
+
+@(hackett-examples
+  (eval:check (let ([x 10])
+                x)
+              10)
+  (eval:check (let ([x 10]
+                    [y (+ x 1)])
+                y)
+              11)
+  (eval:check (let ([x 10]
+                    [y {x + 1}]
+                    [z {y * 2}])
+                z)
+              22))}
+
+@defform[#:literals [:]
          (letrec ([id maybe-type val-expr] ...+)
            body-expr)
          #:grammar
          ([maybe-type (code:line : type)
                       (code:line)])]{
 
-Creates a set of potentially mutually-recursive local bindings. Each @racket[id] is bound to the
-result of @racket[val-expr], and each @racket[id] is also in scope within each @racket[val-expr] as
-well as the @racket[body-expr].
+Like @racket[let], but the bindings created are potentially mutually-recursive. Each @racket[id] is
+bound to the result of @racket[val-expr], and each @racket[id] is in scope within each
+@racket[val-expr] as well as the @racket[body-expr]. Unlike @racket[let], all @racket[id]s must be
+unique.
 
 This allows @racket[val-expr]s to refer to themselves (to create circular values or recursive
 functions) or other bindings (to create shared or mututally recursive values or functions).

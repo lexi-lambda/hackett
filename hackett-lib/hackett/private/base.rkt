@@ -20,7 +20,8 @@
                      hackett/private/util/stx))
 
 (provide (for-syntax (all-from-out hackett/private/typecheck)
-                     τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒! elaborate-dictionaries)
+                     τs⇔/λ! τ⇔/λ! τ⇔! τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒!
+                     elaborate-dictionaries)
          #%module-begin #%top
          (rename-out [#%plain-module-begin @%module-begin]
                      [#%top @%top]
@@ -28,7 +29,7 @@
          @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary
          define-primop define-base-type
          -> ∀ => Integer Double String
-         : :/top-level with-dictionary-elaboration λ1 def letrec)
+         : :/top-level with-dictionary-elaboration λ1 def let letrec)
 
 (define-simple-macro (define-base-type name:id)
   (define-syntax name (make-type-variable-transformer (τ:con #'name #f))))
@@ -190,24 +191,33 @@
     ; With everything inferred and checked, all that’s left to do is return the results.
     (values xs- es- ts_es))
 
+  (define/contract (τ⇔/λ! e t bindings)
+    (-> syntax? (or/c τ? #f) (listof (cons/c identifier? τ?))
+        (values (listof identifier?) syntax? τ?))
+    (match-let-values ([(xs- (list e-) (list t_e)) (τs⇔/λ! (list (cons e t)) bindings)])
+      (values xs- e- t_e)))
+
   (define/contract (τ⇒/λ! e bindings)
     (-> syntax? (listof (cons/c identifier? τ?)) (values (listof identifier?) syntax? τ?))
-    (match-let-values ([(xs- (list e-) (list t_e)) (τs⇔/λ! (list (cons e #f)) bindings)])
-      (values xs- e- t_e)))
+    (τ⇔/λ! e #f bindings))
 
   (define/contract (τ⇐/λ! e t bindings)
     (-> syntax? τ? (listof (cons/c identifier? τ?)) (values (listof identifier?) syntax?))
-    (match-let-values ([(xs- (list e-) (list _)) (τs⇔/λ! (list (cons e t)) bindings)])
+    (match-let-values ([(xs- e- _) (τ⇔/λ! e t bindings)])
       (values xs- e-)))
+
+  (define/contract (τ⇔! e t)
+    (-> syntax? (or/c τ? #f) (values syntax? τ?))
+    (match-let-values ([(_ e- t_e) (τ⇔/λ! e t '())])
+      (values e- t_e)))
 
   (define/contract (τ⇒! e)
     (-> syntax? (values syntax? τ?))
-    (match-let-values ([(_ e- t_e) (τ⇒/λ! e '())])
-      (values e- t_e)))
+    (τ⇔! e #f))
 
   (define/contract (τ⇐! e t)
     (-> syntax? τ? syntax?)
-    (match-let-values ([(_ e-) (τ⇐/λ! e t '())])
+    (match-let-values ([(e- _) (τ⇔! e t)])
       e-))
 
   (define/contract (τ⇒app! e_fn t_fn e_arg #:src src)
@@ -405,6 +415,32 @@
           #'(define-syntax- id
               (make-typed-var-transformer #'id- t-expr))
           (attribute fixity.fixity)))])
+
+(define-syntax-parser let1
+  #:literals [:]
+  [(_ [id:id {~optional {~seq colon:: t-ann:type}} val:expr] body:expr)
+   #:do [(define-values [val- t_val] (τ⇔! #'val (attribute t-ann.τ)))
+         (match-define-values [(list id-) body- t_body]
+           (τ⇔/λ! #'body (get-expected this-syntax) (list (cons #'id t_val))))]
+   (~> (quasitemplate/loc this-syntax
+         (let-values- ([(#,id-) #,val-]
+                       {?? [() (begin- (λ- () t-ann.expansion) (values-))]})
+           #,body-))
+       (attach-type t_body)
+       (syntax-property 'disappeared-use (and~> (attribute colon) syntax-local-introduce)))])
+
+(define-syntax-parser let
+  #:literals [:]
+  [(_ ([id:id {~optional {~seq colon:: t-ann:type}} val:expr] ...+) body:expr)
+   (syntax-parse this-syntax
+     [(_ (binding-pair) body)
+      (syntax/loc this-syntax
+        (let1 binding-pair body))]
+     [(_ (binding-pair binding-pairs ...+) body)
+      (quasisyntax/loc this-syntax
+        (let1 binding-pair
+          #,(syntax/loc this-syntax
+              (let (binding-pairs ...) body))))])])
 
 (define-syntax-parser letrec
   #:literals [:]

@@ -22,7 +22,7 @@
                      [∀ forall])
          require combine-in except-in only-in prefix-in rename-in
          provide combine-out except-out prefix-out rename-out
-         : def λ letrec ∀ -> => Integer Double String)
+         : def λ let letrec ∀ -> => Integer Double String)
 
 (module reader syntax/module-reader hackett/private/kernel
   #:wrapper1 call-with-hackett-reading-parameterization

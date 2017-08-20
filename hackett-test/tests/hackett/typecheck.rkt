@@ -167,3 +167,28 @@
 (typecheck-succeed {just . (+ 1)})
 (typecheck-succeed (: {just . (+ 1)} {Integer -> (Maybe Integer)}))
 (typecheck-fail {just . 1})
+
+(typecheck-succeed (let ([x 1]) (+ x 1)))
+(typecheck-succeed (: (let ([x 1]) (+ x 1)) Integer))
+(typecheck-succeed (let ([x 1] [y x]) (+ x y)))
+(typecheck-succeed (: (let ([x 1] [y x]) (+ x y)) Integer))
+
+(typecheck-fail (let ([x "hi"]) (+ x 1)))
+(typecheck-fail (let ([x : Integer "hi"]) (+ x 1)))
+(typecheck-fail (let ([x : String 1]) {x ++ "!"}))
+(typecheck-fail (: (let ([x 1]) (+ x 1)) String))
+(typecheck-fail (: (let ([x 1] [y x]) (+ x y)) String))
+
+(typecheck-succeed (letrec ([xs {1 :: xs}]) (take 4 xs)))
+(typecheck-succeed (letrec ([xs : (List Integer) {1 :: xs}]) (take 4 xs)))
+(typecheck-succeed (: (letrec ([xs {1 :: xs}]) (take 4 xs)) (List Integer)))
+(typecheck-succeed (: (letrec ([xs : (List Integer) {1 :: xs}]) (take 4 xs)) (List Integer)))
+(typecheck-succeed (letrec ([xs {1 :: ys}] [ys {2 :: xs}]) (take 4 xs)))
+(typecheck-succeed (letrec ([xs : (List Integer) {1 :: ys}] [ys {2 :: xs}]) (take 4 xs)))
+(typecheck-succeed (: (letrec ([xs {1 :: ys}] [ys {2 :: xs}]) (take 4 xs)) (List Integer)))
+(typecheck-succeed (: (letrec ([xs {1 :: ys}] [ys : (List Integer) {2 :: xs}]) (take 4 xs))
+                      (List Integer)))
+
+(typecheck-fail (letrec ([xs : Integer {1 :: xs}]) (take 4 xs)))
+(typecheck-fail (letrec ([xs 42]) (take 4 xs)))
+(typecheck-fail (letrec ([xs {1 :: ys}] [ys 5]) xs))
