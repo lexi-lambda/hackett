@@ -32,9 +32,9 @@ And finally, here is a (non-exhaustive) collection of features I would like to e
 
 Due to the way Hackett is implemented, many things that are language features in Haskell can be derived concepts in Hackett. In fact, Hackett’s ADTs are not primitives, they are actually implemented as a library via the `data` and `case` macros in `hackett/private/adt`. Other things, like newtype deriving and generics, should be possible to implement as derived concepts as well.
 
-Here’s what some Hackett code *might* eventually look like:
+Here’s some sample Hackett code that demonstrates some of Hackett’s features:
 
-```
+```racket
 #lang hackett
 
 (data (Maybe a)
@@ -49,12 +49,12 @@ Here’s what some Hackett code *might* eventually look like:
 (class (Show a)
   [show : {a -> String}])
 
-(instance ∀ [a] (Show a) => (Show (Maybe a))
+(instance (∀ [a] (Show a) => (Show (Maybe a)))
   [show (λ* [[(just x)] {"(just " ++ (show x) ++ ")"}]
             [[nothing ] "nothing"])])
 ```
 
-Most of the above syntax is already implemented, but some things are not.
+[**For a much more in-depth look at Hackett, see the documentation.**][hackett-docs]
 
 ## Trying Hackett
 
@@ -68,4 +68,5 @@ $ raco pkg install hackett
 
 Now you can use Hackett by writing `#lang hackett` at the top of a file.
 
+[hackett-docs]: https://pkg-build.racket-lang.org/doc/hackett@hackett-doc/
 [types-as-macros]: http://www.ccs.neu.edu/home/stchang/pubs/ckg-popl2017.pdf
