@@ -5,8 +5,9 @@
 
 @title[#:tag "guide" #:style 'toc]{The Hackett Guide}
 
-Hackett is a programming language in the Racket language ecosystem. Its name is a portmanteau that
-hints at its philosophy and heritage:
+Hackett is a high-level, general-purpose programming language designed for writing programs in many
+domains, and it is designed to scale nicely from small programs to large, complex systems. Its name is
+a portmanteau that hints at its philosophy and heritage:
 
 @itemlist[
   @item{Like @hyperlink["https://www.haskell.org"]{Haskell}, Hackett is a purely functional,
