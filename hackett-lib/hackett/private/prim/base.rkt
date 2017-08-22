@@ -14,7 +14,7 @@
 
 (provide not || && if fst snd unsafe-run-io!
 
-         . id const flip
+         . $ & id const flip
 
          (class Eq) (class Show)
          (class Semigroup) (class Monoid)
@@ -59,6 +59,12 @@
 
 (defn . : (∀ [a b c] {{b -> c} -> {a -> b} -> a -> c})
   [[f g x] (f (g x))])
+
+(defn $ : (∀ [a b] {{a -> b} -> a -> b})
+  [[f x] (f x)])
+
+(defn & : (∀ [a b] {a -> {a -> b} -> b})
+  [[x f] (f x)])
 
 (defn const : (∀ [a b] {a -> b -> a})
   [[x _] x])
@@ -128,6 +134,11 @@
 
 (instance (∀ [a b] (Eq a) (Eq b) => (Eq (Tuple a b)))
   [== (λ [(tuple a b) (tuple c d)] {{a == c} && {b == d}})])
+
+(instance (∀ [a] (Eq a) => (Eq (List a)))
+  [== (λ* [[{x :: xs} {y :: ys}] {{x == y} && {xs == ys}}]
+          [[nil       nil      ] true]
+          [[_         _        ] false])])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Semigroup / Monoid

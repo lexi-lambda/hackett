@@ -338,6 +338,33 @@ Accepts two arguments and returns the first, ignoring the second.
   (eval:check (const "hello" "goodbye") "hello")
   (eval:check (const unit (error! "never gets here")) unit))}
 
+@defthing[|.| (forall [a b c] {{b -> c} -> {a -> b} -> {a -> c}})]{
+
+Function composition. Given two functions @racket[_f] and @racket[_g], then @racket[({_f |.| _g} _x)]
+is equivalent to @racket[(_f (_g _x))].
+
+@(hackett-examples
+  (def add1AndDouble {(* 2) |.| (+ 1)})
+  (eval:check (add1AndDouble 3) 8))}
+
+@defthing[$ (forall [a b] {{a -> b} -> a -> b})]{
+
+Function application as a binary operator. Not especially useful, since @racket[{_f $ _x}] is
+equivalent to @racket[(_f _x)], but sometimes convenient when used higher-order.}
+
+@defthing[& (forall [a b] {a -> {a -> b} -> b})]{
+
+Reverse function application. This function is a flipped version of @racket[$] that accepts the
+argument first and the function second.}
+
+@defthing[flip (forall [a b c] {{a -> b -> c} -> b -> a -> c})]{
+
+Produces a function with the same behavior as another function, but with its first two arguments
+flipped.
+
+@(hackett-examples
+  (flip :: nil 3))}
+
 @subsection[#:tag "reference-quantification"]{Quantification and Constrained Types}
 
 @deftogether[
@@ -455,6 +482,22 @@ evaluated, produces the value.
   (show (just 11))
   (show {1 :: 2 :: 3 :: nil}))}}
 
+@subsection[#:tag "reference-equality"]{Equality}
+
+@defclass[(Eq a)
+          [== {a -> a -> Bool}]]{
+The class of types with a notion of equality. The @racket[==] method should produce @racket[true] if
+both of its arguments are equal, otherwise it should produce @racket[false].
+
+@defmethod[== {a -> a -> Bool}]{
+
+@(hackett-examples
+  (eval:check {10 == 10} true)
+  (eval:check {10 == 11} false)
+  (eval:check {{1 :: 2 :: nil} == {1 :: 2 :: nil}} true)
+  (eval:check {{1 :: 2 :: nil} == {1 :: nil}} false)
+  (eval:check {{1 :: 2 :: nil} == {1 :: 3 :: nil}} false))}}
+
 @subsection[#:tag "reference-semigroup-monoid"]{Semigroups and monoids}
 
 @defclass[(Semigroup a)
@@ -493,6 +536,123 @@ An identity element for @racket[++]. That is, @racket[mempty] must obey the foll
 @(hackett-examples
   (: mempty String)
   (: mempty (List Integer)))}}
+
+@subsection[#:tag "reference-functor"]{Functors}
+
+@defclass[(Functor f)
+          [map (forall [a b] {{a -> b} -> (f a) -> (f b)})]]{
+
+A class of types that are @deftech{functors}, essentially types that provide a mapping or “piercing”
+operation. The @racket[map] function can be viewed in different ways:
+
+  @itemlist[
+    @item{The @racket[map] function can be thought of as applying a function to each “element” of some
+          “container”. This metaphor applies to many members of the @racket[Functor] typeclass, such
+          as @racket[List] and @racket[Maybe], but does not apply well to all of them.}
+
+    @item{More generally, @racket[map] can be viewed as a “lifting” operation, which “lifts” a
+          function of type @racket[{_a -> _b}] to a function of type @racket[{(f _a) -> (f _b)}] for
+          some type @racket[f]. This is a very general notion, and the meaning of such an operation is
+          highly dependent on the particular choice of @racket[f].}]
+
+All @racket[map] implementations must obey the following laws:
+
+@racketblock[
+  @#,racket[(map id)] @#,elem[#:style 'roman]{=} @#,racket[id]
+  @#,racket[(map {_f |.| _g}) @#,elem[#:style 'roman]{=} @#,racket[{(map _f) |.| (map _g)}]]]
+
+@defmethod[map (forall [a b] {{a -> b} -> (f a) -> (f b)})]{
+
+@(hackett-examples
+  (map (+ 1) {1 :: 2 :: nil})
+  (map (+ 1) (just 10))
+  (map (+ 1) nothing))}}
+
+@defthing[<$> (forall [f a b] (Functor f) => {{a -> b} -> (f a) -> (f b)})]{
+
+An alias for @racket[map], intended to be used in @tech{infix mode} instead of prefix, especially when
+mixed with @racket[<*>] in the same expression.
+
+@(hackett-examples
+  {(+ 1) <$> {1 :: 2 :: nil}}
+  {(+ 1) <$> (just 10)}
+  {(+ 1) <$> nothing})}
+
+@defthing[<&> (forall [f a b] (Functor f) => {(f a) -> {a -> b} -> (f b)})]{
+
+A flipped version of @racket[<$>] for when it’s preferable to take the function argument second, like
+@racket[&] but lifted to a @tech{functor}.}
+
+@defthing[<$ (forall [f a b] (Functor f) => {b -> (f a) -> (f b)})]{
+
+Equivalent to @racket[{map |.| const}]. Replaces all values of type @racket[_a] with a new value of
+type @racket[_b].
+
+@(hackett-examples
+  {10 <$ (just 1)}
+  {10 <$ {1 :: 2 :: 3 :: nil}})}
+
+@defthing[$> (forall [f a b] (Functor f) => {(f a) -> b -> (f b)})]{
+
+A flipped version of @racket[<$].}
+
+@subsection[#:tag "reference-applicative"]{Applicative functors}
+
+@defclass[#:super [(Functor f)]
+          (Applicative f)
+          [pure (forall [a] {a -> (f a)})]
+          [<*> (forall [a b] {(f {a -> b}) -> (f a) -> (f b)})]]{
+
+The class of @deftech{applicative functors}, which are @tech{functors} with some notion of
+application, @racket[<*>]. Additionally, applicative functors must provided a lifting operation,
+@racket[pure], which embeds any value into @racket[f].
+
+Applicative functors must satisfy the following laws:
+
+@racketblock[
+  @#,racket[{(pure id) <*> _v}] @#,elem[#:style 'roman]{=} @#,racket[_v]
+  @#,racket[{(pure |.|) <*> _u <*> _v <*> _w}] @#,elem[#:style 'roman]{=} @#,racket[{_u <*> (_v <*> _w)}]
+  @#,racket[{(pure _f) <*> (pure _x)}] @#,elem[#:style 'roman]{=} @#,racket[(pure (_f _x))]
+  @#,racket[{_u <*> (pure _y)}] @#,elem[#:style 'roman]{=} @#,racket[{(pure (& _y) <*> _u)}]]
+
+As a consequence of these laws, the @racket[Functor] instance for @racket[f] will satisfy:
+
+@racketblock[
+  @#,racket[(map _f _x)] @#,elem[#:style 'roman]{=} @#,racket[{(pure _f) <*> _x}]]
+
+@defmethod[pure (forall [a] {a -> (f a)})]{
+
+Lifts a value.
+
+@(hackett-examples
+  (: (pure 11) (Maybe Integer))
+  (: (pure 11) (List Integer)))}
+
+@defmethod[<*> (forall [a b] {(f {a -> b}) -> (f a) -> (f b)})]{
+
+Applies a function in a context. While @racket[map]/@racket[<$>] “lifts” a pure function to a function
+that operates on a functor, @racket[<*>] applies a function that is already inside the context of a
+@tech{functor}.
+
+@(hackett-examples
+  {(just not) <*> (just true)}
+  {(just not) <*> (just false)}
+  {(just not) <*> nothing}
+  {(: nothing (Maybe {Bool -> Bool})) <*> (just true)})
+
+Due to currying, this is especially useful in combination with @racket[<$>] to apply a multi-argument
+function to multiple arguments within the context of some functor. For example, @racket[Maybe]
+implements a sort of short-circuiting, where any @racket[nothing] will cause the entire computation to
+produce @racket[nothing].
+
+@(hackett-examples
+  {+ <$> (just 1) <*> (just 2)}
+  {+ <$> nothing <*> (just 2)}
+  {+ <$> (just 1) <*> nothing})
+
+This works because @racket[{_f <$> _x}] is guaranteed to be equivalent to @racket[{(pure _f) <*> _x}]
+by the applicative laws, and since functions are curried, each use of @racket[<*>] applies a single
+argument to the (potentially partially-applied) function.}}
 
 @section[#:tag "reference-controlling-evaluation"]{Controlling Evaluation}
 

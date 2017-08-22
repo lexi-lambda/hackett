@@ -17,7 +17,7 @@
          (data Unit) (data Bool) (data Tuple) (data Maybe) (data List)
          || && not if fst snd
 
-         . id const flip
+         . $ & id const flip
 
          (class Eq) (class Show) (class Semigroup) (class Monoid)
 
