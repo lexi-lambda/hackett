@@ -431,6 +431,15 @@ Returns @racket[just] the first element of a list, or @racket[nothing] if the li
   (head {1 :: 2 :: 3 :: nil})
   (head (: nil (List Integer))))}
 
+@defthing[tail (forall [a] {(List a) -> (Maybe (List a))})]{
+
+Returns @racket[just] a list without its first element, or @racket[nothing] if the list is
+@racket[nil].
+
+@(hackett-examples
+  (tail {1 :: 2 :: 3 :: nil})
+  (tail (: nil (List Integer))))}
+
 @defproc[(take [n Integer] [xs (List a)]) (List a)]{
 
 Produces a list with the first @racket[n] elements of @racket[xs]. If @racket[xs] contains fewer than
@@ -703,6 +712,8 @@ Monads must satisfy the following laws:
   @#,racket[{join |.| (map pure)}] @#,elem[#:style 'roman]{=} @#,racket[id]
   @#,racket[{join |.| join}] @#,elem[#:style 'roman]{=} @#,racket[{join |.| (map join)}]]
 
+Generally, it is more useful to use @racket[=<<] or @racket[do] than to use @racket[join] directly.
+
 @defmethod[join (forall [a] {(m (m a)) -> (m a)})]{
 
 @(hackett-examples
@@ -710,6 +721,58 @@ Monads must satisfy the following laws:
   (join (just (: nothing (Maybe Integer))))
   (join (: nothing (Maybe (Maybe Integer))))
   (join {{1 :: nil} :: {2 :: 3 :: nil} :: nil}))}}
+
+@defthing[=<< (forall [m a b] (Monad m) => {{a -> (m b)} -> (m a) -> (m b)})]{
+
+Applies a function that produces a @tech[#:key "monad"]{monadic} value to a monadic value. The
+expression @racket[{_f =<< _x}] is equivalent to @racket[(join {_f <$> _x})]. It is worth comparing
+and contrasting the types of @racket[map]/@racket[<$>], @racket[<*>], and @racket[=<<], all of which
+are similar but slightly different.
+
+@(hackett-examples
+  {head =<< (tail {1 :: 2 :: nil})}
+  {head =<< (tail {1 :: nil})}
+  {head =<< (tail (: nil (List Integer)))})}
+
+@defthing[>>= (forall [m a b] (Monad m) => {(m a) -> {a -> (m b)} -> (m b)})]{
+
+A flipped version of @racket[=<<].}
+
+@defform[#:literals [<-]
+         (do do-clause ... monadic-expr)
+         #:grammar
+         ([do-clause [binding-id <- monadic-expr]
+                     monadic-expr])]{
+
+A convenient, imperative-style shorthand for a sequence of monadic expressions chained together with
+@racket[>>=]. Each @racket[do-clause] corresponds to a single use of @racket[>>=], and each
+@racket[monadic-expr] must have a type with the shape @racket[(_m _a)], where @racket[_m] is a
+@racket[Monad].
+
+Any use of @racket[do] with a single subform expands to the subform: @racket[(do _expr)] is equivalent
+to @racket[_expr]. Each @racket[do-clause] introduces a use of @racket[>>=], with the result
+potentially bound to a @racket[binding-id]. That is, @racket[(do [_x <- _m] _more ...+)] expands to
+@racket[{_ma >>= (λ [_x] (do _more ...))}], and @racket[(do _m _more ...+)] expands to
+@racket[{_ma >>= (λ [_] (do _more ...))}].
+
+This is often much more readable than writing the uses of @racket[>>=] out by hand, especially when
+the result of each action must be give a name.
+
+@(hackett-examples
+  (do [xs <- (tail {1 :: 2 :: 3 :: 4 :: nil})]
+      [ys <- (tail xs)]
+      [zs <- (tail ys)]
+      (head zs))
+  (do [xs <- (tail {1 :: 2 :: 3 :: nil})]
+      [ys <- (tail xs)]
+      [zs <- (tail ys)]
+      (head zs)))}
+
+@defthing[ap (forall [m a b] (Monad m) => {(m {a -> b}) -> (m a) -> (m b)})]{
+
+An implementation of @racket[<*>] in terms of @racket[map], @racket[pure], and @racket[join]. This can
+be used as an implementation of @racket[<*>] as long as @racket[join] does not use @racket[<*>] (if it
+does, the two will likely infinitely mutually recur).}
 
 @section[#:tag "reference-controlling-evaluation"]{Controlling Evaluation}
 
