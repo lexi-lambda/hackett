@@ -21,7 +21,13 @@
 
          (only-meta-in 1 hackett/private/adt))
 
-(provide defdata defclass defmethod)
+(provide |.| defdata defclass defmethod)
+
+; Provide an element transformer to typeset |.| (the function composition operator) without vertical
+; bars.
+(define-syntax |.|
+  (make-element-id-transformer
+   (λ (stx) #'(racketlink |.| (racketidfont ".")))))
 
 (begin-for-syntax
   (define-splicing-syntax-class kind-kw
