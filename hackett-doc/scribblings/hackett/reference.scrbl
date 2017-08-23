@@ -423,6 +423,14 @@ The @deftech{list} type, which describes lazy linked lists. Since a list is lazy
 as long as the entire list is never demanded. The @racket[::] constructor is pronounced “cons”, and it
 is generally intended to be used infix.}
 
+@defthing[head (forall [a] {(List a) -> (Maybe a)})]{
+
+Returns @racket[just] the first element of a list, or @racket[nothing] if the list is @racket[nil].
+
+@(hackett-examples
+  (head {1 :: 2 :: 3 :: nil})
+  (head (: nil (List Integer))))}
+
 @defproc[(take [n Integer] [xs (List a)]) (List a)]{
 
 Produces a list with the first @racket[n] elements of @racket[xs]. If @racket[xs] contains fewer than
@@ -596,6 +604,10 @@ type @racket[_b].
 
 A flipped version of @racket[<$].}
 
+@defthing[ignore (forall [f a] (Functor f) => {(f a) -> (f Unit)})]{
+
+Replaces the result of a @tech{functor} with @racket[unit]. Equivalent to @racket[(<$ unit)].}
+
 @subsection[#:tag "reference-applicative"]{Applicative functors}
 
 @defclass[#:super [(Functor f)]
@@ -653,6 +665,51 @@ produce @racket[nothing].
 This works because @racket[{_f <$> _x}] is guaranteed to be equivalent to @racket[{(pure _f) <*> _x}]
 by the applicative laws, and since functions are curried, each use of @racket[<*>] applies a single
 argument to the (potentially partially-applied) function.}}
+
+@defthing[sequence (forall [f a] (Applicative f) => {(List (f a)) -> (f (List a))})]{
+
+Produces an action that runs a @tech{list} of @tech[#:key "applicative functor"]{applicative} actions
+from left to right, then collects the results into a new list.
+
+@(hackett-examples
+  (sequence {(just 1) :: (just 2) :: (just 3) :: nil})
+  (sequence {(just 1) :: nothing :: (just 3) :: nil}))}
+
+@defthing[traverse (forall [f a b] (Applicative f) => {{a -> (f b)} -> (List a) -> (f (List b))})]{
+
+Applies a function to each element of a @tech{list} to produce an @tech[#:key "applicative functor"]{
+applicative} action, then collects them left to right @italic{a la} @racket[sequence]
+(@racket[(traverse _f _xs)] is equivalent to @racket[(sequence (map _f _xs))]).
+
+@(hackett-examples
+  (traverse head {{1 :: nil} :: {2 :: 3 :: nil} :: nil})
+  (traverse head {{1 :: nil} :: nil :: nil}))}
+
+@subsection[#:tag "reference-monad"]{Monads}
+
+@defclass[#:super [(Applicative m)]
+          (Monad m)
+          [join (forall [a] {(m (m a)) -> (m a)})]]{
+
+The class of @deftech{monads}, which are @tech{applicative functors} augmented with a single
+@racket[join] operation that allows multiple “layers” of @racket[m] to be “flattened” into a single
+one. Like @tech{functors} and @tech{applicative functors}, monads are a highly abstract concept, but
+they can be most usefully thought of as an abstraction notion of sequential actions.
+
+Monads must satisfy the following laws:
+
+@racketblock[
+  @#,racket[{join |.| pure}] @#,elem[#:style 'roman]{=} @#,racket[id]
+  @#,racket[{join |.| (map pure)}] @#,elem[#:style 'roman]{=} @#,racket[id]
+  @#,racket[{join |.| join}] @#,elem[#:style 'roman]{=} @#,racket[{join |.| (map join)}]]
+
+@defmethod[join (forall [a] {(m (m a)) -> (m a)})]{
+
+@(hackett-examples
+  (join (just (just 3)))
+  (join (just (: nothing (Maybe Integer))))
+  (join (: nothing (Maybe (Maybe Integer))))
+  (join {{1 :: nil} :: {2 :: 3 :: nil} :: nil}))}}
 
 @section[#:tag "reference-controlling-evaluation"]{Controlling Evaluation}
 
