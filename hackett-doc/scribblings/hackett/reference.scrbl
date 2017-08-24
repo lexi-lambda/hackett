@@ -253,9 +253,14 @@ contains the provided values.
     (foo1 Integer Bool)
     (foo2 String)
     foo3)
-  foo1
+  (instance (Show Foo)
+    [show (λ* [[(foo1 a b)] {"(foo1 " ++ (show a) ++ " "
+                                      ++ (show b) ++ ")"}]
+              [[(foo2 a)] {"(foo2 " ++ (show a) ++ ")"}]
+              [[foo3] "foo3"])])
+  (#:type foo1)
   (foo1 42 true)
-  foo2
+  (#:type foo2)
   (foo2 "hello")
   foo3)
 
@@ -279,6 +284,9 @@ specified controls the fixity used by the associated @racket[type-constructor-id
   (data (Tree a)
     {(Tree a) :&: (Tree a)} #:fixity right
     (leaf a))
+  (instance (forall [a] (Show a) => (Show (Tree a)))
+    [show (λ* [[{a :&: b}] {"{" ++ (show a) ++ " :&: " ++ (show b) ++ "}"}]
+              [[(leaf a)] {"(leaf " ++ (show a) ++ ")"}])])
   {(leaf 1) :&: (leaf 2) :&: (leaf 3)})}
 @(close-eval data-examples-eval)
 

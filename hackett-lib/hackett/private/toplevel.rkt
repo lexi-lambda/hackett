@@ -60,6 +60,8 @@
 ; since we are at phase 1, but the forms need to be evaluated at phase 0.
 
 (require (for-syntax racket/base
+                     racket/match
+                     racket/pretty
                      syntax/kerncase
                      threading
 
@@ -68,13 +70,19 @@
          racket/promise
          syntax/parse/define
 
-         (only-in hackett/private/base τ⇒! elaborate-dictionaries))
+         (only-in hackett/private/base τ⇒! τ⇐! elaborate-dictionaries)
+         (only-in hackett/private/kernel String [#%app @%app])
+         (only-in hackett/private/prim/base show))
 
 (provide @%top-interaction make-hackett-print)
 
 (struct repl-result [value type])
+(struct type-result [type])
 
 (define-syntax-parser @%top-interaction
+  [(_ . (#:type ~! expr:expr))
+   (match-let-values ([(_ τ_e) (τ⇒! #'expr)])
+     #`(type-result '#,(τ->string (apply-current-subst τ_e))))]
   [(_ . form)
    (syntax-parse (local-expand #'form 'top-level (kernel-form-identifier-list))
      #:context this-syntax
@@ -87,15 +95,18 @@
       (syntax/loc this-syntax
         (begin form ... (@%top-interaction . form*)))]
      [expr
-      (let-values ([(e- τ_e) (τ⇒! #'expr)])
-        #`(repl-result (force #,(elaborate-dictionaries e-))
+      (match-let*-values ([(e- τ_e) (τ⇒! #'expr)]
+                          [(e-/show) (τ⇐! (quasisyntax/loc this-syntax
+                                            (@%app show #,e-))
+                                          (parse-type #'String))])
+        #`(repl-result (force #,(elaborate-dictionaries e-/show))
                        '#,(τ->string (apply-current-subst τ_e))))])])
 
 (define ((make-hackett-print #:printer [orig-print (current-print)]) y)
   (match y
     [(repl-result v t)
-     (begin
-       (printf ": ~a\n" t)
-       (orig-print v))]
+     (printf ": ~a\n~a\n" t v)]
+    [(type-result t)
+     (printf ": ~a\n" t)]
     [_
      (orig-print y)]))

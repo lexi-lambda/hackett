@@ -1,9 +1,31 @@
-#lang hackett/private/kernel
+#lang racket/base
 
-; This module needs to be written in #lang hackett/private/kernel (or any #lang that provides
-; hackett/private/kernel’s #%module-begin) so that it includes the configure-runtime submodule that
-; sets up current-print. This is necessary, since the -I flag provided to the racket executable loads
-; the configure-runtime submodule present in the specified <init-lib>, and it completely ignores the
+(require syntax/parse/define
+
+         hackett/prelude
+         (only-in hackett/private/adt case* case λ λ* lambda lambda* defn _)
+         (only-in hackett/private/class instance)
+         (except-in hackett/private/kernel λ lambda #%module-begin)
+         (only-in hackett/private/kernel [#%module-begin @%module-begin/nonconfigured])
+         hackett/private/provide
+         (only-in hackett/private/toplevel @%top-interaction))
+(provide (all-from-out hackett/prelude)
+         (all-from-out hackett/private/adt)
+         (all-from-out hackett/private/class)
+         (except-out (all-from-out hackett/private/kernel) @%module-begin/nonconfigured)
+         (all-from-out hackett/private/provide)
+
+         (rename-out [@%module-begin #%module-begin]
+                     [@%top-interaction #%top-interaction]))
+
+(module reader syntax/module-reader hackett/main
+  #:wrapper1 call-with-hackett-reading-parameterization
+  (require hackett/private/reader))
+
+; This module needs to include the configure-runtime submodule that sets up current-print, so we need
+; to write it explicitly, since it won’t get created by the #%module-begin binding defined in this
+; module. This is necessary, since the -I flag provided to the racket executable loads the
+; configure-runtime submodule present in the specified <init-lib>, and it completely ignores the
 ; #%module-begin *exported* by <init-lib>.
 ;
 ; This is different from the REPL in DrRacket, which takes a different approach to initializing the
@@ -14,19 +36,12 @@
 ; useful approach, but the top level initialization performed by the racket excutable does not create
 ; a fresh module (it merely requires the library into the top level namespace).
 
-(require (only-in racket/base all-from-out module)
+(module configure-runtime racket/base
+  (require (only-in hackett/private/toplevel make-hackett-print))
+  (current-print (make-hackett-print)))
 
-         hackett/prelude
-         (only-in hackett/private/adt case* case λ λ* lambda lambda* defn _)
-         (only-in hackett/private/class instance)
-         (except-in hackett/private/kernel λ lambda)
-         hackett/private/provide)
-(provide (all-from-out hackett/prelude)
-         (all-from-out hackett/private/adt)
-         (all-from-out hackett/private/class)
-         (all-from-out hackett/private/kernel)
-         (all-from-out hackett/private/provide))
-
-(module reader syntax/module-reader hackett/main
-  #:wrapper1 call-with-hackett-reading-parameterization
-  (require hackett/private/reader))
+(define-simple-macro (@%module-begin body ...)
+  (@%module-begin/nonconfigured
+   (module configure-runtime racket/base
+     (require (submod hackett configure-runtime)))
+   body ...))

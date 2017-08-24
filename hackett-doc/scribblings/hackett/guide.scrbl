@@ -61,11 +61,19 @@ subexpressions with parentheses. In any expression @racket[(_f _x _y _z)], @rack
 expression to apply, and @racket[_x], @racket[_y], and @racket[_z] are arguments that will be passed
 to the function.
 
-So, what is a function? Well, a function is any value with a @deftech{function type}. For example,
-it’s possible to see the type of @racket[not] by evaluating it in the REPL:
+So, what is a function? Well, a function is any value with a @deftech{function type}. We could try to
+look at the type of @racket[not] by evaluating it in the REPL, but that will produce an error, since
+functions aren’t printable:
 
 @(hackett-interaction
-  not)
+  #:no-preserve-source-locations
+  (eval:error not))
+
+However, we can ask Hackett to only print the type of an expression by wrapping it with
+@racket[(#:type _expr)], which will allow us to inspect the type of @racket[not]:
+
+@(hackett-interaction
+  (#:type not))
 
 The type of @racket[not] is a @tech{function type}, which is represented by @racket[->]. The type can
 be read as “a function that takes a @racket[Bool] and produces (or returns) a @racket[Bool]”. If you
@@ -79,7 +87,7 @@ expression as ill-typed:
 The type of @racket[+] is slightly more complicated:
 
 @(hackett-interaction
-  +)
+  (#:type +))
 
 This type has two @racket[->] constructors in it, and it actually represents a function that
 @emph{returns} another function. This is because all functions in Hackett are @deftech{curried}—that
@@ -90,8 +98,8 @@ To make this easier to understand, it may be helpful to observe the following ex
 types:
 
 @(hackett-interaction
-  +
-  (+ 1)
+  (#:type +)
+  (#:type (+ 1))
   ((+ 1) 2))
 
 This technique of representing multi-argument functions with single-argument functions scales to any
@@ -141,7 +149,7 @@ successfully inferred. We can see the inferred type by evaluating it in the REPL
 
 @(hackett-interaction
   #:eval square-no-sig-eval
-  square)
+  (#:type square))
 
 @(close-eval square-no-sig-eval)
 
@@ -367,6 +375,16 @@ can define that enumeration in Hackett using the @racket[data] form:
     sunday monday tuesday wednesday
     thursday friday saturday))
 
+@(enumerations-eval
+  '(instance (Show Weekday)
+     [show (λ* [[sunday] "sunday"]
+               [[monday] "monday"]
+               [[tuesday] "tuesday"]
+               [[wednesday] "wednesday"]
+               [[thursday] "thursday"]
+               [[friday] "friday"]
+               [[saturday] "saturday"])]))
+
 This declaration defines two things: a @tech{type} and a set of @tech{values}. Specifically, it
 defines a new type named @racket[Weekday], and it defines 7 values, @racket[monday] through
 @racket[sunday]. You can see that each of these names are bound to values of the @racket[Weekday]
@@ -486,7 +504,7 @@ This function is not only partial, it is actually undefined for @emph{all} possi
 partiality can be observed in @racket[error!]’s type:
 
 @(hackett-interaction
-  error!)
+  (#:type error!))
 
 The @racket[error!] function seems impossible, since it promises to produce @emph{anything}, of any
 type, when given nothing but a string. Indeed, this type signature lies; it promises it will produce
@@ -495,7 +513,7 @@ anything, but this is only possible because it will never actually return anythi
 
 @(hackett-interaction
   #:no-preserve-source-locations
-  (eval:error (error! "urk!")))
+  (eval:error (: (error! "urk!") Unit)))
 
 Partial functions in Hackett are idiomatically indicated by including a @litchar{!} symbol at the end
 of their names, but this is only a convention; it is not enforced by the compiler or typechecker.

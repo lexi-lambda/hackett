@@ -176,6 +176,15 @@
                               t-expr
                               #'dict-id-)))
            (define-values- [] (begin- (λ- () t.expansion) (values-)))
+           ; The defined dict-id- might appear in the expansion of :/instance-dictionary, since it
+           ; performs dictionary elaboration. At the top level, this can cause problems, since
+           ; recursive/self-referential definitions are complicated. We can perform a sort of “forward
+           ; declaration” by using a special case of define-syntaxes (that only works at the top
+           ; level) to declare identifiers without binding them; see the documentation for
+           ; define-syntaxes for details.
+           #,(if (eq? 'top-level (syntax-local-context))
+                 #'(define-syntaxes- [dict-id-] (values))
+                 #'(begin-))
            (define- dict-id-
              #,(syntax/loc this-syntax
                  (:/instance-dictionary
