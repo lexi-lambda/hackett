@@ -91,7 +91,7 @@
 (define ((equal?/String x) y) (string=?- (force- x) (force- y)))
 (define ((append/String x) y) (string-append- (force- x) (force- y)))
 (define (string-length x) (string-length- (force- x)))
-(define ((string-split x) y) (list->List (string-split- (force- y) (force- x))))
+(define ((string-split x) y) (list->List (string-split- (force- y) (force- x) #:trim? #f)))
 
 ;; ---------------------------------------------------------------------------------------------------
 

@@ -326,6 +326,23 @@ These functions provide simple, floating-point arithmentic on @racket[Double]s.}
 
 The type of strings, which can be constructed using string literals.}
 
+@defthing[string-length {String -> Integer}]{
+
+Returns the length of a string, in characters.
+
+@(hackett-examples
+  (eval:check (string-length "hello") 5)
+  (eval:check (string-length "Λάμβδα") 6))}
+
+@defthing[string-split {String -> String -> (List String)}]{
+
+Splits a string on all instances of a separator string.
+
+@(hackett-examples
+  (string-split "," "1,2,3,4,5")
+  (string-split "," ",2,,4,")
+  (string-split "," ",,,,"))}
+
 @subsection[#:tag "reference-functions"]{Functions}
 
 @defform[#:kind "type constructor" (-> a b)]{
