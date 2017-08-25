@@ -61,12 +61,10 @@
 
 (require (for-syntax racket/base
                      racket/match
-                     racket/pretty
                      syntax/kerncase
                      threading
 
                      hackett/private/typecheck)
-         racket/match
          racket/promise
          syntax/parse/define
 
@@ -74,10 +72,18 @@
          (only-in hackett/private/kernel String [#%app @%app])
          (only-in hackett/private/prim/base show))
 
-(provide @%top-interaction make-hackett-print)
+(provide @%top-interaction)
 
-(struct repl-result [value type])
-(struct type-result [type])
+(struct repl-result [value type]
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc result port mode)
+     (fprintf port ": ~a\n~a" (repl-result-type result) (repl-result-value result)))])
+(struct type-result [type]
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc result port mode)
+     (fprintf port ": ~a" (type-result-type result)))])
 
 (define-syntax-parser @%top-interaction
   [(_ . (#:type ~! expr:expr))
@@ -101,12 +107,3 @@
                                           (parse-type #'String))])
         #`(repl-result (force #,(elaborate-dictionaries e-/show))
                        '#,(τ->string (apply-current-subst τ_e))))])])
-
-(define ((make-hackett-print #:printer [orig-print (current-print)]) y)
-  (match y
-    [(repl-result v t)
-     (printf ": ~a\n~a\n" t v)]
-    [(type-result t)
-     (printf ": ~a\n" t)]
-    [_
-     (orig-print y)]))
