@@ -407,12 +407,70 @@ in @hash-lang[] @racketmodname[racket] or the @tt{void} return “type” in man
 
 @defdata[Bool true false]{
 
-The boolean type, representing two binary states.}
+The @deftech{boolean} type, representing two binary states.}
 
 @defthing[not {Bool -> Bool}]{
 
-Inverts the value it is applied to; that is, produces @racket[false] when given @racket[true] and
-produces @racket[true] when given @racket[false].}
+Inverts the @tech{boolean} it is applied to; that is, produces @racket[false] when given @racket[true]
+and produces @racket[true] when given @racket[false].}
+
+@defthing[if (forall [a] {Bool -> a -> a -> a})]{
+
+Performs case analysis on a @tech{boolean} value. If the supplied boolean is @racket[true], returns
+its second argument; otherwise, returns its third argument.
+
+Since Hackett is lazy, @racket[if] is an ordinary function, not a macro or special form, and it can be
+used higher-order if desired.
+
+@(hackett-examples
+  (eval:check (if true "first" "second") "first")
+  (eval:check (if false "first" "second") "second"))}
+
+@defthing[\|\| {Bool -> Bool -> Bool}]{
+
+Returns @racket[true] if its first argument is @racket[true]; otherwise, returns its second argument.
+Notably, the second argument will not be evaluated at all if the first argument is @racket[true], but
+the first argument will always be forced when the result is forced.
+
+@(hackett-examples
+  (eval:check {true \|\| true} true)
+  (eval:check {false \|\| true} true)
+  (eval:check {true \|\| false} true)
+  (eval:check {false \|\| false} false)
+  (eval:check {true \|\| (error! "never gets here")} true))}
+
+@defthing[&& {Bool -> Bool -> Bool}]{
+
+Returns @racket[false] if its first argument is @racket[false]; otherwise, returns its second argument.
+Notably, the second argument will not be evaluated at all if the first argument is @racket[false], but
+the first argument will always be forced when the result is forced.
+
+@(hackett-examples
+  (eval:check {true && true} true)
+  (eval:check {false && true} false)
+  (eval:check {true && false} false)
+  (eval:check {false && false} false)
+  (eval:check {false && (error! "never gets here")} false))}
+
+@subsection[#:tag "reference-tuples"]{Tuples}
+
+@defdata[(Tuple a b) (tuple a b)]{
+
+The @deftech{tuple} type, which contains a pair of possibly heterogenous values.}
+
+@defthing[fst (forall [a b] {(Tuple a b) -> a})]{
+
+Extracts the first element of a @tech{tuple}.
+
+@(hackett-examples
+  (eval:check (fst (tuple 42 "hello")) 42))}
+
+@defthing[snd (forall [a b] {(Tuple a b) -> b})]{
+
+Extracts the second element of a @tech{tuple}.
+
+@(hackett-examples
+  (eval:check (snd (tuple 42 "hello")) "hello"))}
 
 @subsection[#:tag "reference-optionals"]{Optionals}
 
