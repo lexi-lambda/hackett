@@ -205,7 +205,7 @@
    #:with [superclass-dict-placeholder ...]
           (for/list ([constr-expr (in-list (attribute superclass-constr-expr))])
             (quasisyntax/loc this-syntax
-              (@%dictionary-placeholder #,constr-expr)))
+              (@%dictionary-placeholder #,constr-expr (quote-syntax #,this-syntax))))
 
    (~> #'(let-syntax- ([method-t (make-type-variable-transformer method-t-expr)] ...)
            (make-immutable-free-id-table-

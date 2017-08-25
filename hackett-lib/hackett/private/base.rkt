@@ -3,14 +3,10 @@
 (require racket/require hackett/private/util/require)
 
 (require (for-syntax (multi-in racket [base contract list match syntax])
-                     syntax/id-table
-                     syntax/parse
                      syntax/parse/experimental/template
                      threading)
          (postfix-in - (combine-in racket/base
-                                   racket/local
                                    racket/promise
-                                   racket/splicing
                                    syntax/id-table))
          syntax/parse/define
 
@@ -56,7 +52,7 @@
   [(_ x:id t)
    #:with x- (generate-temporary #'x)
    #:with x/τ (preservable-property->expression (τ:var #'x-))
-   #:with {~and expansion (let-values _ {~and inner-let (let-values _ t-:type)})}
+   #:with (let-values _ {~and inner-let (let-values _ t-:type)})
           (local-expand-type #'(let-syntax ([x (make-type-variable-transformer x/τ)])
                                  t))
    (~> (τ-stx-token (τ:∀ #'x- (attribute t-.τ))
@@ -138,7 +134,8 @@
                                                          #,(quasisyntax/loc e
                                                              (@%dictionary-placeholder
                                                               #,(preservable-property->expression
-                                                                 %1))))))}
+                                                                 %1)
+                                                              (quote-syntax #,e))))))}
                                 e- constrs)
                          t))))]))
 
@@ -165,7 +162,7 @@
                                   'expression '())
         #:literals [#%expression- #%plain-lambda- let-values-]
         [(#%plain-lambda- (x-* ...)
-           (let-values- _ {~and inner-let (let-values _ (#%expression- e-) ...)}))
+           (let-values- _ {~and inner-let (let-values- _ (#%expression- e-) ...)}))
          (list
           ; The first thing we need to return from the expanded syntax is the expanded identifiers
           ; used as runtime slots for the assumption bindings. These have scopes added to them by the
@@ -243,7 +240,8 @@
                  (lazy- (#%app- (force- #,e_fn)
                                 #,(quasisyntax/loc src
                                     (@%dictionary-placeholder
-                                     #,(preservable-property->expression constr))))))
+                                     #,(preservable-property->expression constr)
+                                     (quote-syntax #,src))))))
                t e_arg #:src src)]
       [_ (raise-syntax-error #f (format "cannot apply expression of type ~a to expression ~a"
                                         (τ->string t_fn) (syntax->datum e_arg))
@@ -281,13 +279,13 @@
     (-> syntax? syntax?)
     (syntax-parse stx
       #:context 'elaborate-dictionaries
-      #:literals [#%plain-app @%dictionary-placeholder @%with-dictionary]
-      [(#%plain-app @%dictionary-placeholder constr-expr)
+      #:literals [#%plain-app quote-syntax @%dictionary-placeholder @%with-dictionary]
+      [(#%plain-app @%dictionary-placeholder ~! constr-expr (quote-syntax src-expr))
        #:with this #`(quote-syntax #,this-syntax)
        #'(let-syntax-
           ([dict-expr
             (let*-values ([(constr) constr-expr]
-                          [(instance constrs) (lookup-instance! constr #:src this)]
+                          [(instance constrs) (lookup-instance! constr #:src (quote-syntax src-expr))]
                           [(dict-expr) (class:instance-dict-expr instance)])
               ; It’s possible that the dictionary itself requires dictionaries for classes with
               ; subgoals, like (instance ∀ [a] [(Show a)] => (Show (List a)) ...). If there are not
@@ -301,7 +299,8 @@
                                      #,@(for/list ([constr (in-list constrs)])
                                           (quasisyntax/loc this
                                             (@%dictionary-placeholder
-                                             #,(preservable-property->expression constr)))))
+                                             #,(preservable-property->expression constr)
+                                             (quote-syntax src-expr)))))
                                   'expression '())))))])
            dict-expr)]
       [(#%plain-app @%with-dictionary constr-expr e)
