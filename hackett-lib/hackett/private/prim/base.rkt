@@ -12,12 +12,12 @@
          hackett/private/prim/type
          syntax/parse/define)
 
-(provide not || && if fst snd unsafe-run-io!
+(provide not || && if fst snd foldr unsafe-run-io!
 
          . $ & id const flip
 
          (class Eq) (class Show)
-         (class Semigroup) (class Monoid)
+         (class Semigroup) (class Monoid) concat
 
          (class Functor) (rename-out [map <$>]) <&> <$ $> ignore
          (class Applicative) sequence traverse
@@ -47,6 +47,10 @@
 
 (defn snd : (∀ [a b] {(Tuple a b) -> b})
   [[(tuple _ x)] x])
+
+(defn foldr : (∀ [a b] {{a -> b -> b} -> b -> (List a) -> b})
+  [[f a {x :: xs}] (f x (foldr f a xs))]
+  [[_ a nil      ] a])
 
 (defn unsafe-run-io! : (∀ [a] {(IO a) -> a})
   [[(io f)] (snd (f real-world))])
@@ -102,8 +106,9 @@
   [show (λ [(tuple a b)] {"(tuple " ++ (show a) ++ " " ++ (show b) ++ ")"})])
 
 (instance (∀ [a] (Show a) => (Show (List a)))
-  [show (λ* [[{y :: ys}] {"{" ++ (show y) ++ " :: " ++ (show ys) ++ "}"}]
-            [[nil      ] "nil"])])
+  [show (λ* [[nil] "nil"]
+            [[xs] (let ([strs (map {(λ [x] {x ++ " :: "}) . show} xs)])
+                    {"{" ++ (concat strs) ++ "nil}"})])])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Eq
@@ -162,6 +167,9 @@
 
 (instance (∀ [a] (Monoid (List a)))
   [mempty nil])
+
+(def concat : (∀ [a] (Monoid a) => {(List a) -> a})
+  (foldr ++ mempty))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Functor

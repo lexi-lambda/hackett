@@ -38,10 +38,6 @@
   [[_ nil]
    nil])
 
-(defn foldr : (∀ [a b] {{a -> b -> b} -> b -> (List a) -> b})
-  [[f a {x :: xs}] (f x (foldr f a xs))]
-  [[_ a nil      ] a])
-
 (defn foldl : (∀ [a b] {{b -> a -> b} -> b -> (List a) -> b})
   [[f a {x :: xs}] (case (f a x) [b {b seq (foldl f b xs)}])]
   [[_ a nil      ] a])
