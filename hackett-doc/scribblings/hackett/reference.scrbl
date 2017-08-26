@@ -523,6 +523,24 @@ Returns @racket[just] a list without its first element, or @racket[nothing] if t
   (tail {1 :: 2 :: 3 :: nil})
   (tail (: nil (List Integer))))}
 
+@defthing[head! (forall [a] {(List a) -> a})]{
+
+A @tech[#:key "partial function"]{partial} version of @racket[head] that returns the first element of
+a list. If the list is empty, it raises an error.
+
+@(hackett-examples
+  (head! {1 :: 2 :: 3 :: nil})
+  (eval:error (head! (: nil (List Integer)))))}
+
+@defthing[tail! (forall [a] {(List a) -> (List a)})]{
+
+A @tech[#:key "partial function"]{Partial} version of @racket[tail] that returns a list without its
+first element. If the list is empty, it raises an error.
+
+@(hackett-examples
+  (tail! {1 :: 2 :: 3 :: nil})
+  (eval:error (tail! (: nil (List Integer)))))}
+
 @defproc[(take [n Integer] [xs (List a)]) (List a)]{
 
 Produces a list with the first @racket[n] elements of @racket[xs]. If @racket[xs] contains fewer than
@@ -531,6 +549,48 @@ Produces a list with the first @racket[n] elements of @racket[xs]. If @racket[xs
 @(hackett-examples
   (take 2 {1 :: 2 :: 3 :: nil})
   (take 2 {1 :: nil}))}
+
+@defproc[(drop [n Integer] [xs (List a)]) (List a)]{
+
+Produces a list like @racket[xs] without its first @racket[n] elements. If @racket[xs] contains fewer
+then @racket[n] elements, the result is @racket[nil].
+
+@(hackett-examples
+  (drop 2 {1 :: 2 :: 3 :: nil})
+  (drop 2 {1 :: nil}))}
+
+@defproc[(foldr [f {a -> b -> b}] [acc b] [xs (List a)]) b]{
+
+Reduces @racket[xs] to a single value using a right-associative binary operator, @racket[f], using
+@racket[acc] as a “seed” element. Uses of @racket[foldr] can be thought of as a series of nested,
+right-associative applications of @racket[f], so if @racket[xs] contains elements named @racket[_x0],
+@racket[_x1], @racket[_x2] etc., up to @racket[_xn], then @racket[(foldr f acc xs)] is equivalent to
+the following expression:
+
+@(racketblock
+  {_x0 f {_x1 f {_x2 f .... {_xn f acc} ....}}})
+
+@(hackett-examples
+  (foldr + 0 {1 :: 2 :: 3 :: 4 :: 5 :: nil})
+  (foldr * 1 {1 :: 2 :: 3 :: 4 :: 5 :: nil})
+  (foldr - 0 {1 :: 2 :: 3 :: 4 :: 5 :: nil})
+  (foldr :: nil {1 :: 2 :: 3 :: 4 :: 5 :: nil}))}
+
+@defproc[(foldl [f {b -> a -> b}] [acc b] [xs (List a)]) b]{
+
+Reduces @racket[xs] to a single value using a left-associative binary operator, @racket[f], using
+@racket[acc] as a “seed” element. Uses of @racket[foldr] can be thought of as a series of nested,
+left-associative applications of @racket[f], so if @racket[xs] contains elements named @racket[_x0],
+@racket[_x1], @racket[_x2] etc., up to @racket[_xn], then @racket[(foldr f acc xs)] is equivalent to
+the following expression:
+
+@(racketblock
+  {.... {{{acc f _x0} f _x1} f _x2} .... _xn})
+
+@(hackett-examples
+  (foldl + 0 {1 :: 2 :: 3 :: 4 :: 5 :: nil})
+  (foldl * 1 {1 :: 2 :: 3 :: 4 :: 5 :: nil})
+  (foldl - 0 {1 :: 2 :: 3 :: 4 :: 5 :: nil}))}
 
 @section[#:tag "reference-typeclasses"]{Typeclasses}
 
