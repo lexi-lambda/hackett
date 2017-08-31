@@ -155,9 +155,18 @@
 (instance (Semigroup String)
   [++ append/String])
 
+(instance (∀ [a] (Semigroup a) => (Semigroup (Maybe a)))
+  [++ (λ* [[(just x) (just y)] (just {x ++ y})]
+          [[(just x) nothing ] (just x)]
+          [[nothing  (just y)] (just y)]
+          [[nothing  nothing ] nothing])])
+
 (instance (∀ [a] (Semigroup (List a)))
   [++ (λ* [[{z :: zs} ys] {z :: {zs ++ ys}}]
           [[nil       ys] ys])])
+
+(instance (∀ [a b] (Semigroup b) => (Semigroup {a -> b}))
+  [++ (λ [f g x] {(f x) ++ (g x)})])
 
 (class (Semigroup a) => (Monoid a)
   [mempty : a])
@@ -165,8 +174,14 @@
 (instance (Monoid String)
   [mempty ""])
 
+(instance (∀ [a] (Semigroup a) => (Monoid (Maybe a)))
+  [mempty nothing])
+
 (instance (∀ [a] (Monoid (List a)))
   [mempty nil])
+
+(instance (∀ [a b] (Monoid b) => (Monoid {a -> b}))
+  [mempty (λ [_] mempty)])
 
 (def concat : (∀ [a] (Monoid a) => {(List a) -> a})
   (foldr ++ mempty))
