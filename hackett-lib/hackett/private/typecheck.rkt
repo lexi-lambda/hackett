@@ -28,7 +28,6 @@
                        [struct ctx:var ([x identifier?])]
                        [struct ctx:var^ ([x^ identifier?])]
                        [struct ctx:skolem ([x^ identifier?])]
-                       [struct ctx:assump ([x identifier?] [t τ?])]
                        [struct ctx:solution ([x^ identifier?] [t τ?])]
                        [struct class:info ([var identifier?]
                                            [method-table immutable-free-id-table?]
@@ -135,10 +134,9 @@
 (struct ctx:var (x) #:prefab)
 (struct ctx:var^ (x^) #:prefab)
 (struct ctx:skolem (x^) #:prefab)
-(struct ctx:assump (x t) #:prefab)
 (struct ctx:solution (x^ t) #:prefab)
 
-(define (ctx-elem? x) ((disjoin ctx:var? ctx:var^? ctx:skolem? ctx:assump? ctx:solution?) x))
+(define (ctx-elem? x) ((disjoin ctx:var? ctx:var^? ctx:skolem? ctx:solution?) x))
 (define (ctx? x) ((listof ctx-elem?) x))
 (define/contract ctx-elem=?
   (-> ctx-elem? ctx-elem? boolean?)
@@ -146,7 +144,6 @@
    [[(ctx:var x) (ctx:var y)] (free-identifier=? x y)]
    [[(ctx:var^ x) (ctx:var^ y)] (free-identifier=? x y)]
    [[(ctx:skolem x^) (ctx:skolem y^)] (free-identifier=? x^ y^)]
-   [[(ctx:assump x a) (ctx:assump y b)] (and (free-identifier=? x y) (τ=? a b))]
    [[(ctx:solution x^ a) (ctx:solution y^ b)] (and (free-identifier=? x^ y^) (τ=? a b))]
    [[_ _] #f]))
 (define/contract (ctx-member? ctx elem)
@@ -155,12 +152,6 @@
 (define/contract (ctx-remove ctx elem)
   (-> ctx? ctx-elem? ctx?)
   (remove elem ctx ctx-elem=?))
-
-(define (ctx-find-assump ctx x)
-  (and~> (findf #{and (ctx:assump? %) (free-identifier=? x (ctx:assump-x %))} ctx)
-         ctx:assump-t))
-(define (current-ctx-assump x)
-  (ctx-find-assump (current-type-context) x))
 
 (define/contract (ctx-find-solution ctx x^)
   (-> ctx? identifier? (or/c τ? #f))

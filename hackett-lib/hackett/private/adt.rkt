@@ -199,14 +199,14 @@
     (-> pat?
         (values
          τ?                                           ; the inferred type the pattern matches against;
-         (listof ctx:assump?)                         ; the types of bindings produced by the pattern;
+         (listof (cons/c identifier? τ?))             ; the types of bindings produced by the pattern;
          (-> (listof identifier?)                     ; a function that produces a Racket `match`
              (values syntax? (listof identifier?))))) ; pattern given a set of binding ids
     (match pat
       [(pat-var _ id)
        (let ([a^ (generate-temporary)])
          (modify-type-context #{snoc % (ctx:var^ a^)})
-         (values (τ:var^ a^) (list (ctx:assump id (τ:var^ a^)))
+         (values (τ:var^ a^) (list (cons id (τ:var^ a^)))
                  (match-lambda [(cons id rest) (values id rest)])))]
       [(pat-hole _)
        (let ([a^ (generate-temporary)])
@@ -223,7 +223,8 @@
 
   (define/contract (pat⇐! pat t)
     (-> pat? τ?
-        (values (listof ctx:assump?) (-> (listof identifier?) (values syntax? (listof identifier?)))))
+        (values (listof (cons/c identifier? τ?))
+                (-> (listof identifier?) (values syntax? (listof identifier?)))))
     (let-values ([(t_⇒ assumps mk-pat) (pat⇒! pat)])
       (τ<:! t_⇒ t #:src (pat-base-stx pat))
       (values assumps mk-pat)))
@@ -241,7 +242,7 @@
 
   (define/contract (pats⇒! pats)
     (-> (listof pat?)
-        (values (listof τ?) (listof ctx:assump?)
+        (values (listof τ?) (listof (cons/c identifier? τ?))
                 (-> (listof identifier?) (values (listof syntax?) (listof identifier?)))))
     (define-values [ts assumps mk-pats]
       (for/lists [ts assumps mk-pats]
@@ -251,7 +252,7 @@
 
   (define/contract (pats⇐! pats ts)
     (-> (listof pat?) (listof τ?)
-        (values (listof ctx:assump?)
+        (values (listof (cons/c identifier? τ?))
                 (-> (listof identifier?) (values (listof syntax?) (listof identifier?)))))
     (define-values [assumps mk-pats]
       (for/lists [assumps mk-pats]
@@ -338,12 +339,10 @@
                    (for/lists [ts_pats assumpss mk-match-pats]
                               ([pat (in-list pats)])
                      (pat⇒! pat))]
+                  ; Collect the set of bindings introduced by the patterns.
                   [(assumps) (append* assumpss)]
-                  ; Calculate the set of bindings introduced by the patterns in the format that
-                  ; τ⇒/λ! understands (which is an alist).
-                  [(bindings) (map #{cons (ctx:assump-x %) (ctx:assump-t %)} assumps)]
                   ; Infer the type of the body expression, as well as the bindings it introduces.
-                  [(bound-ids- body- t_body) (τ⇒/λ! body bindings)]
+                  [(bound-ids- body- t_body) (τ⇒/λ! body assumps)]
                   ; Use the bound ids to construct racket/match patterns from the case patterns.
                   [(match-pats- (list))
                    (for/fold ([match-pats- '()]
