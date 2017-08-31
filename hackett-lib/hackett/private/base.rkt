@@ -289,19 +289,20 @@
                           [(dict-expr) (class:instance-dict-expr instance)])
               ; It’s possible that the dictionary itself requires dictionaries for classes with
               ; subgoals, like (instance ∀ [a] [(Show a)] => (Show (List a)) ...). If there are not
-              ; any constraints, we should just produce a bare identifier. Otherwise, we should
-              ; produce an application to sub-dictionaries, which need to be recursively elaborated.
-              (if (empty? constrs)
-                  (make-variable-like-transformer dict-expr)
-                  (make-variable-like-transformer
-                   (elaborate-dictionaries
-                    (local-expand #`(#,dict-expr
-                                     #,@(for/list ([constr (in-list constrs)])
-                                          (quasisyntax/loc this
-                                            (@%dictionary-placeholder
-                                             #,(preservable-property->expression constr)
-                                             (quote-syntax src-expr)))))
-                                  'expression '())))))])
+              ; any constraints, we need to produce a (curried) application to sub-dictionaries, which
+              ; should be recursively elaborated.
+              (make-variable-like-transformer
+               (foldr (λ (constr acc)
+                        #`(#,acc
+                           #,(elaborate-dictionaries
+                              (local-expand
+                               (quasisyntax/loc this
+                                 (@%dictionary-placeholder
+                                  #,(preservable-property->expression constr)
+                                  (quote-syntax src-expr)))
+                               'expression '()))))
+                      dict-expr
+                      constrs)))])
            dict-expr)]
       [(#%plain-app @%with-dictionary constr-expr e)
        #:with this #`(quote-syntax #,this-syntax)
