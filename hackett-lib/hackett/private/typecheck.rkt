@@ -1,5 +1,15 @@
 #lang curly-fn racket/base
 
+; This module contains the core implementation of the Hackett typechecker, as well as the core type
+; representations. The Hackett typechecker operates using a mutable typechecker context implemented
+; as a Racket parameter, which contains information about solutions for existing solver variables.
+;
+; The core typechecker implements typing subsumption rules and the constraint solver for resolving
+; typeclass instances. Other functionality is deferred to the implementation site of Hackett forms.
+; The functions that perform the actual process of type inference (via recursive expansion) are
+; defined in hackett/private/base, and they provide the primary interface to the various typechecker
+; functions in this module.
+
 (require (for-template racket/base)
          (for-syntax racket/base
                      syntax/parse
@@ -43,13 +53,60 @@
          make-type-variable-transformer attach-type attach-expected get-type get-expected
          make-typed-var-transformer)
 
+;; ---------------------------------------------------------------------------------------------------
+;; type representation
+
+; Bound type variables. In the type (forall [a] a), a is a τ:var until the forall is instantiated.
+; These usually do not appear in typechecking (since they will be instantiated to τ:var^, τ:skolem, or
+; a concrete type).
 (struct τ:var (x) #:prefab)
+
+; Solver variables, which represent some yet-unknown type. The typechecker will *solve* these
+; variables as necessary as part of *unification*.
 (struct τ:var^ (x^) #:prefab)
+
+; Skolem, aka “rigid”, type variables, which represent a *specific* unknown type. While solver
+; variables unify with *anything*, skolem type variables unify with *nothing* (except themselves).
+; These are introduced by user-provided type annotations — for example, an identity function annotated
+; with (forall [a] {a -> a}) will check the implementation against a fresh skolem variable for a.
+;
+; Since skolems are completely unique, this process ensures an implementation is suitably polymorphic.
+; If a function typechecks with a skolem, it must work for *all* types, since the function cannot know
+; anything about the skolem. This is in contrast to an ordinary solver variable: if we used a solver
+; variable to check the identity function instead of a skolem, then the user could write code that
+; would get the solver variable to unify with a single, concrete type (such as (λ [x] {x + 1})), which
+; would defeat the whole point of the quantified type annotation.
 (struct τ:skolem (x^) #:prefab)
+
+; Type constructors, the primary building block that all concrete types are built out of. Type
+; constructors may actually be types themselves (such as Unit, Integer, or String), or they may be
+; “type functions” that accept other types to produce a concrete type (such as Tuple, Maybe, or List).
+;
+; Type constructors also store the names of their associated constructors, if they are ADTs. If not,
+; the constructors field is #f.
 (struct τ:con (name constructors) #:prefab)
+
+; Type application, which represents the application of some type constructor to type arguments. For
+; example, (Maybe Integer) is the application of the Maybe constructor to the Integer constructor.
+; Type constructors are curried in the same way that value-level functions are, so type applications
+; can be nested in a left-associative manner to represent applying a type to multiple arguments.
 (struct τ:app (a b) #:prefab)
+
+; Universal quantification over types. The primitive quantifier abstracts a single type variable
+; within its type. Within t, (τ:var x) may appear.
 (struct τ:∀ (x t) #:prefab)
+
+; Qualified types, aka types with constraints. Currently, the only sort of constraint Hackett supports
+; is typeclass constraints. Constraints themselves are represented as types, though they do not
+; (directly) describe any terms. Typeclass names may serve as type constructors that can be applied
+; to other types just like any others.
 (struct τ:qual (constr t) #:prefab)
+
+;; ---------------------------------------------------------------------------------------------------
+;; function types
+
+; Functions are the only truly “baked-in” types. They are handled specially by the typechecker in
+; order to implement higher-rank polymorphism, so they are defined here.
 
 (define τ:-> (τ:con #'-> #f))
 
@@ -65,7 +122,14 @@
     [(τ:->* _ _) #t]
     [_ #f]))
 
+;; ---------------------------------------------------------------------------------------------------
+;; type operations
+
 (define (τ? x) ((disjoin τ:var? τ:var^? τ:skolem? τ:con? τ:app? τ:∀? τ:qual?) x))
+
+; Compares two types for literal equality. This is a much more primitive notion than type
+; “equivalence”, since it does not check alpha-equivalence. This means that (forall [a] a) and
+; (forall [b] b) will be considered different types.
 (define/contract τ=?
   (-> τ? τ? boolean?)
   (match-lambda**
@@ -79,6 +143,7 @@
 
 (define (constr? x) (τ? x)) ; TODO: change this when we add kinds to check that x has kind Constraint
 
+; Determines if a type is monomorphic, which simply checks if the type contains any quantifiers.
 (define/contract τ-mono?
   (-> τ? boolean?)
   (match-lambda
@@ -90,6 +155,7 @@
     [(τ:∀ _ _) #f]
     [(τ:qual a b) (and (τ-mono? a) (τ-mono? b))]))
 
+; Returns all solver variables present in a type.
 (define/contract τ-vars^
   (-> τ? (listof identifier?))
   (match-lambda
@@ -130,6 +196,9 @@
        (match t
          [(τ:qual constr t) (flatten-qual (cons constr constrs) t)]
          [other `(=> ,(map τ->datum (reverse constrs)) ,(τ->datum t))]))]))
+
+;; ---------------------------------------------------------------------------------------------------
+;; type contexts
 
 (struct ctx:var (x) #:prefab)
 (struct ctx:var^ (x^) #:prefab)
@@ -216,6 +285,9 @@
   (-> (-> ctx? ctx?) void?)
   (current-type-context (f (current-type-context))))
 
+;; ---------------------------------------------------------------------------------------------------
+;; instance contexts
+
 (struct class:info (var method-table superclasses) #:transparent
   #:property prop:procedure
   (λ (info stx)
@@ -240,6 +312,9 @@
 (define (current-instances-of-class class)
   (-> class:info? (listof class:instance?))
   (filter #{eq? class (class:instance-class %)} (current-class-instances)))
+
+;; ---------------------------------------------------------------------------------------------------
+;; subsumption, instantiation, and elaboration
 
 (define/contract (τ<:/full! a b #:src src #:elaborate? elaborate?)
   (->i ([a τ?]
@@ -332,7 +407,8 @@
     [(τ:->* a b)
      (let ([x1^ (generate-temporary x^)]
            [x2^ (generate-temporary x^)])
-       (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^))))})
+       (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^)
+                                             (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^))))})
        (τ-inst-r! a x1^)
        (τ-inst-l! x2^ (apply-current-subst b)))]
     ; InstLAllR
@@ -340,7 +416,7 @@
      (modify-type-context #{snoc % (ctx:var x)})
      (τ-inst-l! x^ t*)
      (modify-type-context #{ctx-remove % (ctx:var x)})]
-    [_ (error 'τ-inst-l! (format "failed to instantiate ~a to a subtype of ~a"
+    [_ (error 'τ-inst-l! (format "internal error: failed to instantiate ~a to a subtype of ~a"
                                  (τ->string (τ:var^ x^)) (τ->string t)))]))
 
 (define/contract (τ-inst-r! t x^)
@@ -353,7 +429,8 @@
     [(τ:->* a b)
      (let ([x1^ (generate-temporary x^)]
            [x2^ (generate-temporary x^)])
-       (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^))))})
+       (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^)
+                                             (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^))))})
        (τ-inst-l! x1^ a)
        (τ-inst-r! (apply-current-subst b) x2^))]
     ; InstRAllL
@@ -362,7 +439,7 @@
        (modify-type-context #{snoc % (ctx:var^ y^)})
        (τ-inst-r! (inst t* x (τ:var^ y^)) x^)
        (modify-type-context #{ctx-remove % (ctx:var^ y^)}))]
-    [_ (error 'τ-inst-r! (format "failed to instantiate ~a to a supertype of ~a"
+    [_ (error 'τ-inst-r! (format "internal error: failed to instantiate ~a to a supertype of ~a"
                                  (τ->string (τ:var^ x^)) (τ->string t)))]))
 
 ;; ---------------------------------------------------------------------------------------------------
@@ -411,6 +488,17 @@
                                  src))))
 
 ;; ---------------------------------------------------------------------------------------------------
+;; parsing types
+
+; Types are represented using the data structures defined at the top of this module. However, users
+; use a different source language for writing types that does not use the raw type data structures
+; directly. This code handles “parsing” such type syntax, though types are not really parsed: they are
+; *expanded*.
+;
+; Type syntax in Hackett actually uses arbitrary Racket expressions that are expanded as part of the
+; typechecking process. They are expected to attach a syntax property to their expansion that
+; represents the resulting type. When types are being expanded, (type-transforming?) will be #t, which
+; Hackett uses to invoke a custom #%app that converts application expressions to uses of τ:app.
 
 (define type-transforming?-param (make-parameter #f))
 (define (type-transforming?) (type-transforming?-param))
