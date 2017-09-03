@@ -36,7 +36,6 @@
                        [struct τ:∀ ([x identifier?] [t τ?])]
                        [struct τ:qual ([constr constr?] [t τ?])]
                        [struct ctx:var ([x identifier?])]
-                       [struct ctx:var^ ([x^ identifier?])]
                        [struct ctx:skolem ([x^ identifier?])]
                        [struct ctx:solution ([x^ identifier?] [t τ?])]
                        [struct class:info ([var identifier?]
@@ -201,17 +200,15 @@
 ;; type contexts
 
 (struct ctx:var (x) #:prefab)
-(struct ctx:var^ (x^) #:prefab)
 (struct ctx:skolem (x^) #:prefab)
 (struct ctx:solution (x^ t) #:prefab)
 
-(define (ctx-elem? x) ((disjoin ctx:var? ctx:var^? ctx:skolem? ctx:solution?) x))
+(define (ctx-elem? x) ((disjoin ctx:var? ctx:skolem? ctx:solution?) x))
 (define (ctx? x) ((listof ctx-elem?) x))
 (define/contract ctx-elem=?
   (-> ctx-elem? ctx-elem? boolean?)
   (match-lambda**
    [[(ctx:var x) (ctx:var y)] (free-identifier=? x y)]
-   [[(ctx:var^ x) (ctx:var^ y)] (free-identifier=? x y)]
    [[(ctx:skolem x^) (ctx:skolem y^)] (free-identifier=? x^ y^)]
    [[(ctx:solution x^ a) (ctx:solution y^ b)] (and (free-identifier=? x^ y^) (τ=? a b))]
    [[_ _] #f]))
@@ -235,9 +232,7 @@
   (match t
     [(τ:var x) (unless (ctx-member? ctx (ctx:var x))
                  (raise-syntax-error #f "unbound type variable" x))]
-    [(τ:var^ x^) (unless (or (ctx-member? ctx (ctx:var^ x^))
-                             (ctx-find-solution ctx x^))
-                   (raise-syntax-error #f "unbound existential variable" x^))]
+    [(τ:var^ _) (void)]
     [(τ:skolem x^) (unless (ctx-member? ctx (ctx:skolem x^))
                     (raise-syntax-error #f "skolem escaped its scope" x^))]
     [(τ:con _ _) (void)]
@@ -358,7 +353,6 @@
     [[(τ:∀ x a) b]
      (let* ([x^ (generate-temporary x)]
             [a* (inst a x (τ:var^ x^))])
-       (modify-type-context #{snoc % (ctx:var^ x^)})
        (τ<:/full! a* b #:src src #:elaborate? elaborate?))]
     ; <:∀R
     [[a (τ:∀ x b)]
@@ -407,8 +401,7 @@
     [(τ:->* a b)
      (let ([x1^ (generate-temporary x^)]
            [x2^ (generate-temporary x^)])
-       (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^)
-                                             (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^))))})
+       (modify-type-context #{snoc % (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^)))})
        (τ-inst-r! a x1^)
        (τ-inst-l! x2^ (apply-current-subst b)))]
     ; InstLAllR
@@ -429,16 +422,13 @@
     [(τ:->* a b)
      (let ([x1^ (generate-temporary x^)]
            [x2^ (generate-temporary x^)])
-       (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^)
-                                             (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^))))})
+       (modify-type-context #{snoc % (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^)))})
        (τ-inst-l! x1^ a)
        (τ-inst-r! (apply-current-subst b) x2^))]
     ; InstRAllL
     [(τ:∀ x t*)
      (let ([y^ (generate-temporary x)])
-       (modify-type-context #{snoc % (ctx:var^ y^)})
-       (τ-inst-r! (inst t* x (τ:var^ y^)) x^)
-       (modify-type-context #{ctx-remove % (ctx:var^ y^)}))]
+       (τ-inst-r! (inst t* x (τ:var^ y^)) x^))]
     [_ (error 'τ-inst-r! (format "internal error: failed to instantiate ~a to a supertype of ~a"
                                  (τ->string (τ:var^ x^)) (τ->string t)))]))
 
@@ -465,7 +455,6 @@
                 (and y (append x y)))))]
     [[a (τ:∀ x b)]
      (let ([x^ (generate-temporary x)])
-       (modify-type-context #{snoc % (ctx:var^ x^)})
        (unify-instance-head a (inst b x (τ:var^ x^))))]
     [[a (τ:qual constr b)]
      (and~>> (unify-instance-head a b)

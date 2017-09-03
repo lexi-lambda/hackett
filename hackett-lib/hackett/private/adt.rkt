@@ -88,7 +88,6 @@
       (match-lambda
         [(τ:∀ x t) (let* ([x^ (generate-temporary x)]
                           [t* (inst t x (τ:var^ x^))])
-                     (modify-type-context #{snoc % (ctx:var^ x^)})
                      (instantiate-quantifiers t*))]
         [t t]))
     (let flatten-fn ([t (instantiate-quantifiers t)])
@@ -205,12 +204,10 @@
     (match pat
       [(pat-var _ id)
        (let ([a^ (generate-temporary)])
-         (modify-type-context #{snoc % (ctx:var^ a^)})
          (values (τ:var^ a^) (list (cons id (τ:var^ a^)))
                  (match-lambda [(cons id rest) (values id rest)])))]
       [(pat-hole _)
        (let ([a^ (generate-temporary)])
-         (modify-type-context #{snoc % (ctx:var^ a^)})
          (values (τ:var^ a^) '() #{values #'_ %}))]
       [(pat-str _ str)
        (values (τ:con #'String #f) '() #{values str %})]
@@ -369,7 +366,6 @@
                                 [ts_pats (in-list tss_pats-transposed)]
                                 [pats (in-list patss-transposed)])
                        (let ([val^ (generate-temporary)])
-                         (modify-type-context #{snoc % (ctx:var^ val^)})
                          (for-each #{τ<:! %1 (τ:var^ val^) #:src %2} ts_pats pats)
                          (τ⇐! val (apply-current-subst (τ:var^ val^)))))
 
@@ -378,7 +374,6 @@
          ; whole expression.
          (define t_result
            (let ([result^ (generate-temporary)])
-             (modify-type-context #{snoc % (ctx:var^ result^)})
              (for-each #{τ<:! %1 (τ:var^ result^) #:src %2} ts_bodies (attribute clause.body))
              (apply-current-subst (τ:var^ result^))))]
 

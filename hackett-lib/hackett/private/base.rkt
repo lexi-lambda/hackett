@@ -223,7 +223,7 @@
       [(τ:var^ x^)
        (let ([x1^ (generate-temporary x^)]
              [x2^ (generate-temporary x^)])
-         (modify-type-context #{append % (list (ctx:var^ x2^) (ctx:var^ x1^) (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^))))})
+         (modify-type-context #{snoc % (ctx:solution x^ (τ:->* (τ:var^ x1^) (τ:var^ x2^)))})
          (values (quasisyntax/loc src
                    (lazy- (#%app- (force- #,e_fn) #,(τ⇐! e_arg (τ:var^ x1^)))))
                  (τ:var^ x2^)))]
@@ -233,7 +233,6 @@
                b)]
       [(τ:∀ x t)
        (let ([x^ (generate-temporary x)])
-         (modify-type-context #{snoc % (ctx:var^ x^)})
          (τ⇒app! e_fn (inst t x (τ:var^ x^)) e_arg #:src src))]
       [(τ:qual constr t)
        (τ⇒app! (quasisyntax/loc src
@@ -363,7 +362,6 @@
   [(_ x:id e:expr)
    #:do [(define x^ (generate-temporary))
          (define y^ (generate-temporary))
-         (modify-type-context #{append % (list (ctx:var^ x^) (ctx:var^ y^))})
          (define-values [xs- e-] (τ⇐/λ! #'e (τ:var^ y^) (list (cons #'x (τ:var^ x^)))))]
    #:with [x-] xs-
    (attach-type #`(λ- (x-) #,e-) (τ:->* (τ:var^ x^) (τ:var^ y^)))])
@@ -443,8 +441,8 @@
   #:literals [:]
   [(_ ([id:id {~optional {~seq colon:: t-ann:type}} val:expr] ...+) body:expr)
    ; First, infer or check the type of each binding. Use τ⇐!\λ to check the type if a type annotation
-   ; is provided. Otherwise, use τ⇒!/λ to infer it, and synthesize a fresh type variable for id’s type
-   ; during inference. If a type is successfully inferred, unify it with the fresh type variable
+   ; is provided. Otherwise, use τ⇒!/λ to infer it, and synthesize a fresh type variable for id’s
+   ; type during inference. If a type is successfully inferred, unify it with the fresh type variable
    ; afterwards.
    #:do [; First, start by grouping bindings into two sets: those with explicit type annotations, and
          ; those without. For those without explicit type annotations, synthesize a fresh type
@@ -461,7 +459,6 @@
                        (values (cons (list id t-ann val) ids+ts+vals/ann) ids+ts+vals/unann)
                        (let* ([t_val-id (generate-temporary)]
                               [t_val (τ:var^ t_val-id)])
-                         (modify-type-context #{snoc % (ctx:var^ t_val-id)})
                          (values ids+ts+vals/ann (cons (list id t_val val) ids+ts+vals/unann)))))])
              (values (reverse ids+ts+vals/ann) (reverse ids+ts+vals/unann))))
 
