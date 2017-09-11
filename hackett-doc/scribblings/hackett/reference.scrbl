@@ -702,7 +702,7 @@ An identity element for @racket[++]. That is, @racket[mempty] must obey the foll
 @defclass[(Functor f)
           [map (forall [a b] {{a -> b} -> (f a) -> (f b)})]]{
 
-A class of types that are @deftech{functors}, essentially types that provide a mapping or “piercing”
+A class of types that are @deftech{functors}, essentially types that provide a mapping or “lifting”
 operation. The @racket[map] function can be viewed in different ways:
 
   @itemlist[
