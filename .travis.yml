@@ -30,7 +30,10 @@ install:
       $TRAVIS_BUILD_DIR/hackett-test
 
 script:
-  - raco test -ep hackett-demo hackett-lib hackett-test
+  - 'raco test -e
+      ++ignore-stderr "^process \\d+: D-Bus library appears to be incorrectly set up"
+      ++ignore-stderr "^See the manual page for dbus-uuidgen to correct this issue.$"
+      -p hackett-demo hackett-lib hackett-test'
 
 after_success:
   - bash deploy-docs.sh
