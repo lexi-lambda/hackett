@@ -306,6 +306,14 @@ arbitrary-precision “bignums”.}
 
 These functions provide simple, arbitrary-precision, integral arithmetic.}
 
+@deftogether[
+ [@defthing[> {Integer -> Integer -> Bool}]
+  @defthing[< {Integer -> Integer -> Bool}]
+  @defthing[>= {Integer -> Integer -> Bool}]
+  @defthing[<= {Integer -> Integer -> Bool}]]]{
+
+Comparison operators on integers.}
+
 @defidform[#:kind "type" Double]{
 
 The type of double-precision IEEE 754 floating-point numbers, known as
@@ -534,7 +542,7 @@ a list. If the list is empty, it raises an error.
 
 @defthing[tail! (forall [a] {(List a) -> (List a)})]{
 
-A @tech[#:key "partial function"]{Partial} version of @racket[tail] that returns a list without its
+A @tech[#:key "partial function"]{partial} version of @racket[tail] that returns a list without its
 first element. If the list is empty, it raises an error.
 
 @(hackett-examples
@@ -558,6 +566,14 @@ then @racket[n] elements, the result is @racket[nil].
 @(hackett-examples
   (drop 2 {1 :: 2 :: 3 :: nil})
   (drop 2 {1 :: nil}))}
+
+@defproc[(filter [f {a -> Bool}] [xs (List a)]) (List a)]{
+
+Produces a list that contains each element, @racket[_x], for which @racket[_x] is an element of
+@racket[xs] and @racket[(f _x)] is @racket[true].
+
+@(hackett-examples
+  (filter (λ [x] {x > 5}) {3 :: 7 :: 2 :: 9 :: 12 :: 4 :: nil}))}
 
 @defproc[(foldr [f {a -> b -> b}] [acc b] [xs (List a)]) b]{
 
@@ -591,6 +607,14 @@ the following expression:
   (foldl + 0 {1 :: 2 :: 3 :: 4 :: 5 :: nil})
   (foldl * 1 {1 :: 2 :: 3 :: 4 :: 5 :: nil})
   (foldl - 0 {1 :: 2 :: 3 :: 4 :: 5 :: nil}))}
+
+@defproc[(sum [xs (List Integer)]) Integer]{
+
+Adds the elements of @racket[xs] together and returns the sum. Equivalent to @racket[(foldl + 0)].
+
+@(hackett-examples
+  (eval:check (sum {1 :: 2 :: 3 :: nil}) 6)
+  (eval:check (sum nil) 0))}
 
 @section[#:tag "reference-typeclasses"]{Typeclasses}
 

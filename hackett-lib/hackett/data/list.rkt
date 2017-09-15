@@ -5,8 +5,8 @@
          hackett/private/prim
          hackett/private/provide)
 
-(provide (data List) head tail head! tail! take drop foldr foldl reverse zip-with repeat cycle!
-         or and any? all? elem? not-elem? delete delete-by)
+(provide (data List) head tail head! tail! take drop filter foldr foldl reverse zip-with sum
+         repeat cycle! or and any? all? elem? not-elem? delete delete-by)
 
 (defn head : (∀ [a] {(List a) -> (Maybe a)})
   [[{x :: _}] (just x)]
@@ -38,8 +38,12 @@
   [[_ nil]
    nil])
 
+(defn filter : (∀ [a] {{a -> Bool} -> (List a) -> (List a)})
+  [[f {x :: xs}] (let ([ys (filter f xs)]) (if (f x) {x :: ys} ys))]
+  [[_ nil      ] nil])
+
 (defn foldl : (∀ [a b] {{b -> a -> b} -> b -> (List a) -> b})
-  [[f a {x :: xs}] (case (f a x) [b {b seq (foldl f b xs)}])]
+  [[f a {x :: xs}] (let ([b (f a x)]) {b seq (foldl f b xs)})]
   [[_ a nil      ] a])
 
 (def reverse : (∀ [a] {(List a) -> (List a)})
@@ -48,6 +52,9 @@
 (defn zip-with : (∀ [a b c] {{a -> b -> c} -> (List a) -> (List b) -> (List c)})
   [[f {x :: xs} {y :: ys}] {(f x y) :: (zip-with f xs ys)}]
   [[_ _         _        ] nil])
+
+(def sum : {(List Integer) -> Integer}
+  (foldl + 0))
 
 (defn repeat : (∀ [a] {a -> (List a)})
   [[x] (letrec ([xs {x :: xs}]) xs)])

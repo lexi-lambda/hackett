@@ -34,7 +34,7 @@ with either Haskell or Racket. Familiarity with either language will, of course,
 
 The easiest way to get started with Hackett is by experimenting in the REPL. Using DrRacket, you can
 quickly get a REPL by writing @hash-lang[] @racketmodname[hackett] at the top of the definitions
-window and pressing the @onscreen{Run} button. Alternatively, if you can start a REPL from the
+window and pressing the @onscreen{Run} button. Alternatively, you can start a REPL from the
 command-line by running the following command:
 
 @commandline{racket -iI hackett}
@@ -479,6 +479,33 @@ together using the @racket[++] operator:
 
 @(hackett-interaction
   {{1 :: 2 :: nil} ++ {3 :: 4 :: nil}})
+
+We can sum a list of numbers using the @racket[sum] function:
+
+@(hackett-interaction
+  (eval:check (sum {1 :: 2 :: 3 :: nil}) 6))
+
+We can even apply a function to each element of a list to produce a new list by using the @racket[map]
+function:
+
+@(hackett-interaction
+  (map (+ 1) {1 :: 2 :: 3 :: nil}))
+
+Combining this with our @racket[Weekday] type from earlier, we can create a list of all the days in
+the week:
+
+@(hackett-interaction
+  #:eval enumerations-eval
+  (def weekdays : (List Weekday)
+    {sunday :: monday :: tuesday :: wednesday
+     :: thursday :: friday :: saturday :: nil}))
+
+Using @racket[filter] combined with the @racket[is-weekend?] function we wrote earlier, it’s possible
+to produce a list that contains only weekends:
+
+@(hackett-interaction
+  #:eval enumerations-eval
+  (filter is-weekend? weekdays))
 
 @(close-eval enumerations-eval)
 
