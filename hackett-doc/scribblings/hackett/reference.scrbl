@@ -504,7 +504,25 @@ Extracts the second element of a @tech{tuple}.
 A type that encodes the notion of an optional or nullable value. A value of type @racket[(Maybe a)]
 implies that it @emph{might} contain a value of type @racket[a], but it also might contain nothing at
 all. This type is usually used to represent operations that can fail (where @racket[nothing]
-represents failure) or values that are not required to be present.}
+represents failure) or values that are not required to be present.
+
+@(hackett-examples
+  (map (+ 1) (just 5))
+  (map (+ 1) nothing))}
+
+@defdata[(Either a b) (left a) (right b)]{
+
+A type that encodes the notion of a successful result or an error. The @racket[Functor],
+@racket[Applicative], and @racket[Monad] instances for @racket[(Either a)] are “right-biased”, so they
+will short circuit values wrapped in @racket[left] and will perform mapping or sequencing on values
+wrapped in @racket[right].
+
+This type is generally used in a similar way to @racket[Maybe], but it allows the sort of failure to
+be explicitly tagged, usually returning a error message or failure reason on the @racket[left] side.
+
+@(hackett-examples
+  (map (+ 1) (: (right 5) (Either String Integer)))
+  (map (+ 1) (: (left "an error happened") (Either String Integer))))}
 
 @subsection[#:tag "reference-lists"]{Lists}
 

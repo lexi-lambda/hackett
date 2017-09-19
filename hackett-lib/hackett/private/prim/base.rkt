@@ -102,6 +102,10 @@
   [show (λ* [[(just x)] {"(just " ++ (show x) ++ ")"}]
             [[nothing ] "nothing"])])
 
+(instance (∀ [a b] (Show a) (Show b) => (Show (Either a b)))
+  [show (λ* [[(left x)] {"(left " ++ (show x) ++ ")"}]
+            [[(right x)] {"(right " ++ (show x) ++ ")"}])])
+
 (instance (∀ [a b] (Show a) (Show b) => (Show (Tuple a b)))
   [show (λ [(tuple a b)] {"(tuple " ++ (show a) ++ " " ++ (show b) ++ ")"})])
 
@@ -133,9 +137,14 @@
   [== equal?/String])
 
 (instance (∀ [a] (Eq a) => (Eq (Maybe a)))
-  [== (λ* [[(just a) (just b)] (== a b)]
+  [== (λ* [[(just a) (just b)] {a == b}]
           [[nothing  nothing ] true]
           [[_        _       ] false])])
+
+(instance (∀ [a b] (Eq a) (Eq b) => (Eq (Either a b)))
+  [== (λ* [[(right a) (right b)] {a == b}]
+          [[(left  a) (left  b)] {a == b}]
+          [[_         _        ] false])])
 
 (instance (∀ [a b] (Eq a) (Eq b) => (Eq (Tuple a b)))
   [== (λ [(tuple a b) (tuple c d)] {{a == c} && {b == d}})])
@@ -208,6 +217,10 @@
   [map (λ* [[f (just x)] (just (f x))]
            [[_ nothing ] nothing])])
 
+(instance (∀ [e] (Functor (Either e)))
+  [map (λ* [[f (right x)] (right (f x))]
+           [[_ (left  x)] (left  x)])])
+
 (instance (Functor List)
   [map (λ* [[f {y :: ys}] {(f y) :: (map f ys)}]
            [[_ nil      ] nil])])
@@ -236,6 +249,11 @@
   [pure just]
   [<*> (λ* [[(just f) x] (map f x)]
            [[nothing  _] nothing])])
+
+(instance (∀ [e] (Applicative (Either e)))
+  [pure right]
+  [<*> (λ* [[(right f) x] (map f x)]
+           [[(left  x) _] (left x)])])
 
 (instance (Applicative List)
   [pure (λ [x] {x :: nil})]
@@ -276,6 +294,11 @@
 (instance (Monad Maybe)
   [join (λ* [[(just (just x))] (just x)]
             [[_              ] nothing])])
+
+(instance (∀ [e] (Monad (Either e)))
+  [join (λ* [[(right (right x))] (right x)]
+            [[(right (left  x))] (left  x)]
+            [[(left  x)        ] (left  x)])])
 
 (instance (Monad List)
   [join (λ* [[{{z :: zs} :: yss}] {z :: (join {zs :: yss})}]

@@ -14,7 +14,7 @@
 (provide (all-from-out hackett/data/list)
          (all-from-out hackett/data/maybe)
 
-         (data Unit) (data Bool) (data Tuple) (data Maybe) (data List)
+         (data Unit) (data Bool) (data Tuple) (data Maybe) (data Either) (data List)
          || && not if fst snd
 
          . $ & id const flip
