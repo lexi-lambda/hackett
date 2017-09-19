@@ -1,7 +1,6 @@
-#lang hackett/private/kernel
+#lang hackett/base
 
-(require hackett/private/adt
-         hackett/private/prim)
+(require hackett/private/prim)
 
 (provide maybe from-maybe)
 

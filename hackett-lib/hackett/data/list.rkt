@@ -1,9 +1,7 @@
-#lang hackett/private/kernel
+#lang hackett/base
 
-(require (except-in hackett/private/adt data)
-         hackett/data/maybe
-         hackett/private/prim
-         hackett/private/provide)
+(require hackett/data/maybe
+         hackett/private/prim)
 
 (provide (data List) head tail head! tail! take drop filter foldr foldl reverse zip-with sum
          repeat cycle! or and any? all? elem? not-elem? delete delete-by)
