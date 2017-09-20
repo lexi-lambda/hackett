@@ -466,9 +466,9 @@ the first argument will always be forced when the result is forced.
 
 @defthing[&& {Bool -> Bool -> Bool}]{
 
-Returns @racket[false] if its first argument is @racket[false]; otherwise, returns its second argument.
-Notably, the second argument will not be evaluated at all if the first argument is @racket[false], but
-the first argument will always be forced when the result is forced.
+Returns @racket[false] if its first argument is @racket[false]; otherwise, returns its second
+argument. Notably, the second argument will not be evaluated at all if the first argument is
+@racket[false], but the first argument will always be forced when the result is forced.
 
 @(hackett-examples
   (eval:check {true && true} true)
@@ -476,6 +476,23 @@ the first argument will always be forced when the result is forced.
   (eval:check {true && false} false)
   (eval:check {false && false} false)
   (eval:check {false && (error! "never gets here")} false))}
+
+@subsection[#:tag "reference-identity"]{The Identity Type}
+
+@defmodule[hackett/data/identity]
+
+@defdata[(Identity a) (identity a)]{
+
+A simple wrapper type with a variety of typeclass instances that defer to the value inside whenever
+possible. Most useful for its @racket[Functor], @racket[Applicative], and @racket[Monad] instances,
+which simply apply functions to the value inside the @racket[identity] wrapper, making it serve as
+a “no-op” wrapper of sorts.
+
+@(hackett-interaction
+  (identity 5)
+  (map (+ 1) (identity 5))
+  {(identity (+ 1)) <*> (identity 5)}
+  {(identity "hello, ") ++ (identity "world")})}
 
 @subsection[#:tag "reference-tuples"]{Tuples}
 
