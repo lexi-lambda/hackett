@@ -1,10 +1,10 @@
 #lang hackett
 
-(provide (data Identity) get-identity)
+(provide (data Identity) run-identity)
 
 (data (Identity a) (identity a))
 
-(defn get-identity : (forall [a] {(Identity a) -> a})
+(defn run-identity : (forall [a] {(Identity a) -> a})
   [[(identity x)] x])
 
 (instance (forall [a] (Show a) => (Show (Identity a)))

@@ -494,6 +494,13 @@ a “no-op” wrapper of sorts.
   {(identity (+ 1)) <*> (identity 5)}
   {(identity "hello, ") ++ (identity "world")})}
 
+@defproc[(run-identity [x (Identity a)]) a]{
+
+Unwraps and returns the value inside an @racket[identity] wrapper.
+
+@(hackett-interaction
+  (run-identity (identity 5)))}
+
 @subsection[#:tag "reference-tuples"]{Tuples}
 
 @defdata[(Tuple a b) (tuple a b)]{
@@ -975,6 +982,75 @@ the result of each action must be give a name.
 An implementation of @racket[<*>] in terms of @racket[map], @racket[pure], and @racket[join]. This can
 be used as an implementation of @racket[<*>] as long as @racket[join] does not use @racket[<*>] (if it
 does, the two will likely infinitely mutually recur).}
+
+@section[#:tag "reference-monad-transformers"]{Monad Transformers}
+
+@defmodule[hackett/monad/trans]
+
+@defclass[(MonadTrans t)
+          [lift (forall [m a] {(m a) -> (t m a)})]]{
+
+The class of @deftech{monad transformers}. A monad transformer builds a new monad from an existing
+one, extending it with additional functionality. In this sense, monad transformers can be thought of
+as “monad mixins”.
+
+Instances should satisfy the following laws:
+
+@racketblock[
+  @#,racket[{lift |.| pure}] @#,elem[#:style 'roman]{=} @#,racket[pure]
+  @#,racket[(lift {_m >>= _f})] @#,elem[#:style 'roman]{=} @#,racket[{(lift _m) >>= {lift |.| _f}}]]
+
+@defmethod[lift (forall [m a] {(m a) -> (t m a)})]{
+
+Lifts a computation from the argument monad to the constructed monad.}}
+
+@subsection[#:tag "reference-reader-monad"]{Reader}
+
+@defmodule[hackett/monad/reader]
+
+@defdata[(ReaderT r m a) (reader-t {r -> (m a)})]{
+
+The @deftech{reader monad transformer}, a @tech{monad transformer} that extends a monad with a
+read-only dynamic environment. The environment can be accessed with @racket[ask] and locally modified
+with @racket[local].
+
+@(hackett-interaction
+  (run-reader-t (do [x <- ask]
+                    [y <- (lift {{x + 1} :: {x - 1} :: nil})]
+                    (lift {{x * 2} :: {x * 3} :: nil}))
+                10))}
+
+@defproc[(run-reader-t [x (ReaderT r m a)] [ctx r]) (m a)]{
+
+Runs the @tech{reader monad transformer} computation @racket[x] with the context @racket[ctx] and
+produces a computation in the argument monad.}
+
+@defproc[(run-reader [x (ReaderT r Identity a)] [ctx r]) a]{
+
+Runs the @tech{reader monad transformer} computation @racket[x] with the context @racket[ctx] and
+extracts the result.}
+
+@defthing[ask (forall [r m] (ReaderT r m r))]{
+
+A computation that fetches the value of the current dynamic environment.
+
+@(hackett-interaction
+  (eval:check (run-reader ask 5) 5)
+  (eval:check (run-reader ask "hello") "hello"))}
+
+@defproc[(asks [f {r -> a}]) (ReaderT r m a)]{
+
+Produces a computation that fetches a value from the current dynamic environment, applies @racket[f]
+to it, and returns the result.
+
+@(hackett-interaction
+  (eval:check (run-reader (asks (+ 1)) 5) 6)
+  (eval:check (run-reader (asks head) {5 :: nil}) (just 5)))}
+
+@defproc[(local [f {r -> r}] [x (ReaderT r m a)]) (ReaderT r m a)]{
+
+Produces a computation like @racket[x], except that the environment is modified in its dynamic extent
+by applying @racket[f] to it.}
 
 @section[#:tag "reference-controlling-evaluation"]{Controlling Evaluation}
 

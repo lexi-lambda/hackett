@@ -1,7 +1,9 @@
 #lang at-exp racket/base
 
 (require (for-label hackett
-                    hackett/data/identity)
+                    hackett/data/identity
+                    hackett/monad/reader
+                    hackett/monad/trans)
 
          (for-syntax racket/base)
 
@@ -15,7 +17,9 @@
          syntax/parse/define)
 
 (provide (for-label (all-from-out hackett)
-                    (all-from-out hackett/data/identity))
+                    (all-from-out hackett/data/identity)
+                    (all-from-out hackett/monad/reader)
+                    (all-from-out hackett/monad/trans))
          (all-from-out scribble/manual/hackett)
          close-eval
 
@@ -29,7 +33,9 @@
 ;; evaluation
 
 (define (make-hackett-eval)
-  (make-base-eval #:lang 'hackett '(require hackett/data/identity)))
+  (make-base-eval #:lang 'hackett '(require hackett/data/identity
+                                            hackett/monad/reader
+                                            hackett/monad/trans)))
 
 (define-simple-macro (hackett-examples
                       {~or {~optional {~seq #:eval eval:expr}}
