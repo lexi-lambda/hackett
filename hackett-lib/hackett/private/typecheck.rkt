@@ -102,26 +102,6 @@
 (struct τ:qual (constr t) #:prefab)
 
 ;; ---------------------------------------------------------------------------------------------------
-;; function types
-
-; Functions are the only truly “baked-in” types. They are handled specially by the typechecker in
-; order to implement higher-rank polymorphism, so they are defined here.
-
-(define τ:-> (τ:con #'-> #f))
-
-(define (mk-τ:-> a b) (τ:app (τ:app τ:-> a) b))
-(define-match-expander τ:->*
-  (syntax-parser
-    [(_ a b)
-     #'(τ:app (τ:app (== τ:-> τ=?) a) b)])
-  (make-variable-like-transformer #'mk-τ:->))
-
-(define τ:->?
-  (match-lambda
-    [(τ:->* _ _) #t]
-    [_ #f]))
-
-;; ---------------------------------------------------------------------------------------------------
 ;; type operations
 
 (define (τ? x) ((disjoin τ:var? τ:var^? τ:skolem? τ:con? τ:app? τ:∀? τ:qual?) x))
@@ -307,6 +287,26 @@
 (define (current-instances-of-class class)
   (-> class:info? (listof class:instance?))
   (filter #{eq? class (class:instance-class %)} (current-class-instances)))
+
+;; ---------------------------------------------------------------------------------------------------
+;; function types
+
+; Functions are the only truly “baked-in” types. They are handled specially by the typechecker in
+; order to implement higher-rank polymorphism, so they are defined here.
+
+(define τ:-> (τ:con #'-> #f))
+
+(define (mk-τ:-> a b) (τ:app (τ:app τ:-> a) b))
+(define-match-expander τ:->*
+  (syntax-parser
+    [(_ a b)
+     #'(τ:app (τ:app (== τ:-> τ=?) a) b)])
+  (make-variable-like-transformer #'mk-τ:->))
+
+(define τ:->?
+  (match-lambda
+    [(τ:->* _ _) #t]
+    [_ #f]))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; subsumption, instantiation, and elaboration
