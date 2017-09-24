@@ -153,8 +153,12 @@
                          [nothing unit]
                          [true unit])))
 
-(typecheck-succeed (λ [m] (case m [nothing nothing])))
-(typecheck-succeed (: (λ [m] (case m [nothing nothing]))
+(typecheck-succeed (λ [m] (case m
+                            [nothing nothing]
+                            [_ nothing])))
+(typecheck-succeed (: (λ [m] (case m
+                               [nothing nothing]
+                               [_ nothing]))
                       (∀ [a b] {(Maybe a) -> (Maybe b)})))
 (typecheck-succeed (λ [f m] (case m
                               [(just x) (just (f x))]

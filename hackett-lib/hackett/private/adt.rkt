@@ -2,7 +2,7 @@
 
 (require racket/require hackett/private/util/require)
 
-(require (for-syntax (multi-in racket [base contract format list match syntax])
+(require (for-syntax (multi-in racket [base contract string format list match syntax])
                      (multi-in syntax/parse [class/local-value class/paren-shape
                                              experimental/template experimental/specialize])
                      threading
@@ -116,13 +116,21 @@
     (-> data-constructor? exact-integer?)
     (function-type-arity (data-constructor-type ctor)))
 
+  (define/contract (data-constructor-all-tags ctor)
+    (-> data-constructor? (listof identifier?))
+    (let find-tcon ([t (data-constructor-type ctor)])
+      (match t
+        [(τ:∀ _ u)          (find-tcon u)]
+        [(τ:->* _ u)        (find-tcon u)]
+        [(τ:app u _)        (find-tcon u)]
+        [(τ:con _ ctor-ids) ctor-ids])))
+
   (struct pat-base (stx) #:transparent)
   (struct pat-var pat-base (id) #:transparent)
   (struct pat-hole pat-base () #:transparent)
   (struct pat-con pat-base (constructor pats) #:transparent)
   (struct pat-str pat-base (str) #:transparent)
-
-  (define (pat? x) (or (pat-var? x) (pat-hole? x) (pat-con? x) (pat-str? x)))
+  (define pat? pat-base?)
 
   (define-syntax-class pat
     #:description "a pattern"
@@ -256,7 +264,139 @@
                  ([pat (in-list pats)]
                   [t (in-list ts)])
         (pat⇐! pat t)))
-    (values (append* assumps) (combine-pattern-constructors mk-pats))))
+    (values (append* assumps) (combine-pattern-constructors mk-pats)))
+
+
+  ;; -------------------------------------------------------------------------------------------------
+  ;; Exhaustiveness checking
+
+  (struct ideal-con (ctor-tag args))
+
+  ; An “ideal” pattern represents unmatched patterns, used by the exhaustiveness checker.
+  ; Specifically, the current set of ideals represents the minimal set of patterns that would cover
+  ; all uncovered cases without covering covered ones. As the exhaustiveness checker runs, it consults
+  ; user provided patterns, and adjusts the set of ideals accordingly: it eliminates covered ideals
+  ; and splits partially-covered ideals into more specific ones.
+  ;
+  ; An ideal pattern can be a variable, which corresponds to a pat-var or pat-hole (that is, it
+  ; matches anything), or a constructor, which contains sub-ideals for each argument to the
+  ; constructor.
+  (define ideal?
+    (or/c symbol?      ; ideal variable
+          ideal-con?)) ; ideal for specific constructor
+
+  ; Creates a list of n fresh ideal variables.
+  (define (generate-fresh-ideals n)
+    (build-list n (λ (_) (gensym))))
+
+  ; Returns a pretty representation of ideal. Uses “syntax-e” to turn constructor tags into strings,
+  ; and replaces symbols with “_”.
+  (define (ideal->string q)
+    (define ideal->datum
+      (match-lambda
+        [(? symbol?)
+         '_]
+        [(ideal-con ctor-tag '())
+         (syntax-e ctor-tag)]
+        [(ideal-con ctor-tag qs)
+         (cons (syntax-e ctor-tag)
+               (map ideal->datum qs))]))
+    (format "~a" (ideal->datum q)))
+
+  ; Generates a new ideal-con from a data constructor’s tag identifier
+  (define (constructor-tag->ideal-con ctor-tag)
+    (define arity (data-constructor-arity (syntax-local-value ctor-tag)))
+    (ideal-con ctor-tag (generate-fresh-ideals arity)))
+
+  ; Returns a substition function f for the given ideal q such that (f r) is just like q, except that
+  ; all occurences of x are replaced by r.
+  (define (ideal->subst-fn q x)
+    (match q
+      [(== x eq?)
+       (λ (r) r)]
+      [(ideal-con ctor qs)
+       (let ([fns (map #{ideal->subst-fn % x} qs)])
+         (λ (r) (ideal-con ctor (map #{% r} fns))))]
+      [_
+       (λ (r) q)]))
+
+  ; Substitutes occurences of symbol x with each ideal in rs, for each ideal in qs.
+  ;
+  ; e.g.
+  ;   (subs 'A '(B C) (list 'D (con "*" 'A)))
+  ;   =
+  ;   (list (list 'D (con "*" 'B))
+  ;         (list 'D (con "*" 'C)))
+  (define (substitute-ideals x rs qs)
+    (let ([subst-fns (map #{ideal->subst-fn % x} qs)])
+      (for/list ([r (in-list rs)])
+        (for/list ([fn (in-list subst-fns)])
+          (fn r)))))
+
+  (define current-exhaust-split-handler
+    (make-parameter #f))
+
+  ; Returns #t if the ideals satisfy the patterns. Calls (current-exhaust-split-handler) when an ideal
+  ; variable needs to be split.
+  (define (ideals-satisfied? ideals pats)
+    (for/and ([p (in-list pats)]
+              [q (in-list ideals)])
+      (match p
+        ; The ideal is always satisfied when we hit a wildcard pattern, such as a variable or a hole,
+        ; since they match everything.
+        [(pat-var _ _) #t]
+        [(pat-hole _) #t]
+
+        ; When we hit a constructor pattern, we check the ideal. If it is a constructor, compare the
+        ; tags and then recur for the sub-patterns. If it is a variable, then split the ideal into new
+        ; ideals for each kind of constructor.
+        [(pat-con _ ctor sub-pats)
+         (match q
+           [(ideal-con ctor-tag sub-ideals)
+            (and (eq? (syntax-local-value ctor-tag) ctor)
+                 (ideals-satisfied? sub-ideals sub-pats))]
+
+           [(? symbol? x)
+            (let ([split-into (map constructor-tag->ideal-con (data-constructor-all-tags ctor))])
+              ((current-exhaust-split-handler) x split-into))])]
+
+        ; TODO: better exhaustiveness checking on strings. OCaml checks for the strings "*", "**",
+        ; "***" etc. It would be fairly easy to do the same using splitting.
+        [(pat-str _ s) #f])))
+
+
+  ; Checks if patterns are exhaustive or not. Given a list of pattern-lists, returns #f if no
+  ; un-matched patterns are found. Otherwise, returns an example of an un-matched pattern-list.
+  (define/contract (check-exhaustiveness patss pat-count)
+    (-> (listof (listof pat?))
+        exact-nonnegative-integer?
+        (or/c #f (listof ideal?)))
+
+    ; Initially, use a fresh ideal variable for each pattern.
+    (let check ([idealss (list (generate-fresh-ideals pat-count))])
+      (match idealss
+        ; No more ideals to check; #f signals that the pattern is exhaustive.
+        ['() #f]
+
+        ; Check if the most recent ideal is exhaustive, or if it split into more ideals.
+        [(cons ideals rest-idealss)
+         (define sat
+           (let/ec escape ; This continuation is used to escape in case of a split
+             (parameterize ([current-exhaust-split-handler
+                             (λ (x rs)
+                               (escape (substitute-ideals x rs ideals)))])
+
+               (for/or ([pats (in-list patss)])
+                 (ideals-satisfied? ideals pats)))))
+
+         (match sat
+           [#t (check rest-idealss)]
+
+           ; Non-exhaustive! return un-matched ideals.
+           [#f ideals]
+
+           ; In case of split, append.
+           [new-idealss (check (append new-idealss rest-idealss))])]))))
 
 (define-syntax-parser define-data-constructor
   [(_ [τ:type-constructor-spec] [constructor:data-constructor-spec])
@@ -368,6 +508,15 @@
                        (let ([val^ (generate-temporary)])
                          (for-each #{τ<:! %1 (τ:var^ val^) #:src %2} ts_pats pats)
                          (τ⇐! val (apply-current-subst (τ:var^ val^)))))
+
+   #:do [; Perform exhaustiveness checking.
+         (define non-exhaust (check-exhaustiveness (attribute clause.pat.pat)
+                                                   (length (attribute val))))]
+   #:fail-when non-exhaust
+               (string-append "non-exhaustive pattern match\n  unmatched case"
+                              (if (= (length non-exhaust) 1) "" "s")
+                              ":" (string-append* (map #{string-append "\n    " (ideal->string %)}
+                                                       non-exhaust)))
 
    #:do [; Now that we’ve inferred the types for the patterns, the inputs, and the bodies, we need to
          ; ensure all the body types actually agree. If they do, that will be the result type of the
