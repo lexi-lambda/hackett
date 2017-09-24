@@ -303,7 +303,7 @@
    #`(begin-
        #,(indirect-infix-definition
           #'(define-syntax- τ.tag (make-type-variable-transformer
-                                   (τ:con #'τ.tag (list #'constructor ...))))
+                                   (τ:con #'τ.tag (list #'constructor.tag ...))))
           (attribute τ.fixity))
        (define-data-constructor τ constructor) ...)])
 

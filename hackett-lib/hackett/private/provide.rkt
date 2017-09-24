@@ -33,8 +33,8 @@
                        "not defined as a datatype"
            #:fail-when (and (not (τ:con-constructors t)) #'type-id)
                        "type does not have visible constructors"
-           #:with [[constructor:data-constructor-spec] ...] (τ:con-constructors t)
-           (expand-export #'(combine-out type-id constructor.tag ...) modes)]))))
+           #:with [ctor-tag ...] (τ:con-constructors t)
+           (expand-export #'(combine-out type-id ctor-tag ...) modes)]))))
 
   (struct class-transformer ()
     #:property prop:procedure
