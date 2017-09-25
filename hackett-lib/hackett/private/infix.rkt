@@ -55,14 +55,20 @@
   [pattern _:expr
            #:attr fixity default-operator-fixity])
 
+(define-splicing-syntax-class precedence
+  #:description "operator precedence"
+  #:attributes [precedence]
+  [pattern n:nat #:attr precedence (syntax-e #'n)]
+  [pattern {~seq} #:attr precedence default-operator-precedence])
+
 (define-splicing-syntax-class fixity-annotation
   #:description "fixity annotation"
   #:datum-literals [left right]
   #:attributes [fixity]
-  [pattern {~seq #:fixity left}
-           #:attr fixity (left-operator-fixity default-operator-precedence)]
-  [pattern {~seq #:fixity right}
-           #:attr fixity (right-operator-fixity default-operator-precedence)])
+  [pattern {~seq #:fixity p:precedence left}
+           #:attr fixity (left-operator-fixity (attribute p.precedence))]
+  [pattern {~seq #:fixity p:precedence right}
+           #:attr fixity (right-operator-fixity (attribute p.precedence))])
 
 ; Given a definition and a potential fixity declaration, add a layer of indirection that replaces the
 ; definition with one that defines an infix operator.
