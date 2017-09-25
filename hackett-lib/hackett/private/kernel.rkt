@@ -76,25 +76,9 @@
             xs ...))])
 
 (define-syntax-parser @%app/infix
-  ;; TODO: precedence parsing here
-  [(_ a:expr op:infix-operator b:expr {~seq ops:infix-operator bs:expr} ...+)
-   #:when (left-operator-fixity? (attribute op.fixity))
-   #:with ~! #f
-   #:fail-unless (andmap left-operator-fixity? (attribute ops.fixity))
-                 "cannot mix left- and right-associative operators in the same infix expression"
-   (quasitemplate/loc this-syntax
-     (@%app/infix #,(syntax/loc this-syntax
-                      (@%app/infix a op b))
-                  {?@ ops bs} ...))]
-  [(_ {~seq as:expr ops:infix-operator} ...+ a:expr op:infix-operator b:expr)
-   #:when (right-operator-fixity? (attribute op.fixity))
-   #:with ~! #f
-   #:fail-unless (andmap right-operator-fixity? (attribute ops.fixity))
-                 "cannot mix left- and right-associative operators in the same infix expression"
-   (quasitemplate/loc this-syntax
-     (@%app/infix {?@ as ops} ...
-                  #,(syntax/loc this-syntax
-                      (@%app/infix a op b))))]
-  [(_ a:expr op:expr b:expr)
-   (syntax/loc this-syntax
-     (@%app/prefix op a b))])
+  [(_ a:expr {~seq op:infix-operator b:expr} ...)
+   #:with (_ . op+terms) this-syntax
+   (infix->prefix #'op+terms
+                  (λ (op a b)
+                    (quasisyntax/loc this-syntax
+                      (@%app/prefix #,op #,a #,b))))])

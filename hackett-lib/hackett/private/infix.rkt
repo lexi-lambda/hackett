@@ -24,7 +24,8 @@
          default-operator-fixity
          default-operator-precedence
          infix-operator? infix-operator-fixity
-         infix-operator fixity-annotation indirect-infix-definition)
+         infix-operator fixity-annotation indirect-infix-definition
+         infix->prefix)
 
 (struct operator-fixity (precedence) #:prefab)
 (struct left-operator-fixity operator-fixity () #:prefab)
@@ -92,3 +93,36 @@
              (d id- expr)
              (define-syntax id (infix-operator-impl #'id- fixity-expr)))])
       stx))
+
+
+; Converts brace-enclosed infix syntax to prefix notation, using
+; the function 'join-fn' to convert an operator and two arguments into
+; an expression that applies the operator.
+(define/contract (infix->prefix stx join-fn)
+  (-> syntax? (-> identifier? syntax? syntax? syntax?) syntax?)
+
+  (define (op->fixity o)
+    (define v (syntax-local-value o))
+    (if (infix-operator? v)
+        (infix-operator-fixity v)
+        default-operator-fixity))
+
+  (define (climb stx min-prec)
+    (syntax-parse stx
+      [(a op . term+ops)
+       #:do [(define fixity (op->fixity #'op))
+             (define op-prec (operator-fixity-precedence fixity))
+             (define greater-prec
+               (if (right-operator-fixity? fixity)
+                   (sub1 op-prec)
+                   op-prec))]
+       #:when (> op-prec min-prec)
+       #:with (b . op+terms) (climb #'term+ops greater-prec)
+       #:with a+b (join-fn #'op #'a #'b)
+       (climb (syntax/loc stx
+                (a+b . op+terms))
+              min-prec)]
+
+      [_ stx]))
+
+  (car (syntax-e (climb stx -1))))
