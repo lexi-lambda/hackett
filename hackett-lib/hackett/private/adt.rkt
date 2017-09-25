@@ -173,11 +173,12 @@
              #:attr disappeared-uses (cons (syntax-local-introduce #'constructor)
                                            (append (attribute a.disappeared-uses)
                                                    (attribute b.disappeared-uses)))]
+    ;; TODO: precedence parsing here
     [pattern {~braces a:pat ctor:data-constructor-val b:pat
                       {~seq ctors:data-constructor-val bs:expr} ...}
-             #:when (eq? 'left (data-constructor-fixity (attribute ctor.local-value)))
+             #:when (left-operator-fixity? (data-constructor-fixity (attribute ctor.local-value)))
              #:with ~! #f
-             #:fail-unless (andmap #{eq? % 'left}
+             #:fail-unless (andmap left-operator-fixity?
                                    (map data-constructor-fixity (attribute ctors.local-value)))
                            (~a "cannot mix left- and right-associative operators in the same infix "
                                "pattern")
@@ -185,9 +186,9 @@
     [pattern {~braces {~seq as:expr ctors:data-constructor-val} ...
                       a:pat ctor:data-constructor-val b:pat
                       }
-             #:when (eq? 'right (data-constructor-fixity (attribute ctor.local-value)))
+             #:when (right-operator-fixity? (data-constructor-fixity (attribute ctor.local-value)))
              #:with ~! #f
-             #:fail-unless (andmap #{eq? % 'right}
+             #:fail-unless (andmap right-operator-fixity?
                                    (map data-constructor-fixity (attribute ctors.local-value)))
                            (~a "cannot mix left- and right-associative operators in the same infix "
                                "pattern")
@@ -407,7 +408,8 @@
    #:with τ_con:type (foldr #{begin #`(∀ #,%1 #,%2)} #'τ_con_unquantified (attribute τ.arg))
    #:with τ_con-expr (preservable-property->expression (attribute τ_con.τ))
    #:with [field ...] (generate-temporaries (attribute constructor.arg))
-   #:with fixity-expr (preservable-property->expression (or (attribute constructor.fixity) 'left))
+   #:with fixity-expr (preservable-property->expression (or (attribute constructor.fixity)
+                                                            default-operator-fixity))
    #`(begin-
        (define-values- [] (begin- (λ- () τ_con.expansion) (values-)))
        ; check if the constructor is nullary or not
