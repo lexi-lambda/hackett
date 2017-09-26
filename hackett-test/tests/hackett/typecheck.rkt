@@ -153,8 +153,12 @@
                          [nothing unit]
                          [true unit])))
 
-(typecheck-succeed (λ [m] (case m [nothing nothing])))
-(typecheck-succeed (: (λ [m] (case m [nothing nothing]))
+(typecheck-succeed (λ [m] (case m
+                            [nothing nothing]
+                            [_ nothing])))
+(typecheck-succeed (: (λ [m] (case m
+                               [nothing nothing]
+                               [_ nothing]))
                       (∀ [a b] {(Maybe a) -> (Maybe b)})))
 (typecheck-succeed (λ [f m] (case m
                               [(just x) (just (f x))]
@@ -192,3 +196,20 @@
 (typecheck-fail (letrec ([xs : Integer {1 :: xs}]) (take 4 xs)))
 (typecheck-fail (letrec ([xs 42]) (take 4 xs)))
 (typecheck-fail (letrec ([xs {1 :: ys}] [ys 5]) xs))
+
+(typecheck-succeed (λ [xs] (case xs [_ unit])))
+(typecheck-succeed (λ [xs] (case xs
+                             [nil unit]
+                             [{_ :: _} unit])))
+(typecheck-fail (λ [xs] (case xs
+                          [nil unit])))
+(typecheck-succeed (λ [xs] (case xs
+                             [nil unit]
+                             [{_ :: _ :: _} unit]
+                             [{_ :: _} unit])))
+(typecheck-fail (λ [xs] (case xs
+                          [nil unit]
+                          [{_ :: _ :: _} unit])))
+(typecheck-fail (λ [xs] (case xs
+                          [{_ :: _ :: _} unit]
+                          [{_ :: _} unit])))
