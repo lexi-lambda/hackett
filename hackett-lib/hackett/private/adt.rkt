@@ -336,11 +336,14 @@
   (define current-exhaust-split-handler
     (make-parameter #f))
 
-  ; Returns #t if the ideals satisfy the patterns. Calls (current-exhaust-split-handler) when an ideal
-  ; variable needs to be split.
-  (define (ideals-satisfied? ideals pats)
-    (for/and ([p (in-list pats)]
-              [q (in-list ideals)])
+  ; Checks if the ideals are covered by the patterns. Returns #t if the ideals are fully covered, #f
+  ; if some ideals are left uncovered, or a pair of a symbol and its replacements if it needs to be
+  ; split.
+  (define (check-ideals ideals pats)
+    (for/fold ([acc #t])
+              ([p (in-list pats)]
+               [q (in-list ideals)])
+      #:break (not (eq? #t acc))
       (match p
         ; The ideal is always satisfied when we hit a wildcard pattern, such as a variable or a hole,
         ; since they match everything.
@@ -354,11 +357,11 @@
          (match q
            [(ideal-con ctor-tag sub-ideals)
             (and (eq? (syntax-local-value ctor-tag) ctor)
-                 (ideals-satisfied? sub-ideals sub-pats))]
+                 (check-ideals sub-ideals sub-pats))]
 
            [(? symbol? x)
             (let ([split-into (map constructor-tag->ideal-con (data-constructor-all-tags ctor))])
-              ((current-exhaust-split-handler) x split-into))])]
+              (cons x split-into))])]
 
         ; TODO: better exhaustiveness checking on strings. OCaml checks for the strings "*", "**",
         ; "***" etc. It would be fairly easy to do the same using splitting.
@@ -371,32 +374,24 @@
     (-> (listof (listof pat?))
         exact-nonnegative-integer?
         (or/c #f (listof ideal?)))
-
     ; Initially, use a fresh ideal variable for each pattern.
     (let check ([idealss (list (generate-fresh-ideals pat-count))])
       (match idealss
         ; No more ideals to check; #f signals that the pattern is exhaustive.
         ['() #f]
-
         ; Check if the most recent ideal is exhaustive, or if it split into more ideals.
         [(cons ideals rest-idealss)
-         (define sat
-           (let/ec escape ; This continuation is used to escape in case of a split
-             (parameterize ([current-exhaust-split-handler
-                             (λ (x rs)
-                               (escape (substitute-ideals x rs ideals)))])
-
-               (for/or ([pats (in-list patss)])
-                 (ideals-satisfied? ideals pats)))))
-
-         (match sat
-           [#t (check rest-idealss)]
-
+         (match (for/or ([pats (in-list patss)])
+                 (check-ideals ideals pats))
+           [#t
+            (check rest-idealss)]
            ; Non-exhaustive! return un-matched ideals.
-           [#f ideals]
-
-           ; In case of split, append.
-           [new-idealss (check (append new-idealss rest-idealss))])]))))
+           [#f
+            ideals]
+           ; In case of split, substitute and append.
+           [(cons x rs)
+            (let ([new-idealss (substitute-ideals x rs ideals)])
+              (check (append new-idealss rest-idealss)))])]))))
 
 (define-syntax-parser define-data-constructor
   [(_ [τ:type-constructor-spec] [constructor:data-constructor-spec])
