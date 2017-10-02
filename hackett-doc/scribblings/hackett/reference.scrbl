@@ -57,6 +57,7 @@ to provide additional locations for type annotations.}
          ([maybe-type (code:line : type)
                       (code:line)]
           [maybe-fixity-ann (code:line #:fixity fixity)
+                            (code:line #:fixity precedence fixity)
                             (code:line)]
           [fixity left right])]{
 
@@ -86,6 +87,7 @@ If @racket[fixity] is specified, it defines @racket[id]’s @tech{operator fixit
          ([maybe-type (code:line : type)
                       (code:line)]
           [maybe-fixity-ann (code:line #:fixity fixity)
+                            (code:line #:fixity precedence fixity)
                             (code:line)]
           [fixity left right])]{
 
@@ -229,6 +231,7 @@ Like @racket[case], but matches against multiple values at once. Each case only 
                        (code:line (data-constructor-id arg-type ...+) maybe-fixity-ann)
                        (code:line {arg-type data-constructor-id arg-type} maybe-fixity-ann)]
           [maybe-fixity-ann (code:line #:fixity fixity)
+                            (code:line #:fixity precedence fixity)
                             (code:line)]
           [fixity left right])]{
 
