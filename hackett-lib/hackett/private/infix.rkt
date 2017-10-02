@@ -86,11 +86,11 @@
   (if fixity
       (syntax-parse stx
         #:context 'indirect-infix-definition
-        [(d id:id expr)
+        [(d id:id . defn-parts)
          #:with id- (generate-temporary #'id)
          #:with fixity-expr (preservable-property->expression fixity)
          #'(begin
-             (d id- expr)
+             (d id- . defn-parts)
              (define-syntax id (infix-operator-impl #'id- fixity-expr)))])
       stx))
 
