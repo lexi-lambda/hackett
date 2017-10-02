@@ -99,10 +99,11 @@
 ; the function 'join-fn' to convert an operator and two arguments into
 ; an expression that applies the operator.
 (define/contract (infix->prefix stx join-fn)
-  (-> syntax? (-> identifier? syntax? syntax? syntax?) syntax?)
+  (-> syntax? (-> syntax? syntax? syntax? syntax?) syntax?)
 
   (define (op->fixity o)
-    (define v (syntax-local-value o))
+    (define v (and (identifier? o)
+                   (syntax-local-value o)))
     (if (infix-operator? v)
         (infix-operator-fixity v)
         default-operator-fixity))
