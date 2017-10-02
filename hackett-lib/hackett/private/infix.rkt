@@ -66,10 +66,10 @@
   #:description "fixity annotation"
   #:datum-literals [left right]
   #:attributes [fixity]
-  [pattern {~seq #:fixity p:precedence left}
-           #:attr fixity (left-operator-fixity (attribute p.precedence))]
-  [pattern {~seq #:fixity p:precedence right}
-           #:attr fixity (right-operator-fixity (attribute p.precedence))])
+  [pattern {~seq #:fixity :precedence left}
+           #:attr fixity (left-operator-fixity (attribute precedence))]
+  [pattern {~seq #:fixity :precedence right}
+           #:attr fixity (right-operator-fixity (attribute precedence))])
 
 ; Given a definition and a potential fixity declaration, add a layer of indirection that replaces the
 ; definition with one that defines an infix operator.
