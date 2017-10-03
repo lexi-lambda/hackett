@@ -7,6 +7,7 @@ Here are some of the features that Hackett supports **right now**:
   - Bidirectional type inference
   - Algebraic datatypes (ADTs)
   - Pattern matching
+  - Exhaustiveness checking
   - Typeclasses
   - Higher-kinded types
   - Higher-rank polymorphism
@@ -17,7 +18,6 @@ Here are some of the features that Hackett supports **right now**:
 Here are some of the features that still need to be implemented for a minimal release:
 
   - Default class methods
-  - Exhaustiveness checking
   - Scoped type variables
   - Kindchecking
   - Type expanders (of which type aliases are a subset)
@@ -49,7 +49,7 @@ Here’s some sample Hackett code that demonstrates some of Hackett’s features
 (class (Show a)
   [show : {a -> String}])
 
-(instance (∀ [a] (Show a) => (Show (Maybe a)))
+(instance (forall [a] (Show a) => (Show (Maybe a)))
   [show (λ* [[(just x)] {"(just " ++ (show x) ++ ")"}]
             [[nothing ] "nothing"])])
 ```
