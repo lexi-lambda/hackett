@@ -983,6 +983,46 @@ An implementation of @racket[<*>] in terms of @racket[map], @racket[pure], and @
 be used as an implementation of @racket[<*>] as long as @racket[join] does not use @racket[<*>] (if it
 does, the two will likely infinitely mutually recur).}
 
+@section[#:tag "reference-io"]{I/O}
+
+@defform[#:kind "type constructor" (IO a)]{
+
+The type of @deftech{I/O actions}, which are @tech{monads}. Hackett’s encoding of I/O is semantically
+pure—evaluating an I/O action does not cause any side-effects to be performed. The only way to
+“execute” an I/O action is to provide it to the @racket[main] form, which instructs the Hackett
+runtime to perform the actual I/O actions described by the @racket[IO] value.
+
+It may be helpful to think of a value of type @racket[(IO a)] as a set of @emph{instructions} to
+obtain a value of type @racket[a]. This makes it clear that it is @bold{impossible} to get the value
+“inside” an @racket[IO] action, since no such value exists; there is no @racket[String] “inside” a
+value of type @racket[(IO String)].
+
+Since @racket[main] is the only way to ask the runtime to execute the instructions contained within
+an @racket[IO] action, and @racket[main] is only legal at the top level of a module, it is impossible
+for I/O to be performed locally. This is how Hackett preserves referential transparency @emph{even
+within} functions that produce values of type @racket[IO].}
+
+@defform[(main action)
+         #:contracts
+         ([action (IO _a)])]{
+
+Appends an @tech{I/O action} to the current module’s @deftech{main actions}. Main actions are executed
+by the runtime whenever a module is run directly, e.g. from DrRacket or via the @tt{racket}
+executable, rather than imported via @racket[require]. This form is only legal at the top level of a
+module.
+
+Uses of this form correspond to definitions of @racketid[main] submodules in @hash-lang[]
+@racketmodname[racket]. For more information, see
+@secref["main-and-test" #:doc '(lib "scribblings/guide/guide.scrbl")].}
+
+@defproc[(print [str String]) (IO Unit)]{
+
+Produces an @tech{I/O action} that prints @racket[str] to standard output.}
+
+@defproc[(println [str String]) (IO Unit)]{
+
+Like @racket[print], but appends a newline to the end of the printed message.}
+
 @section[#:tag "reference-monad-transformers"]{Monad Transformers}
 
 @defmodule[hackett/monad/trans]
@@ -1051,6 +1091,59 @@ to it, and returns the result.
 
 Produces a computation like @racket[x], except that the environment is modified in its dynamic extent
 by applying @racket[f] to it.}
+
+@subsection[#:tag "reference-error-monad"]{Error}
+
+@defmodule[hackett/monad/error]
+
+@defdata[(ErrorT e m a) (error-t (m (Either e a)))]{
+
+The @deftech{error monad transformer}, a @tech{monad transformer} that extends a monad with a notion
+of failure. Failures short-circuit other computations in the monad, and they can carry information,
+usually information about what caused the failure.
+
+@(hackett-interaction
+  (eval:alts (run-error-t (do (lift (println "This gets printed."))
+                              (throw "Oops!")
+                              (lift (println "Never gets here."))))
+             (unsafe-run-io!
+              (run-error-t (do (lift (println "This gets printed."))
+                               (throw "Oops!")
+                               (lift (println "Never gets here.")))))))}
+
+@defproc[(run-error-t [x (ErrorT e m a)]) (m (Either e a))]{
+
+Runs the @tech{error monad transformer} computation @racket[x] and produces the possibly-aborted
+result in the argument monad.}
+
+@defproc[(run-error [x (ErrorT e Identity a)]) (Either e a)]{
+
+Runs the @tech{error monad transformer} computation @racket[x] and extracts the possibly-aborted
+result.}
+
+@defproc[(throw [ex e]) (ErrorT e m a)]{
+
+Produces a computation that raises @racket[ex] as an error, aborting the current computation (unless
+caught with @racket[catch]).
+
+@(hackett-interaction
+  (eval:check (: (run-error (pure 42)) (Either String Integer))
+              (: (right 42) (Either String Integer)))
+  (eval:check (run-error (do (throw "Ack!") (pure 42)))
+              (: (left "Ack!") (Either String Integer))))}
+
+@defproc[(catch [x (ErrorT e m a)] [handler {e -> (ErrorT e* m a)}]) (ErrorT e* m a)]{
+
+Produces a computation like @racket[x], except any errors raised are handled via @racket[handler]
+instead of immediately aborting.
+
+@(hackett-interaction
+  (eval:check (: (run-error (throw "Ack!")) (Either String String))
+              (: (left "Ack!") (Either String String)))
+  (eval:check (: (run-error (catch (throw "Ack!")
+                              (λ [str] (pure {"Caught error: " ++ str}))))
+                 (Either Unit String))
+              (: (right "Caught error: Ack!") (Either Unit String))))}
 
 @section[#:tag "reference-controlling-evaluation"]{Controlling Evaluation}
 

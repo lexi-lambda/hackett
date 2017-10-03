@@ -2,6 +2,7 @@
 
 (require (for-label hackett
                     hackett/data/identity
+                    hackett/monad/error
                     hackett/monad/reader
                     hackett/monad/trans)
 
@@ -18,6 +19,7 @@
 
 (provide (for-label (all-from-out hackett)
                     (all-from-out hackett/data/identity)
+                    (all-from-out hackett/monad/error)
                     (all-from-out hackett/monad/reader)
                     (all-from-out hackett/monad/trans))
          (all-from-out scribble/manual/hackett)
@@ -34,8 +36,10 @@
 
 (define (make-hackett-eval)
   (make-base-eval #:lang 'hackett '(require hackett/data/identity
+                                            hackett/monad/error
                                             hackett/monad/reader
-                                            hackett/monad/trans)))
+                                            hackett/monad/trans
+                                            (only-in hackett/private/prim unsafe-run-io!))))
 
 (define-simple-macro (hackett-examples
                       {~or {~optional {~seq #:eval eval:expr}}
