@@ -2,7 +2,7 @@
 
 (require hackett/private/prim)
 
-(provide maybe from-maybe)
+(provide (data Maybe) maybe from-maybe)
 
 (defn maybe : (∀ [a b] {b -> {a -> b} -> (Maybe a) -> b})
   [[_ f (just x)] (f x)]

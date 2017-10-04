@@ -534,11 +534,29 @@ represents failure) or values that are not required to be present.
   (map (+ 1) (just 5))
   (map (+ 1) nothing))}
 
+@defproc[(maybe [v b] [f {a -> b}] [x (Maybe a)]) b]{
+
+The catamorphism for @racket[Maybe]. Produces @racket[v] when @racket[x] is @racket[nothing] and
+produces @racket[(f _y)] when @racket[x] is @racket[(just _y)].
+
+@(hackett-examples
+  (eval:check (maybe 0 (+ 1) (just 5)) 6)
+  (eval:check (maybe 0 (+ 1) nothing) 0))}
+
+@defproc[(from-maybe [v a] [x (Maybe a)]) a]{
+
+Extracts the value inside @racket[x], producing a default value @racket[v] when @racket[x] is
+@racket[nothing]. Equivalent to @racket[(maybe v id)].
+
+@(hackett-examples
+  (eval:check (from-maybe 0 (just 5)) 5)
+  (eval:check (from-maybe 0 nothing) 0))}
+
 @defdata[(Either a b) (left a) (right b)]{
 
 A type that encodes the notion of a successful result or an error. The @racket[Functor],
 @racket[Applicative], and @racket[Monad] instances for @racket[(Either a)] are “right-biased”, so they
-will short circuit values wrapped in @racket[left] and will perform mapping or sequencing on values
+will short-circuit on values wrapped in @racket[left] and will perform mapping or sequencing on values
 wrapped in @racket[right].
 
 This type is generally used in a similar way to @racket[Maybe], but it allows the sort of failure to
@@ -547,6 +565,15 @@ be explicitly tagged, usually returning a error message or failure reason on the
 @(hackett-examples
   (map (+ 1) (: (right 5) (Either String Integer)))
   (map (+ 1) (: (left "an error happened") (Either String Integer))))}
+
+@defproc[(either [f {a -> c}] [g {b -> c}] [x (Either a b)]) c]{
+
+The catamorphism for @racket[Either]. Produces @racket[(f _y)] when @racket[x] is @racket[(left _y)]
+and produces @racket[(g _z)] when @racket[x] is @racket[(right _z)].
+
+@(hackett-examples
+  (eval:check (either (+ 1) (* 2) (left 5)) 6)
+  (eval:check (either (+ 1) (* 2) (right 5)) 10))}
 
 @subsection[#:tag "reference-lists"]{Lists}
 

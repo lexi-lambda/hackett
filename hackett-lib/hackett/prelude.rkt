@@ -5,13 +5,15 @@
          (except-in hackett/private/adt data)
          (except-in hackett/private/class class)
 
+         hackett/data/either
          hackett/data/list
          hackett/data/maybe
 
          hackett/private/prim
          hackett/private/provide)
 
-(provide (all-from-out hackett/data/list)
+(provide (all-from-out hackett/data/either)
+         (all-from-out hackett/data/list)
          (all-from-out hackett/data/maybe)
 
          (data Unit) (data Bool) (data Tuple) (data Maybe) (data Either) (data List)
