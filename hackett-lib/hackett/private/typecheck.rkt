@@ -21,6 +21,7 @@
          racket/list
          racket/match
          racket/syntax
+         racket/stxparam-exptime
          syntax/id-table
          syntax/parse
          threading
@@ -47,10 +48,12 @@
          ctx-elem? ctx? ctx-elem=? ctx-member? ctx-remove
          ctx-find-solution current-ctx-solution apply-subst apply-current-subst
          current-type-context modify-type-context
-         register-global-class-instance! local-class-instances lookup-instance!
+         register-global-class-instance! lookup-instance!
          type type-transforming? parse-type τ-stx-token local-expand-type
          make-type-variable-transformer attach-type attach-expected get-type get-expected
-         make-typed-var-transformer)
+         make-typed-var-transformer
+
+         (for-template local-class-instances))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; type representation
@@ -278,11 +281,17 @@
 (define/contract (register-global-class-instance! instance)
   (-> class:instance? void?)
   (gvector-add! global-class-instances instance))
-(define/contract local-class-instances (parameter/c (listof class:instance?)) (make-parameter '()))
+
+(module local-instances-stxparam racket/base
+  (require (for-syntax racket/base) racket/stxparam)
+  (provide local-class-instances)
+  (define-syntax-parameter local-class-instances '()))
+(require (for-template 'local-instances-stxparam))
+
 (define/contract (current-class-instances)
   (-> (listof class:instance?))
   (append (gvector->list global-class-instances)
-          (local-class-instances)))
+          (syntax-parameter-value #'local-class-instances)))
 
 (define (current-instances-of-class class)
   (-> class:info? (listof class:instance?))

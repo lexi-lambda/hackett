@@ -68,7 +68,7 @@
          racket/promise
          syntax/parse/define
 
-         (only-in hackett/private/base τ⇒! τ⇐! elaborate-dictionaries)
+         (only-in hackett/private/base τ⇒! τ⇐!)
          (only-in hackett/private/kernel String [#%app @%app])
          (only-in hackett/private/prim/base show))
 
@@ -105,5 +105,4 @@
                           [(e-/show) (τ⇐! (quasisyntax/loc this-syntax
                                             (@%app show #,e-))
                                           (parse-type #'String))])
-        #`(repl-result (force #,(elaborate-dictionaries e-/show))
-                       '#,(τ->string (apply-current-subst τ_e))))])])
+        #`(repl-result (force #,e-/show) '#,(τ->string (apply-current-subst τ_e))))])])

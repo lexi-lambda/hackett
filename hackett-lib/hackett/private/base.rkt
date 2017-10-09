@@ -8,6 +8,7 @@
          (postfix-in - (combine-in racket/base
                                    racket/promise
                                    syntax/id-table))
+         racket/stxparam
          syntax/parse/define
 
          (for-syntax hackett/private/infix
@@ -16,8 +17,7 @@
                      hackett/private/util/stx))
 
 (provide (for-syntax (all-from-out hackett/private/typecheck)
-                     τs⇔/λ! τ⇔/λ! τ⇔! τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒!
-                     elaborate-dictionaries)
+                     τs⇔/λ! τ⇔/λ! τ⇔! τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒!)
          #%module-begin #%top
          (rename-out [#%plain-module-begin @%module-begin]
                      [#%top @%top]
@@ -25,7 +25,7 @@
          @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary
          define-primop define-base-type
          -> ∀ => Integer Double String
-         : :/top-level with-dictionary-elaboration λ1 def let letrec)
+         : λ1 def let letrec)
 
 (define-simple-macro (define-base-type name:id)
   (define-syntax name (make-type-variable-transformer (τ:con #'name #f))))
@@ -64,18 +64,14 @@
    (τ-stx-token (τ:qual (attribute constr.τ) (attribute t.τ))
                 #:expansion #'(void- constr.expansion t.expansion))])
 
-(define (@%dictionary-placeholder . args)
-  (error '@%dictionary-placeholder "should never appear at runtime"))
-
-(define (@%with-dictionary . args)
-  (error '@%with-dictionary "should never appear at runtime"))
-
 (define-syntax (@%superclasses-key stx)
   (raise-syntax-error #f "cannot be used as an expression" stx))
 
 (begin-for-syntax
   ;; -------------------------------------------------------------------------------------------------
   ;; inference/checking + erasure/expansion
+
+  (define stop-ids (list #'@%dictionary-placeholder #'@%with-dictionary))
 
   ; The following functions perform type inference and typechecking. This process is performed by
   ; expanding expressions, which can also be seen as a type erasure pass. These functions follow a
@@ -156,7 +152,7 @@
                                                                (@%dictionary-placeholder
                                                                 #,(preservable-property->expression
                                                                    %1)
-                                                                (quote-syntax #,e))))))}
+                                                                #,e)))))}
                                   e- constrs)
                            t))))]))
 
@@ -200,7 +196,7 @@
                  ([k (in-list ks)]
                   [e (in-list (map car es+ts))]
                   [e/elab (in-list es/elab)])
-        (let* ([e- (local-expand e/elab 'expression '() intdef-ctx)]
+        (let* ([e- (local-expand e/elab 'expression stop-ids intdef-ctx)]
                [t_e (get-type e-)])
           (unless t_e (raise-syntax-error #f "no inferred type" e))
           ; propagate disappeared bindings to ensure binding arrows can pick up uses of
@@ -265,7 +261,7 @@
                                 #,(quasisyntax/loc src
                                     (@%dictionary-placeholder
                                      #,(preservable-property->expression constr)
-                                     (quote-syntax #,src))))))
+                                     #,src)))))
                t e_arg #:src src)]
       [_ (raise-syntax-error #f (format "cannot apply expression of type ~a to expression ~a"
                                         (τ->string t_fn) (syntax->datum e_arg))
@@ -297,54 +293,42 @@
                                 (constraint->instances
                                  super-constr
                                  #`(vector-ref- #,superclass-dict-expr '#,i)))])
-        (cons instance (append* super-instances)))]))
+        (cons instance (append* super-instances)))])))
 
-  (define/contract (elaborate-dictionaries stx)
-    (-> syntax? syntax?)
-    (syntax-parse stx
-      #:context 'elaborate-dictionaries
-      #:literals [#%plain-app quote-syntax @%dictionary-placeholder @%with-dictionary]
-      [(#%plain-app @%dictionary-placeholder ~! constr-expr (quote-syntax src-expr))
-       #:with this #`(quote-syntax #,this-syntax)
-       #'(let-syntax-
-          ([dict-expr
-            (let*-values ([(constr) constr-expr]
-                          [(instance constrs) (lookup-instance! constr #:src (quote-syntax src-expr))]
-                          [(dict-expr) (class:instance-dict-expr instance)])
-              ; It’s possible that the dictionary itself requires dictionaries for classes with
-              ; subgoals, like (instance ∀ [a] [(Show a)] => (Show (List a)) ...). If there are not
-              ; any constraints, we need to produce a (curried) application to sub-dictionaries, which
-              ; should be recursively elaborated.
-              (make-variable-like-transformer
-               (foldr (λ (constr acc)
-                        #`(#,acc
-                           #,(elaborate-dictionaries
-                              (local-expand
-                               (quasisyntax/loc this
-                                 (@%dictionary-placeholder
-                                  #,(preservable-property->expression constr)
-                                  (quote-syntax src-expr)))
-                               'expression '()))))
-                      dict-expr
-                      constrs)))])
-           dict-expr)]
-      [(#%plain-app @%with-dictionary constr-expr e)
-       #:with this #`(quote-syntax #,this-syntax)
-       #:with dict-id (generate-temporary #'constr-expr)
-       #'(λ- (dict-id)
-           (let-syntax-
-            ([abs-expr
-              (let ([instances (constraint->instances constr-expr #'dict-id)])
-                (make-variable-like-transformer
-                 (parameterize ([local-class-instances (append instances (local-class-instances))])
-                   (local-expand (elaborate-dictionaries (quote-syntax e)) 'expression '()))))])
-            abs-expr))]
-      [(a . b)
-       (datum->syntax this-syntax
-                      (cons (elaborate-dictionaries #'a) (elaborate-dictionaries #'b))
-                      this-syntax
-                      this-syntax)]
-      [_ this-syntax])))
+(define-syntax-parser @%with-dictionary
+  [(_ constr-expr e)
+   #:with this #`(quote-syntax #,this-syntax)
+   #:with dict-id (generate-temporary #'constr-expr)
+   #'(λ- (dict-id)
+       (syntax-parameterize
+           ([local-class-instances
+             (let ([existing-instances (syntax-parameter-value #'local-class-instances)]
+                   [new-instances (constraint->instances constr-expr #'dict-id)])
+               (append new-instances existing-instances))])
+         e))])
+
+(define-syntax-parser @%dictionary-placeholder
+  [(_ constr-expr src-expr)
+   #:with this #`(quote-syntax #,this-syntax)
+   #'(let-syntax-
+         ([dict-expr
+           (let*-values ([(constr) constr-expr]
+                         [(instance constrs) (lookup-instance! constr #:src (quote-syntax src-expr))]
+                         [(dict-expr) (class:instance-dict-expr instance)])
+             ; It’s possible that the dictionary itself requires dictionaries for classes with
+             ; subgoals, like (instance ∀ [a] [(Show a)] => (Show (List a)) ...). If there are not
+             ; any constraints, we need to produce a (curried) application to sub-dictionaries, which
+             ; should be recursively elaborated.
+             (make-variable-like-transformer
+              (foldr (λ (constr acc)
+                       #`(#,acc
+                          #,(quasisyntax/loc this
+                              (@%dictionary-placeholder
+                               #,(preservable-property->expression constr)
+                               src-expr))))
+                     dict-expr
+                     constrs)))])
+       dict-expr)])
 
 (define-syntax-parser @%datum
   [(_ . n:exact-integer)
@@ -362,18 +346,6 @@
    (attach-type #`(let-values- ([() (begin- (λ- () t-expr.expansion) (values-))])
                     #,(τ⇐! #'e (attribute t-expr.τ)))
                 (apply-current-subst (attribute t-expr.τ)))])
-
-(define-syntax-parser :/top-level
-  [(_ e t-expr:type)
-   #:with e- (local-expand #'(: e t-expr) 'expression '())
-   (elaborate-dictionaries #'e-)])
-
-(define-syntax-parser with-dictionary-elaboration
-  [(_ e:expr)
-   (~> #'e
-       (local-expand 'expression '())
-       elaborate-dictionaries
-       (local-expand 'expression '()))])
 
 (define-syntax-parser λ1
   [(_ x:id e:expr)
@@ -415,22 +387,21 @@
    #:with id/prefix (generate-temporary #'id)
    #:with t-expr (preservable-property->expression (attribute t.τ))
    #`(begin-
-       (define- id- (:/top-level e t))
+       (define- id- (: e t))
        #,(indirect-infix-definition
           #'(define-syntax- id (make-typed-var-transformer #'id- t-expr))
           (attribute fixity.fixity)))]
   [(_ id:id
       {~optional fixity:fixity-annotation}
       e:expr)
-   #:do [(define-values [e-stx- t]
-           (let-values ([(e-stx- t) (τ⇒! #'e)])
-             (values e-stx- (apply-current-subst t))))]
+   #:do [(define-values [e- t]
+           (let-values ([(e- t) (τ⇒! #'e)])
+             (values e- (apply-current-subst t))))]
    #:with id- (generate-temporary #'id)
    #:with id/prefix (generate-temporary #'id)
-   #:with e- (elaborate-dictionaries e-stx-)
    #:with t-expr (preservable-property->expression (generalize t))
    #`(begin-
-       (define- id- e-)
+       (define- id- #,e-)
        #,(indirect-infix-definition
           #'(define-syntax- id
               (make-typed-var-transformer #'id- t-expr))
