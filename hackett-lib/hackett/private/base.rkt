@@ -74,10 +74,30 @@
   (raise-syntax-error #f "cannot be used as an expression" stx))
 
 (begin-for-syntax
+  ;; -------------------------------------------------------------------------------------------------
+  ;; inference/checking + erasure/expansion
+
+  ; The following functions perform type inference and typechecking. This process is performed by
+  ; expanding expressions, which can also be seen as a type erasure pass. These functions follow a
+  ; mnemonic naming convention, with the following letters and symbols having the following meaning:
+  ;
+  ;   τ    type
+  ;   τs   types
+  ;
+  ;   ⇒    infer
+  ;   ⇐    check
+  ;   ⇔    infer & check
+  ;
+  ;   /λ    with bindings/assumptions
+  ;   !     side-effectfully (mutating the type context)
+  ;
+  ; For example, τ⇒! means “infer a type, using the current type context”, and τs⇐/λ! means “check
+  ; the types for multiple expressions, with a set of assumptions, using the current type context”.
+
   ; The most general function for checking or inferring types. This function allows many expressions
   ; to be checked or inferred with a single set of assumptions, which eliminates the proliferation of
   ; duplicate bindings that would otherwise occur when typechecking letrec. Other forms can get away
-  ; with using the simpler τ⇒!/λ and τ⇐!/λ for inference and checking of a single expression,
+  ; with using the simpler τ⇒/λ! and τ⇐/λ! for inference and checking of a single expression,
   ; respectively.
   (define/contract (τs⇔/λ! es+ts bindings)
     (-> (listof (cons/c syntax? (or/c τ? #f)))
@@ -96,14 +116,14 @@
     ; and expression are passed along unchanged.
     (define/contract (simplify/elaborate e t)
       (-> syntax? (or/c τ? #f)
-          (list/c syntax? (-> syntax? τ? (list/c syntax? τ?))))
+          (list/c syntax? (-> syntax? τ? (values syntax? τ?))))
       (when t
         (current-τ-wf! t))
       (match t
         ; If t is #f, we’re in inference mode, so we don’t need to do anything but pass values through
         ; unchanged.
         [#f
-         (list e (λ (e- t_⇒) (list e- t_⇒)))]
+         (list e (λ (e- t_⇒) (values e- t_⇒)))]
         ; If the expected type is quantified, we need to skolemize it before continuing with
         ; inference.
         [(τ:∀ x a)
@@ -119,74 +139,79 @@
         [(τ:qual constr a)
          (match-let ([(list e* k) (simplify/elaborate e a)])
            (list e* (λ (e- t_⇒)
-                      (match-let ([(list e-* t*) (k e- t_⇒)])
-                        (list (quasisyntax/loc e-*
-                                (@%with-dictionary #,(preservable-property->expression constr) #,e-*))
-                              t*)))))]
+                      (let-values ([(e-* t*) (k e- t_⇒)])
+                        (values
+                         (quasisyntax/loc e-*
+                           (@%with-dictionary #,(preservable-property->expression constr) #,e-*))
+                         t*)))))]
         ; Otherwise, we are in checking mode with no special cases. We need to infer and expand, then
         ; check that the types match and elaborate dictionaries.
         [_
          (list (attach-expected e t)
                (λ (e- t_⇒)
                  (let ([constrs (τ<:/elaborate! t_⇒ t #:src e)])
-                   (list (foldr #{begin (quasisyntax/loc e
-                                          (lazy- (#%app- (force- #,%2)
-                                                         #,(quasisyntax/loc e
-                                                             (@%dictionary-placeholder
-                                                              #,(preservable-property->expression
-                                                                 %1)
-                                                              (quote-syntax #,e))))))}
-                                e- constrs)
-                         t))))]))
+                   (values (foldr #{begin (quasisyntax/loc e
+                                            (lazy- (#%app- (force- #,%2)
+                                                           #,(quasisyntax/loc e
+                                                               (@%dictionary-placeholder
+                                                                #,(preservable-property->expression
+                                                                   %1)
+                                                                (quote-syntax #,e))))))}
+                                  e- constrs)
+                           t))))]))
 
     ; To begin the actual inference process, we need to generate some bindings for the assumptions. We
-    ; do this by binding a slot for each identifier in a lambda, then binding each identifier to a
-    ; typed variable transformer that expands to the generated slots. This code just binds the names
-    ; of those bindings and their types to pattern variables.
-    (define/syntax-parse [x ...] (map car bindings))
-    (define/syntax-parse [x- ...] (generate-temporaries (attribute x)))
-    (define/syntax-parse [t_x ...] (map (λ~> cdr preservable-property->expression) bindings))
+    ; do this by binding a slot for each identifier in a definition context, then binding each
+    ; identifier to a typed variable transformer that expands to the generated slots. This code just
+    ; binds the names of those bindings and their types.
+    (define xs (map car bindings))
+    (define xs- (generate-temporaries xs))
+    (define ts_xs (map (λ~> cdr preservable-property->expression) bindings))
     
     ; Next, we need to call simplify/elaborate on each e+t pair we are provided. We bind the
-    ; elaborated expressions to a pattern variable and keep the continuations for later.
-    (match-define (list (list e/elabs ks) ...) (map #{simplify/elaborate (car %) (cdr %)} es+ts))
-    (define/syntax-parse [e/elab ...] e/elabs)
+    ; elaborated expressions to a variable to be used in expansion, and we keep the continuations for
+    ; later.
+    (match-define (list (list es/elab ks) ...) (map #{simplify/elaborate (car %) (cdr %)} es+ts))
 
-    ; Now we just need to actually perform inference. We put all the pieces together, then call
-    ; local-expand. If expansion is successful, we can then take apart the expanded syntax and look
-    ; at all the pieces to find their inferred types.
-    (match-define (list xs- (list (list es- ts_es) ...))
-      (syntax-parse (local-expand #'(#%plain-lambda- (x- ...)
-                                      (let-syntax- ([x (make-typed-var-transformer #'x- t_x)] ...)
-                                        (#%expression- e/elab) ...))
-                                  'expression '())
-        #:literals [#%expression- #%plain-lambda- let-values-]
-        [(#%plain-lambda- (x-* ...)
-           (let-values- _ {~and inner-let (let-values- _ (#%expression- e-) ...)}))
-         (list
-          ; The first thing we need to return from the expanded syntax is the expanded identifiers
-          ; used as runtime slots for the assumption bindings. These have scopes added to them by the
-          ; macroexpander, which will be critical for actually binding those identifiers somewhere
-          ; else (presumably in a macro calling this function).
-          (attribute x-*)
+    ; Next, we need to expand each expression. We start by building an internal definition context,
+    ; then binding the slots for the assumptions inside it.
+    (define intdef-ctx (syntax-local-make-definition-context))
+    (syntax-local-bind-syntaxes xs- #f intdef-ctx)
+    ; We add the internal definition context’s scope to each temporary identifier to allow them to be
+    ; used in reference and binding positions. We’ll need to return these at the end, to allow callers
+    ; to arrange for these identifiers to appear in binding positions.
+    (define xs-* (map #{internal-definition-context-introduce intdef-ctx %} xs-))
+    (for ([x (in-list xs)]
+          [x-* (in-list xs-*)]
+          [t_x (in-list ts_xs)])
+      ; As previously mentioned, each assumption is bound to a typed variable transformer that expands
+      ; to its temporary slot.
+      (syntax-local-bind-syntaxes
+       (list x)
+       #`(make-typed-var-transformer (quote-syntax #,x-*) #,t_x)
+       intdef-ctx))
 
-          ; Next, we need to get the types attached to the expanded expressions and call the
-          ; continuations produced by simplify/elaborate from earlier. This will produce a
-          ; fully-expanded expression and its type, which we can return.
-          (for/list ([k (in-list ks)]
-                     [e (in-list (map car es+ts))]
-                     [e- (in-list (attribute e-))])
-            (let ([t_e (get-type e-)])
-              (unless t_e (raise-syntax-error #f "no inferred type" e))
-              ; propagate disappeared bindings to ensure binding arrows can pick up uses of
-              ; typed var transformers that have been expanded
-              (k (syntax-property e- 'disappeared-binding
-                                  (cons (syntax-property e 'disappeared-binding)
-                                        (syntax-property #'inner-let 'disappeared-binding)))
-                 t_e))))]))
+    ; With the internal definition context properly set up, we can actually perform expansion. We need
+    ; to get the types attached to the expanded expressions and call the continuations produced by
+    ; simplify/elaborate from earlier. This will produce a fully-expanded expression and its type,
+    ; which we can return.
+    (define-values [es- ts_es]
+      (for/lists [es- ts_es]
+                 ([k (in-list ks)]
+                  [e (in-list (map car es+ts))]
+                  [e/elab (in-list es/elab)])
+        (let* ([e- (local-expand e/elab 'expression '() intdef-ctx)]
+               [t_e (get-type e-)])
+          (unless t_e (raise-syntax-error #f "no inferred type" e))
+          ; propagate disappeared bindings to ensure binding arrows can pick up uses of
+          ; typed var transformers that have been expanded
+          (k (syntax-property e- 'disappeared-binding
+                              (cons (syntax-property e 'disappeared-binding)
+                                    (syntax-property #'inner-let 'disappeared-binding)))
+             t_e))))
 
     ; With everything inferred and checked, all that’s left to do is return the results.
-    (values xs- es- ts_es))
+    (values xs-* es- ts_es))
 
   (define/contract (τ⇔/λ! e t bindings)
     (-> syntax? (or/c τ? #f) (listof (cons/c identifier? τ?))
