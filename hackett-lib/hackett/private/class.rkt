@@ -205,7 +205,7 @@
    #:with [superclass-dict-placeholder ...]
           (for/list ([constr-expr (in-list (attribute superclass-constr-expr))])
             (quasisyntax/loc this-syntax
-              (@%dictionary-placeholder #,constr-expr (quote-syntax #,this-syntax))))
+              (@%dictionary-placeholder #,constr-expr #,this-syntax)))
 
    (~> #'(let-syntax- ([method-t (make-type-variable-transformer method-t-expr)] ...)
            (make-immutable-free-id-table-
@@ -213,7 +213,4 @@
                           (vector-immutable- superclass-dict-placeholder ...))
                    (cons- (quote-syntax method-id) (: method-impl method-t)) ...)))
        ; Wrap the entire expression with lambdas for the appropriate subgoal dictionaries
-       (foldr #{begin #`(@%with-dictionary #,%1 #,%2)} _ (attribute instance-constr-expr))
-       ; Perform dictionary elaboration on the whole expression
-       (local-expand 'expression '())
-       elaborate-dictionaries)])
+       (foldr #{begin #`(@%with-dictionary #,%1 #,%2)} _ (attribute instance-constr-expr)))])

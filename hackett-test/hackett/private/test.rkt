@@ -13,7 +13,6 @@
            syntax/parse/define
 
            (only-in hackett [#%app @%app] : -> IO String Unit unit tuple)
-           (only-in hackett/private/base with-dictionary-elaboration)
            (only-in hackett/private/prim io unsafe-run-io!)
            hackett/private/prim/type-provide
 
@@ -36,7 +35,7 @@
   (define-syntax-parser test
     [(_ e:expr)
      #'(module+ test
-         (void (with-dictionary-elaboration (force (@%app unsafe-run-io! e)))))]))
+         (void (force (@%app unsafe-run-io! e))))]))
 
 (require (submod "." shared)
          (submod "." untyped))
