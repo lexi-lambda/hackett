@@ -575,6 +575,46 @@ and produces @racket[(g _z)] when @racket[x] is @racket[(right _z)].
   (eval:check (either (+ 1) (* 2) (left 5)) 6)
   (eval:check (either (+ 1) (* 2) (right 5)) 10))}
 
+@defproc[(is-left [e (Either a b)]) Bool]{
+
+This predicate is @racket[true] when @racket[e] is of the form @racket[(left x)] for some @racket[x],
+and is false when @racket[e] is @racket[(right x)].
+
+@(hackett-examples
+  (eval:check (is-left (left "nifty")) true)
+  (eval:check (is-left (right "tubular")) false))}
+
+@defproc[(is-right [e (Either a b)]) Bool]{
+
+This predicate is @racket[true] when @racket[e] is of the form @racket[(right x)] for some @racket[x],
+and is false when @racket[e] is @racket[(left x)].
+
+@(hackett-examples
+  (eval:check (is-right (left "nifty")) false)
+  (eval:check (is-right (right "tubular")) true))}
+
+@defproc[(lefts [es (List (Either a b))]) (List a)]{
+
+Extract all values of the form @racket[(left x)] from es.
+
+@(hackett-examples
+  (lefts {(left 1) :: (right "haskell") :: (right "racket") :: (left -32) :: nil}))}
+
+@defproc[(rights [es (List (Either a b))]) (List b)]{
+
+Extract all values of the form @racket[(right x)] from es.
+
+@(hackett-examples
+  (rights {(left 1) :: (right "haskell") :: (right "racket") :: (left -32) :: nil}))}
+
+@defproc[(partition-eithers [es (List (Either a b))]) (Tuple (List a) (List b))]{
+
+Extract every @racket[(left x)] to the first element of the pair and each @racket[(right x)] to the
+second. @racket[(partition-eithers es)] is equivalent to @racket[(tuple (lefts es) (rights es))]
+
+@(hackett-examples
+  (partition-eithers {(left 1) :: (right "haskell") :: (right "racket") :: (left -32) :: nil}))}
+
 @subsection[#:tag "reference-lists"]{Lists}
 
 @defdata[(List a) (:: a (List a)) nil]{
