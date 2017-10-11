@@ -122,11 +122,9 @@
   [[_ _ nil]
    nil])
 
-; Implementation originally found in the base Haskell package version 4.10.0.0
 (defn intersperse : (forall [a] {a -> (List a) -> (List a)})
-  [[_   nil      ] nil]
-  [[sep {x :: xs}] {x :: (prependToAll sep xs)}])
-
-(defn prependToAll : (forall [a] {a -> (List a) -> (List a)})
-  [[_   nil      ] nil]
-  [[sep {x :: xs}] {sep :: x :: (prependToAll sep xs)}])
+  [[_  nil      ] nil]
+  [[in {x :: xs}] (letrec ([helper
+                            (λ* [[{y :: ys}] {in :: y :: (helper ys)}]
+                                [[nil      ] nil])])
+                          {x :: (helper xs)})])
