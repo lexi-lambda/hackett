@@ -1124,7 +1124,7 @@ with @racket[local].
 @(hackett-interaction
   (run-reader-t (do [x <- ask]
                     [y <- (lift {{x + 1} :: {x - 1} :: nil})]
-                    (lift {{x * 2} :: {x * 3} :: nil}))
+                    (lift {{y * 2} :: {y * 3} :: nil}))
                 10))}
 
 @defproc[(run-reader-t [x (ReaderT r m a)] [ctx r]) (m a)]{

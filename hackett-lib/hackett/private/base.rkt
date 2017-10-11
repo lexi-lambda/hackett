@@ -84,8 +84,8 @@
   ;   ⇐    check
   ;   ⇔    infer & check
   ;
-  ;   /λ    with bindings/assumptions
-  ;   !     side-effectfully (mutating the type context)
+  ;   /λ   with bindings/assumptions
+  ;   !    side-effectfully (mutating the type context)
   ;
   ; For example, τ⇒! means “infer a type, using the current type context”, and τs⇐/λ! means “check
   ; the types for multiple expressions, with a set of assumptions, using the current type context”.
