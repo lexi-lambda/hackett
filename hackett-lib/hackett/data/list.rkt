@@ -3,22 +3,54 @@
 (require hackett/data/maybe
          hackett/private/prim)
 
-(provide (data List) head tail head! tail! take drop filter foldr foldl reverse zip-with sum
-         repeat cycle! or and any? all? elem? not-elem? delete delete-by)
+(provide (data List) head last tail init head! last! tail! init! uncons uncons! null? length take drop
+         filter foldr foldl reverse zip-with sum repeat cycle! or and any? all? elem? not-elem? delete
+         delete-by intersperse)
 
 (defn head : (∀ [a] {(List a) -> (Maybe a)})
   [[{x :: _}] (just x)]
   [[nil     ] nothing])
 
+(defn last : (forall [a] {(List a) -> (Maybe a)})
+  [[{x :: nil}] (just x)]
+  [[{_ :: xs} ] (last xs)]
+  [[_         ] nothing])
+
 (defn tail : (∀ [a] {(List a) -> (Maybe (List a))})
   [[{_ :: xs}] (just xs)]
   [[nil      ] nothing])
 
+(defn init : (forall [a] {(List a) -> (Maybe (List a))})
+  [[nil] nothing]
+  [[xs ] (just (init! xs))])
+
 (defn head! : (∀ [a] {(List a) -> a})
   [[xs] (from-maybe (error! "head!: empty list") (head xs))])
 
+(defn last! : (forall [a] {(List a) -> a})
+  [[xs] (from-maybe (error! "last!: empty list") (last xs))])
+
 (defn tail! : (∀ [a] {(List a) -> (List a)})
   [[xs] (from-maybe (error! "tail!: empty list") (tail xs))])
+
+(defn init! : (forall [a] {(List a) -> (List a)})
+  [[{_ :: nil}] nil]
+  [[{x :: xs} ] {x :: (init! xs)}]
+  [[nil       ] (error! "tail!: empty list")])
+
+(defn uncons : (forall [a] {(List a) -> (Maybe (Tuple a (List a)))})
+  [[{x :: xs}] (just (tuple x xs))]
+  [[nil      ] nothing])
+
+(defn uncons! : (forall [a] {(List a) -> (Tuple a (List a))})
+  [[xs] (from-maybe (error! "uncons!: empty list") (uncons xs))])
+
+(defn null? : (forall [a] {(List a) -> Bool})
+  [[nil] true]
+  [[_  ] false])
+
+(def length : (forall [a] {(List a) -> Integer})
+  (foldr (λ [_ acc] {acc + 1}) 0))
 
 (defn take : (∀ [a] {Integer -> (List a) -> (List a)})
   [[n {x :: xs}]
@@ -89,3 +121,12 @@
        {y :: (delete-by =? x ys)})]
   [[_ _ nil]
    nil])
+
+; Implementation originally found in the base Haskell package version 4.10.0.0
+(defn intersperse : (forall [a] {a -> (List a) -> (List a)})
+  [[_   nil      ] nil]
+  [[sep {x :: xs}] {x :: (prependToAll sep xs)}])
+
+(defn prependToAll : (forall [a] {a -> (List a) -> (List a)})
+  [[_   nil      ] nil]
+  [[sep {x :: xs}] {sep :: x :: (prependToAll sep xs)}])
