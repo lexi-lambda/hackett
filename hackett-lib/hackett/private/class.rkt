@@ -25,65 +25,71 @@
 
 (define-syntax-parser class
   #:literals [: => let-values #%plain-app]
-  [(_ {~optional {~seq constr ... =>/use:=>}}
+  [(_ {~optional {~seq constr ... =>/use:=>} #:defaults ([[constr 1] '()])}
       (name:id var-id:id)
       [method-id:id
-       {~or {~once {~seq : bare-t}}
+       {~or {~once {~seq {~and : {~var :/use}} bare-t}}
             {~optional fixity:fixity-annotation}}
        ...]
       ...)
    ; The methods in a class’s method table should *not* be quantified. That is, in this class:
    ;
    ;    (class (Show a)
-   ;      [show : (-> a a)])
+   ;      [show : {a -> a}])
    ;
-   ; The type for show stored in the method table should be (-> a a), not
-   ; (∀ [a] (=> [(Show a)] (-> a a))). However, in order to expand the user-provided (-> a a) type in
-   ; a context where ‘a’ is bound, we need to bind it with let-syntax and manually call local-expand.
-   ; We also want to do the same thing with superclass constraints so that the same variable is bound
-   ; in both situations.
-   #:with var-id- (generate-temporary #'var-id)
-   #:with var-id-expr (preservable-property->expression (τ:var #'var-id-))
-   #:with (let-values () {~and inner-let (let-values ()
-                                           [#%plain-app _ method-t:type ...]
-                                           [#%plain-app _ super-constr:type ...])})
-          (local-expand-type (template
-                              (let-syntax- ([var-id (make-type-variable-transformer var-id-expr)])
-                                (void- bare-t ...)
-                                (void- {?? {?@ constr ...}}))))
+   ; The type for show stored in the method table should be {a -> a}, not
+   ; (∀ [a] (Show a) => {a -> a}). However, in order to expand the user-provided {a -> a} type in
+   ; a context where ‘a’ is bound, we need to bind it into a definition context before expanding it.
+   ; We also want to expand superclass constraints in the same context so that the same variable is
+   ; bound in both situations.
+   #:with var-id- (syntax-local-introduce (generate-temporary #'var-id))
+   #:do [(define t-intdef-ctx (syntax-local-make-definition-context))]
+   #:with var-id-* (internal-definition-context-introduce t-intdef-ctx #'var-id-)
+   #:do [(syntax-local-bind-syntaxes (list #'var-id-) #f t-intdef-ctx)
+         (syntax-local-bind-syntaxes
+          (list #'var-id)
+          #'(make-type-variable-transformer (τ:var (quote-syntax var-id-*)))
+          t-intdef-ctx)]
+
+   #:with [(~var method-t (type t-intdef-ctx)) ...] (attribute bare-t)
+   #:with [(~var super-constr (type t-intdef-ctx)) ...] (attribute constr)
+   
    #:with [method-id- ...] (generate-temporaries #'[method-id ...])
    #:with [method-t-expr ...] (map preservable-property->expression (attribute method-t.τ))
    #:with [super-constr-expr ...] (map preservable-property->expression
                                        (attribute super-constr.τ))
 
-   ; Now that we’ve manually expanded the types above for the purpose of inclusion in the class’s
-   ; method table, we want to reexpand the type with the proper quantifier and constraint, since uses
-   ; of the method should actually see that type.
+   ; Now that we’ve expanded the types above for the purpose of inclusion in the class’s method table,
+   ; we want to reexpand the type with the proper quantifier and constraint, since uses of the method
+   ; should actually see that type.
    #:with name-t (τ-stx-token (τ:con #'name #f))
    #:with [quantified-t:type ...] #'[(∀ [var-id] (=> [(@%app name-t var-id)] bare-t)) ...]
    #:with [quantified-t-expr ...] (map preservable-property->expression (attribute quantified-t.τ))
 
-   #`(begin-
-       (define-values- []
-         #,(~> #'(begin- (λ- () method-t.expansion) ...
-                         (λ- () super-constr.expansion) ...
-                         (values-))
-               (syntax-property 'disappeared-binding
-                                (syntax-property #'inner-let 'disappeared-binding))))
-       (define- (method-id- dict) (free-id-table-ref- dict #'method-id)) ...
-       #,@(for/list ([method-id (in-list (attribute method-id))]
-                     [method-id- (in-list (attribute method-id-))]
-                     [fixity (in-list (attribute fixity.fixity))]
-                     [quantified-t-expr (in-list (attribute quantified-t-expr))])
-            (indirect-infix-definition
-             #`(define-syntax- #,method-id
-                 (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))
-             fixity))
-       (define-syntax- name
-         (class:info (list #'var-id-)
-                     (make-immutable-free-id-table
-                      (list (cons #'method-id method-t-expr) ...))
-                     (list super-constr-expr ...))))])
+   (~> #`(begin-
+           (define-values- []
+             #,(~> #'(begin- (λ- () method-t.expansion) ...
+                             (λ- () super-constr.expansion) ...
+                             (values-))
+                   (syntax-property 'disappeared-binding
+                                    (~>> #'var-id
+                                         (internal-definition-context-introduce t-intdef-ctx)
+                                         syntax-local-introduce))))
+           (define- (method-id- dict) (free-id-table-ref- dict #'method-id)) ...
+           #,@(for/list ([method-id (in-list (attribute method-id))]
+                         [method-id- (in-list (attribute method-id-))]
+                         [fixity (in-list (attribute fixity.fixity))]
+                         [quantified-t-expr (in-list (attribute quantified-t-expr))])
+                (indirect-infix-definition
+                 #`(define-syntax- #,method-id
+                     (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))
+                 fixity))
+           (define-syntax- name
+             (class:info (list #'var-id-*)
+                         (make-immutable-free-id-table
+                          (list (cons #'method-id method-t-expr) ...))
+                         (list super-constr-expr ...))))
+       (syntax-property 'disappeared-use (map syntax-local-introduce (attribute :/use))))])
 
 (begin-for-syntax
   (define-syntax-class instance-head
