@@ -80,7 +80,7 @@
                  (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))
              fixity))
        (define-syntax- name
-         (class:info #'var-id-
+         (class:info (list #'var-id-)
                      (make-immutable-free-id-table
                       (list (cons #'method-id method-t-expr) ...))
                      (list super-constr-expr ...))))])
@@ -88,32 +88,39 @@
 (begin-for-syntax
   (define-syntax-class instance-head
     #:description "instance head"
-    #:attributes [class class.local-value bare-t]
-    [pattern (class:class-id bare-t)])
+    #:attributes [class class.local-value [bare-t 1]]
+    [pattern (class:class-id bare-t ...)])
 
   (define-syntax-class instance-spec
     #:description "instance spec"
-    #:attributes [[var-id 1] [constr 1] ∀/use =>/use class class.local-value bare-t]
+    #:attributes [[var-id 1] [constr 1] ∀/use =>/use class class.local-value [bare-t 1] head-stx]
     #:literals [∀ =>]
     #:commit
-    [pattern {~post :instance-head}
+    [pattern {~post {~and :instance-head head-stx}}
              #:attr ∀/use #f
              #:attr =>/use #f
              #:attr [var-id 1] '()
              #:attr [constr 1] '()]
     [pattern (∀/use:∀ ~!
-              [var-id ...]
+              [var-id:id ...]
               {~optional {~seq constr ... =>/use:=>}
                          #:defaults ([[constr 1] '()])}
-              ~! :instance-head)]
-    [pattern (constr ... =>/use:=> :instance-head)
+              ~! {~and :instance-head head-stx})]
+    [pattern (constr ... =>/use:=> {~and :instance-head head-stx})
              #:attr ∀/use #f
              #:attr [var-id 1] '()]))
 
 (define-syntax-parser instance
   #:literals [∀ =>]
   [(_ :instance-spec [method-id:id impl:expr] ...)
-
+   ; Validate that the number of types in the instance head is the same as the number of parameters of
+   ; the class being implemented.
+   #:do [(define class-info (attribute class.local-value))]
+   #:fail-when (and (not (= (length (class:info-vars class-info)) (length (attribute bare-t))))
+                    #'head-stx)
+               (~a "wrong number of parameters for class ‘" (syntax-e #'class) "’; expected "
+                   (length (class:info-vars class-info)) ", given " (length (attribute bare-t)))
+   
    ; Ensure all the provided methods belong to the class being implemented and ensure that none of the
    ; methods are unimplemented.
    #:do [(define class-info (attribute class.local-value))
@@ -128,54 +135,61 @@
    #:fail-when (and (not (empty? missing-methods)) #'class)
                (~a "missing implementation of ‘" (syntax-e (first missing-methods)) "’")
 
-   ; Calculate the expected type of each method. First, we have to expand the provided type in a
-   ; context where the various type variables are bound. We then need to extract the expanded base
-   ; type and separate its variables so that we can instantiate the type of individual class methods,
-   ; then quantify over the whole thing.
-   #:with t:type (let ([constrained (if (empty? (attribute constr))
-                                        #'bare-t
-                                        #'(=>/use [constr ...] bare-t))])
-                   (if (empty? (attribute var-id))
-                       constrained
-                       #`(∀/use [var-id ...] #,constrained)))
-   #:do [(define skolem-vars (generate-temporaries (attribute var-id)))
-         (modify-type-context #{append % (map ctx:skolem skolem-vars)})
-         (define-values [constrs- bare-t-]
-           (let skolemize-loop ([skolems-left skolem-vars]
-                                [bare-t- (attribute t.τ)])
-             (if (empty? skolems-left)
-                 (let collect-constraints-loop ([constrs- '()]
-                                                [bare-t- bare-t-])
-                   (if (< (length constrs-) (length (attribute constr)))
-                       (match-let ([(τ:qual constr t) bare-t-])
-                         (collect-constraints-loop (cons constr constrs-) t))
-                       (values constrs- bare-t-)))
-                 (match-let ([(τ:∀ id t) bare-t-])
-                   (skolemize-loop (rest skolems-left)
-                                   (inst t id (τ:skolem (first skolems-left))))))))]
+   ; Calculate the expected type of each method. First, we have to expand each provided subgoal and
+   ; type in the instance head in a context where the various type variables are bound.
+   #:with [var-id- ...] (map syntax-local-introduce (generate-temporaries (attribute var-id)))
+   #:do [(define t-intdef-ctx (syntax-local-make-definition-context))]
+   #:with [var-id-* ...] (map #{internal-definition-context-introduce t-intdef-ctx %}
+                              (attribute var-id-))
+   #:do [(syntax-local-bind-syntaxes (attribute var-id-) #f t-intdef-ctx)
+         (for ([var-id (in-list (attribute var-id))]
+               [var-id-* (in-list (attribute var-id-*))])
+           (syntax-local-bind-syntaxes
+            (list var-id)
+            #`(make-type-variable-transformer (τ:var (quote-syntax #,var-id-*)))
+            t-intdef-ctx))]
+   #:with [(~var constr- (type t-intdef-ctx)) ...] (attribute constr)
+   #:with [(~var bare-t- (type t-intdef-ctx)) ...] (attribute bare-t)
+
+   ; With the types actually expanded, we need to skolemize them for the pupose of typechecking
+   ; method implementations.
+   #:do [(define skolem-ids (generate-temporaries (attribute var-id)))
+         (modify-type-context #{append % (map ctx:skolem skolem-ids)})
+         (define var+skolem-ids (map #{cons %1 (τ:skolem %2)} (attribute var-id-*) skolem-ids))
+         (define constrs/skolemized (map #{insts % var+skolem-ids} (attribute constr-.τ)))
+         (define bare-ts/skolemized (map #{insts % var+skolem-ids} (attribute bare-t-.τ)))]
+
+   ; With the skolemized constraints and instance head, we need to synthesize expected types for each
+   ; typeclass method by replacing each variable in the class signatures with the corresponding type
+   ; from the instance head.
    #:do [(define expected-ts
-           (let ([x (class:info-var class-info)])
+           (let* ([class-vars (class:info-vars class-info)]
+                  [class-vars->bare-ts-subst (map cons class-vars bare-ts/skolemized)])
              (for/list ([method-id (in-list (attribute method-id))])
-               (let ([t (free-id-table-ref method-table method-id)])
-                 (inst t x bare-t-)))))]
+               (insts (free-id-table-ref method-table method-id) class-vars->bare-ts-subst))))]
 
-   #:with t-expr (preservable-property->expression (attribute t.τ))
-
-   ; Generate some temporaries and expressions needed in the output.
+   ; Finally, generate some temporaries and expressions needed in the output.
    #:with dict-id- (generate-temporary #'class)
    #:with [expected-t-expr ...] (map preservable-property->expression expected-ts)
-   #:with [constr-expr ...] (map preservable-property->expression constrs-)
-   #:with [superclass-constr-expr ...] (map (λ~> (inst (class:info-var class-info) bare-t-)
-                                                 preservable-property->expression)
-                                            (class:info-superclasses class-info))
+   #:with [bare-t-expr ...] (map preservable-property->expression (attribute bare-t-.τ))
+   #:with [constr-expr ...] (map preservable-property->expression (attribute constr-.τ))
+   #:with [constr/skolemized-expr ...] (map preservable-property->expression constrs/skolemized)
+   #:with [superclass-constr-expr ...]
+          (map (λ~> (insts (map cons (class:info-vars class-info) bare-ts/skolemized))
+                    preservable-property->expression)
+               (class:info-superclasses class-info))
 
    (~> #`(begin-
            (begin-for-syntax-
              (register-global-class-instance!
               (class:instance (syntax-local-value #'class)
-                              t-expr
+                              (list (quote-syntax var-id-*) ...)
+                              (list constr-expr ...)
+                              (list bare-t-expr ...)
                               #'dict-id-)))
-           (define-values- [] (begin- (λ- () t.expansion) (values-)))
+           (define-values- [] (begin- (λ- () constr-.expansion) ...
+                                      (λ- () bare-t-.expansion) ...
+                                      (values-)))
            ; The defined dict-id- might appear in the expansion of :/instance-dictionary, since it
            ; performs dictionary elaboration. At the top level, this can cause problems, since
            ; recursive/self-referential definitions are complicated. We can perform a sort of “forward
@@ -189,11 +203,17 @@
              #,(syntax/loc this-syntax
                  (:/instance-dictionary
                   #:methods ([method-id : expected-t-expr impl] ...)
-                  #:instance-constrs [constr-expr ...]
+                  #:instance-constrs [constr/skolemized-expr ...]
                   #:superclass-constrs [superclass-constr-expr ...]))))
+       (syntax-property 'disappeared-binding
+                        (~>> (attribute var-id)
+                             (map (λ~>> (internal-definition-context-introduce t-intdef-ctx)
+                                        syntax-local-introduce))))
        (syntax-property 'disappeared-use
                         (~>> (map syntax-local-introduce (attribute method-id))
-                             (cons (syntax-local-introduce #'class)))))])
+                             (cons (syntax-local-introduce #'class))
+                             (cons (and~> (attribute ∀/use) syntax-local-introduce))
+                             (cons (and~> (attribute =>/use) syntax-local-introduce)))))])
 
 (define-syntax-parser :/instance-dictionary
   #:literals [:]
@@ -213,4 +233,4 @@
                           (vector-immutable- superclass-dict-placeholder ...))
                    (cons- (quote-syntax method-id) (: method-impl method-t)) ...)))
        ; Wrap the entire expression with lambdas for the appropriate subgoal dictionaries
-       (foldr #{begin #`(@%with-dictionary #,%1 #,%2)} _ (attribute instance-constr-expr)))])
+       (foldl #{begin #`(@%with-dictionary #,%1 #,%2)} _ (attribute instance-constr-expr)))])
