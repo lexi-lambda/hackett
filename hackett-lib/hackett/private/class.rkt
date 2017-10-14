@@ -26,7 +26,7 @@
 (define-syntax-parser class
   #:literals [: => let-values #%plain-app]
   [(_ {~optional {~seq constr ... =>/use:=>} #:defaults ([[constr 1] '()])}
-      (name:id var-id:id)
+      (name:id var-id:id ...)
       [method-id:id
        {~or {~once {~seq {~and : {~var :/use}} bare-t}}
             {~optional fixity:fixity-annotation}}
@@ -42,13 +42,14 @@
    ; a context where ‘a’ is bound, we need to bind it into a definition context before expanding it.
    ; We also want to expand superclass constraints in the same context so that the same variable is
    ; bound in both situations.
-   #:with var-id- (syntax-local-introduce (generate-temporary #'var-id))
+   #:with [var-id- ...] (map syntax-local-introduce (generate-temporaries (attribute var-id)))
    #:do [(define t-intdef-ctx (syntax-local-make-definition-context))]
-   #:with var-id-* (internal-definition-context-introduce t-intdef-ctx #'var-id-)
-   #:do [(syntax-local-bind-syntaxes (list #'var-id-) #f t-intdef-ctx)
+   #:with [var-id-* ...] (map #{internal-definition-context-introduce t-intdef-ctx %}
+                              (attribute var-id-))
+   #:do [(syntax-local-bind-syntaxes (attribute var-id-) #f t-intdef-ctx)
          (syntax-local-bind-syntaxes
-          (list #'var-id)
-          #'(make-type-variable-transformer (τ:var (quote-syntax var-id-*)))
+          (attribute var-id)
+          #'(values (make-type-variable-transformer (τ:var (quote-syntax var-id-*))) ...)
           t-intdef-ctx)]
 
    #:with [(~var method-t (type t-intdef-ctx)) ...] (attribute bare-t)
@@ -63,18 +64,14 @@
    ; we want to reexpand the type with the proper quantifier and constraint, since uses of the method
    ; should actually see that type.
    #:with name-t (τ-stx-token (τ:con #'name #f))
-   #:with [quantified-t:type ...] #'[(∀ [var-id] (=> [(@%app name-t var-id)] bare-t)) ...]
+   #:with [quantified-t:type ...] #'[(∀ [var-id ...] (=> [(@%app name-t var-id ...)] bare-t)) ...]
    #:with [quantified-t-expr ...] (map preservable-property->expression (attribute quantified-t.τ))
 
    (~> #`(begin-
            (define-values- []
-             #,(~> #'(begin- (λ- () method-t.expansion) ...
-                             (λ- () super-constr.expansion) ...
-                             (values-))
-                   (syntax-property 'disappeared-binding
-                                    (~>> #'var-id
-                                         (internal-definition-context-introduce t-intdef-ctx)
-                                         syntax-local-introduce))))
+             (begin- (λ- () method-t.expansion) ...
+                     (λ- () super-constr.expansion) ...
+                     (values-)))
            (define- (method-id- dict) (free-id-table-ref- dict #'method-id)) ...
            #,@(for/list ([method-id (in-list (attribute method-id))]
                          [method-id- (in-list (attribute method-id-))]
@@ -85,10 +82,14 @@
                      (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))
                  fixity))
            (define-syntax- name
-             (class:info (list #'var-id-*)
+             (class:info (list #'var-id-* ...)
                          (make-immutable-free-id-table
                           (list (cons #'method-id method-t-expr) ...))
                          (list super-constr-expr ...))))
+       (syntax-property 'disappeared-binding
+                        (~>> (attribute var-id)
+                             (map (λ~>> (internal-definition-context-introduce t-intdef-ctx)
+                                        syntax-local-introduce))))
        (syntax-property 'disappeared-use (map syntax-local-introduce (attribute :/use))))])
 
 (begin-for-syntax
