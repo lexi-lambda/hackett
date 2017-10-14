@@ -730,7 +730,7 @@ Adds the elements of @racket[xs] together and returns the sum. Equivalent to @ra
 @subsection[#:tag "reference-defining-typeclasses"]{Defining typeclasses and typeclass instances}
 
 @defform[#:literals [: =>]
-         (class maybe-superclasses (class-id var-id)
+         (class maybe-superclasses (class-id var-id ...)
            [method-id : method-type] ...)
          #:grammar
          ([maybe-superclasses (code:line superclass-constraint ... =>)
@@ -742,20 +742,20 @@ or @italic{members} of the class, which are defined using the associated @racket
 
 A typeclass defines a set of @deftech{typeclass methods}, each named @racket[method-id], which are
 operations that must be implemented by all members of the class. Implementations of typeclass methods
-must match the provided @racket[method-type], with the @racket[var-id] replaced by the type the
+must match the provided @racket[method-type], with the @racket[var-id]s replaced by the types the
 instance is being defined for.}
 
 @defform[#:literals [forall =>]
          (instance instance-spec
            [method-id method-expr] ...)
          #:grammar
-         ([instance-spec (class-id instance-type)
+         ([instance-spec (class-id instance-type ...)
                          (forall [var-id ...] maybe-constraints
-                                 (class-id instance-type))]
+                                 (class-id instance-type ...))]
           [maybe-constraints (code:line instance-constraint ... =>)
                              (code:line)])]{
 
-Defines a @deftech{typeclass instance}, which declares that the given @racket[instance-type] belongs
+Defines a @deftech{typeclass instance}, which declares that the given @racket[instance-type]s belong
 to the @tech{typeclass} bound to @racket[class-id].}
 
 @subsection[#:tag "reference-show"]{Printing for debugging}

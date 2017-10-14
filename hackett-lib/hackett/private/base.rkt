@@ -281,13 +281,13 @@
   (define/contract constraint->instances
     (-> constr? syntax? (listof class:instance?))
     (match-lambda**
-     [[(τ:app (τ:con class-id _) t) dict-expr]
+     [[(τ:app* (τ:con class-id _) ts ...) dict-expr]
       (let* ([class-info (syntax-local-value class-id)]
-             [instance (class:instance class-info (apply-current-subst t) dict-expr)]
+             [instance (class:instance class-info '() '() (map apply-current-subst ts) dict-expr)]
              ; instantiate the superclass constraints, so for (Monad Unit), we get (Applicative Unit)
              ; instead of (Applicative m)
              [super-constrs (~>> (class:info-superclasses class-info)
-                                 (map #{inst % (class:info-var class-info) t}))]
+                                 (map #{insts % (map cons (class:info-vars class-info) ts)}))]
              [superclass-dict-expr #`(free-id-table-ref- #,dict-expr #'@%superclasses-key)]
              [super-instances (for/list ([(super-constr i) (in-indexed (in-list super-constrs))])
                                 (constraint->instances
