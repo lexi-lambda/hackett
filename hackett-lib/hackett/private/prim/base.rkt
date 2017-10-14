@@ -268,7 +268,7 @@
 
 (class (Applicative m) => (Monad m)
   [join : (∀ [a] {(m (m a)) -> (m a)})
-        (λ [x] {x >>= id})]
+        (λ [x] {id =<< x})]
   [=<< : (∀ [a b] {{a -> (m b)} -> (m a) -> (m b)})
        (λ [f x] (join (map f x)))])
 
