@@ -731,10 +731,12 @@ Adds the elements of @racket[xs] together and returns the sum. Equivalent to @ra
 
 @defform[#:literals [: =>]
          (class maybe-superclasses (class-id var-id ...)
-           [method-id : method-type] ...)
+           [method-id : method-type maybe-default-method-impl] ...)
          #:grammar
          ([maybe-superclasses (code:line superclass-constraint ... =>)
-                              (code:line)])]{
+                              (code:line)]
+          [maybe-default-method-impl default-method-impl-expr
+                                     (code:line)])]{
 
 Defines a @deftech{typeclass}. As the name implies, a typeclass describes a @italic{class}, or set, of
 @tech{types}. Types that belong to the class are known as @tech[#:key "typeclass instance"]{instances}
@@ -743,7 +745,15 @@ or @italic{members} of the class, which are defined using the associated @racket
 A typeclass defines a set of @deftech{typeclass methods}, each named @racket[method-id], which are
 operations that must be implemented by all members of the class. Implementations of typeclass methods
 must match the provided @racket[method-type], with the @racket[var-id]s replaced by the types the
-instance is being defined for.}
+instance is being defined for.
+
+For each @racket[method-id], a @deftech{default method} may be provided as
+@racket[default-method-impl-expr], which will be used if any instance opts to not specify an explicit
+implementation for that method. Each default method implementation must be polymorphic enough to be a
+valid implementation for any instance of the class. Default methods are generally used when a
+typeclass method may be defined in terms of other typeclass methods, but the implementor can be given
+a choice of which methods to implement, or they can provide a more efficient implementation for
+commonly-used methods.}
 
 @defform[#:literals [forall =>]
          (instance instance-spec
@@ -974,7 +984,8 @@ applicative} action, then collects them left to right @italic{a la} @racket[sequ
 
 @defclass[#:super [(Applicative m)]
           (Monad m)
-          [join (forall [a] {(m (m a)) -> (m a)})]]{
+          [join (forall [a] {(m (m a)) -> (m a)})]
+          [=<< (forall [a b] {{a -> (m b)} -> (m a) -> (m b)})]]{
 
 The class of @deftech{monads}, which are @tech{applicative functors} augmented with a single
 @racket[join] operation that allows multiple “layers” of @racket[m] to be “flattened” into a single
@@ -988,7 +999,13 @@ Monads must satisfy the following laws:
   @#,racket[{join |.| (map pure)}] @#,elem[#:style 'roman]{=} @#,racket[id]
   @#,racket[{join |.| join}] @#,elem[#:style 'roman]{=} @#,racket[{join |.| (map join)}]]
 
-Generally, it is more useful to use @racket[=<<] or @racket[do] than to use @racket[join] directly.
+The @racket[=<<] operation is pronounced “bind”, and it is equivalent in power to @racket[join]. While
+@racket[join] is closer to the essence of what a monad is, @racket[=<<] (or its flipped version,
+@racket[>>=]) is more frequently used in ordinary programming. Either may be implemented, and a
+default implementation will be provided for the other, or an implementation may be provided for both
+if a more efficient implementation can be provided.
+
+It is often more useful to use @racket[do] than to use @racket[join] or @racket[=<<] directly.
 
 @defmethod[join (forall [a] {(m (m a)) -> (m a)})]{
 
@@ -996,19 +1013,20 @@ Generally, it is more useful to use @racket[=<<] or @racket[do] than to use @rac
   (join (just (just 3)))
   (join (just (: nothing (Maybe Integer))))
   (join (: nothing (Maybe (Maybe Integer))))
-  (join {{1 :: nil} :: {2 :: 3 :: nil} :: nil}))}}
+  (join {{1 :: nil} :: {2 :: 3 :: nil} :: nil}))}
 
-@defthing[=<< (forall [m a b] (Monad m) => {{a -> (m b)} -> (m a) -> (m b)})]{
+@defmethod[=<< (forall [a b] {{a -> (m b)} -> (m a) -> (m b)})]{
 
-Applies a function that produces a @tech[#:key "monad"]{monadic} value to a monadic value. The
-expression @racket[{_f =<< _x}] is equivalent to @racket[(join {_f <$> _x})]. It is worth comparing
-and contrasting the types of @racket[map]/@racket[<$>], @racket[<*>], and @racket[=<<], all of which
-are similar but slightly different.
+Applies a function that produces a monadic value to a monadic value. The expression
+@racket[{_f =<< _x}] is equivalent to @racket[(join {_f <$> _x})] (and an explicit implementation of
+both methods must maintain that law). It is worth comparing and contrasting the types of
+@racket[map]/@racket[<$>], @racket[<*>], and @racket[=<<], all of which are similar but slightly
+different.
 
 @(hackett-examples
   {head =<< (tail {1 :: 2 :: nil})}
   {head =<< (tail {1 :: nil})}
-  {head =<< (tail (: nil (List Integer)))})}
+  {head =<< (tail (: nil (List Integer)))})}}
 
 @defthing[>>= (forall [m a b] (Monad m) => {(m a) -> {a -> (m b)} -> (m b)})]{
 

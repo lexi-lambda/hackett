@@ -41,6 +41,7 @@
                        [struct ctx:solution ([x^ identifier?] [t τ?])]
                        [struct class:info ([vars (listof identifier?)]
                                            [method-table immutable-free-id-table?]
+                                           [default-methods immutable-free-id-table?]
                                            [superclasses (listof constr?)])]
                        [struct class:instance ([class class:info?]
                                                [vars (listof identifier?)]
@@ -286,7 +287,7 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; instance contexts
 
-(struct class:info (vars method-table superclasses) #:transparent
+(struct class:info (vars method-table default-methods superclasses) #:transparent
   #:property prop:procedure
   (λ (info stx)
     ((make-type-variable-transformer

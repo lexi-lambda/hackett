@@ -267,10 +267,10 @@
 ;; Monad
 
 (class (Applicative m) => (Monad m)
-  [join : (∀ [a] {(m (m a)) -> (m a)})])
-
-(defn =<< : (∀ [m a b] (Monad m) => {{a -> (m b)} -> (m a) -> (m b)})
-  [[f x] (join (map f x))])
+  [join : (∀ [a] {(m (m a)) -> (m a)})
+        (λ [x] {x >>= id})]
+  [=<< : (∀ [a b] {{a -> (m b)} -> (m a) -> (m b)})
+       (λ [f x] (join (map f x)))])
 
 (def >>= : (∀ [m a b] (Monad m) => {(m a) -> {a -> (m b)} -> (m b)})
   (flip =<<))

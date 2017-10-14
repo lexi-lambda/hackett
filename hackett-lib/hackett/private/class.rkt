@@ -30,7 +30,8 @@
       [method-id:id
        {~or {~once {~seq {~and : {~var :/use}} bare-t}}
             {~optional fixity:fixity-annotation}}
-       ...]
+       ...
+       {~optional method-default-impl:expr}]
       ...)
    ; The methods in a class’s method table should *not* be quantified. That is, in this class:
    ;
@@ -56,6 +57,7 @@
    #:with [(~var super-constr (type t-intdef-ctx)) ...] (attribute constr)
    
    #:with [method-id- ...] (generate-temporaries #'[method-id ...])
+   #:with [method-default-id- ...] (generate-temporaries #'[method-id ...])
    #:with [method-t-expr ...] (map preservable-property->expression (attribute method-t.τ))
    #:with [super-constr-expr ...] (map preservable-property->expression
                                        (attribute super-constr.τ))
@@ -67,25 +69,29 @@
    #:with [quantified-t:type ...] #'[(∀ [var-id ...] (=> [(@%app name-t var-id ...)] bare-t)) ...]
    #:with [quantified-t-expr ...] (map preservable-property->expression (attribute quantified-t.τ))
 
-   (~> #`(begin-
-           (define-values- []
-             (begin- (λ- () method-t.expansion) ...
-                     (λ- () super-constr.expansion) ...
-                     (values-)))
-           (define- (method-id- dict) (free-id-table-ref- dict #'method-id)) ...
-           #,@(for/list ([method-id (in-list (attribute method-id))]
-                         [method-id- (in-list (attribute method-id-))]
-                         [fixity (in-list (attribute fixity.fixity))]
-                         [quantified-t-expr (in-list (attribute quantified-t-expr))])
-                (indirect-infix-definition
-                 #`(define-syntax- #,method-id
-                     (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))
-                 fixity))
-           (define-syntax- name
-             (class:info (list #'var-id-* ...)
-                         (make-immutable-free-id-table
-                          (list (cons #'method-id method-t-expr) ...))
-                         (list super-constr-expr ...))))
+   (~> (quasitemplate
+        (begin-
+          (define-values- []
+            (begin- (λ- () method-t.expansion) ...
+                    (λ- () super-constr.expansion) ...
+                    (values-)))
+          (define- (method-id- dict) (free-id-table-ref- dict #'method-id)) ...
+          #,@(for/list ([method-id (in-list (attribute method-id))]
+                        [method-id- (in-list (attribute method-id-))]
+                        [fixity (in-list (attribute fixity.fixity))]
+                        [quantified-t-expr (in-list (attribute quantified-t-expr))])
+               (indirect-infix-definition
+                #`(define-syntax- #,method-id
+                    (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))
+                fixity))
+          {?? (def method-default-id- : quantified-t method-default-impl)} ...
+          (define-syntax- name
+            (class:info (list #'var-id-* ...)
+                        (make-immutable-free-id-table
+                         (list (cons #'method-id method-t-expr) ...))
+                        (make-immutable-free-id-table
+                         (list {?? (cons #'method-id #'method-default-id-)} ...))
+                        (list super-constr-expr ...)))))
        (syntax-property 'disappeared-binding
                         (~>> (attribute var-id)
                              (map (λ~>> (internal-definition-context-introduce t-intdef-ctx)
@@ -129,14 +135,19 @@
                    (length (class:info-vars class-info)) ", given " (length (attribute bare-t)))
    
    ; Ensure all the provided methods belong to the class being implemented and ensure that none of the
-   ; methods are unimplemented.
+   ; non-optional methods are unimplemented.
    #:do [(define class-info (attribute class.local-value))
          (define method-table (class:info-method-table class-info))
-         (define expected-methods (free-id-table-keys method-table))
-         (define invalid-methods (filter-not #{member % expected-methods free-identifier=?}
+         (define default-methods (class:info-default-methods class-info))
+         
+         (define all-method-ids (free-id-table-keys method-table))
+         (define optional-method-ids (free-id-table-keys default-methods))
+         (define required-method-ids (remove* optional-method-ids all-method-ids free-identifier=?))
+
+         (define invalid-methods (filter-not #{member % all-method-ids free-identifier=?}
                                              (attribute method-id)))
          (define missing-methods (filter-not #{member % (attribute method-id) free-identifier=?}
-                                             expected-methods))]
+                                             required-method-ids))]
    #:fail-when (and (not (empty? invalid-methods)) (first invalid-methods))
                (~a "not a method of class ‘" (syntax-e #'class) "’")
    #:fail-when (and (not (empty? missing-methods)) #'class)
@@ -172,8 +183,17 @@
    #:do [(define expected-ts
            (let* ([class-vars (class:info-vars class-info)]
                   [class-vars->bare-ts-subst (map cons class-vars bare-ts/skolemized)])
-             (for/list ([method-id (in-list (attribute method-id))])
+             (for/list ([method-id (in-list all-method-ids)])
                (insts (free-id-table-ref method-table method-id) class-vars->bare-ts-subst))))]
+
+   ; Now we need to align user-provided method implementations with their types, substituting in the
+   ; default implementation whenever an explicit implementation is not provided.
+   #:with [every-method-id ...] all-method-ids
+   #:do [(define provided-impls (make-immutable-free-id-table
+                                 (map cons (attribute method-id) (attribute impl))))]
+   #:with [every-impl ...] (for/list ([method-id (in-list all-method-ids)])
+                             (let ([provided-impl (free-id-table-ref provided-impls method-id #f)])
+                               (or provided-impl (free-id-table-ref default-methods method-id))))
 
    ; Finally, generate some temporaries and expressions needed in the output.
    #:with dict-id- (generate-temporary #'class)
@@ -209,7 +229,7 @@
            (define- dict-id-
              #,(syntax/loc this-syntax
                  (:/instance-dictionary
-                  #:methods ([method-id : expected-t-expr impl] ...)
+                  #:methods ([every-method-id : expected-t-expr every-impl] ...)
                   #:instance-constrs [constr/skolemized-expr ...]
                   #:superclass-constrs [superclass-constr-expr ...]))))
        (syntax-property 'disappeared-binding
