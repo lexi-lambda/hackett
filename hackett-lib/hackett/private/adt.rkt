@@ -159,39 +159,12 @@
              #:attr pat (pat-con this-syntax (attribute constructor.local-value) (attribute arg.pat))
              #:attr disappeared-uses (cons (syntax-local-introduce #'constructor)
                                            (append* (attribute arg.disappeared-uses)))]
-    [pattern {~braces a:pat constructor:data-constructor-val b:pat}
-             #:do [(define val (attribute constructor.local-value))
-                   (define arity (data-constructor-arity val))]
-             #:fail-when (zero? arity)
-                         (~a "cannot match ‘" (syntax-e #'constructor) "’ infix; it is a value "
-                             "and should matched as a bare identifier")
-             #:fail-when (not (= arity 2))
-                         (~a "cannot match ‘" (syntax-e #'constructor) "’ infix; it has arity "
-                             arity ", but constructors matched infix must have arity 2")
-             #:attr pat (pat-con this-syntax (attribute constructor.local-value)
-                                 (list (attribute a.pat) (attribute b.pat)))
-             #:attr disappeared-uses (cons (syntax-local-introduce #'constructor)
-                                           (append (attribute a.disappeared-uses)
-                                                   (attribute b.disappeared-uses)))]
-    [pattern {~braces a:pat ctor:data-constructor-val b:pat
-                      {~seq ctors:data-constructor-val bs:expr} ...}
-             #:when (eq? 'left (data-constructor-fixity (attribute ctor.local-value)))
-             #:with ~! #f
-             #:fail-unless (andmap #{eq? % 'left}
-                                   (map data-constructor-fixity (attribute ctors.local-value)))
-                           (~a "cannot mix left- and right-associative operators in the same infix "
-                               "pattern")
-             #:with :pat (template {{a ctor b} {?@ ctors bs} ...})]
-    [pattern {~braces {~seq as:expr ctors:data-constructor-val} ...
-                      a:pat ctor:data-constructor-val b:pat
-                      }
-             #:when (eq? 'right (data-constructor-fixity (attribute ctor.local-value)))
-             #:with ~! #f
-             #:fail-unless (andmap #{eq? % 'right}
-                                   (map data-constructor-fixity (attribute ctors.local-value)))
-                           (~a "cannot mix left- and right-associative operators in the same infix "
-                               "pattern")
-             #:with :pat (template {{?@ as ctors} ... {a ctor b}})]
+    [pattern {~braces a {~seq ctor:data-constructor-val b} ...+}
+             #:with :pat
+                    (infix->prefix this-syntax
+                                   (λ (op a b)
+                                     (quasisyntax/loc this-syntax
+                                       (#,op #,a #,b))))]
     [pattern {~literal _}
              #:attr pat (pat-hole this-syntax)
              #:attr disappeared-uses (list (syntax-local-introduce this-syntax))]
@@ -407,7 +380,8 @@
    #:with τ_con:type (foldr #{begin #`(∀ #,%1 #,%2)} #'τ_con_unquantified (attribute τ.arg))
    #:with τ_con-expr (preservable-property->expression (attribute τ_con.τ))
    #:with [field ...] (generate-temporaries (attribute constructor.arg))
-   #:with fixity-expr (preservable-property->expression (or (attribute constructor.fixity) 'left))
+   #:with fixity-expr (preservable-property->expression (or (attribute constructor.fixity)
+                                                            default-operator-fixity))
    #`(begin-
        (define-values- [] (begin- (λ- () τ_con.expansion) (values-)))
        ; check if the constructor is nullary or not

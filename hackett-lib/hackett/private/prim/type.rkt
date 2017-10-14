@@ -12,7 +12,7 @@
 (data (Maybe a) (just a) nothing)
 (data (Either a b) (left a) (right b))
 (data (List a)
-  {a :: (List a)} #:fixity right
+  {a :: (List a)} #:fixity 5 right
   nil)
 
 (data Real-World real-world)

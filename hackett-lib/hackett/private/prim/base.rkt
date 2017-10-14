@@ -30,11 +30,11 @@
   [[true ] false]
   [[false] true])
 
-(defn || : {Bool -> Bool -> Bool} #:fixity right
+(defn || : {Bool -> Bool -> Bool} #:fixity 2 right
   [[true  _] true]
   [[false y] y])
 
-(defn && : {Bool -> Bool -> Bool} #:fixity right
+(defn && : {Bool -> Bool -> Bool} #:fixity 2 right
   [[true  y] y]
   [[false _] false])
 
@@ -61,13 +61,13 @@
 (defn id : (∀ [a] {a -> a})
   [[x] x])
 
-(defn . : (∀ [a b c] {{b -> c} -> {a -> b} -> a -> c})
+(defn . : (∀ [a b c] {{b -> c} -> {a -> b} -> a -> c}) #:fixity 9 right
   [[f g x] (f (g x))])
 
-(defn $ : (∀ [a b] {{a -> b} -> a -> b})
+(defn $ : (∀ [a b] {{a -> b} -> a -> b}) #:fixity 0 right
   [[f x] (f x)])
 
-(defn & : (∀ [a b] {a -> {a -> b} -> b})
+(defn & : (∀ [a b] {a -> {a -> b} -> b}) #:fixity 0 left
   [[x f] (f x)])
 
 (defn const : (∀ [a b] {a -> b -> a})
@@ -118,7 +118,7 @@
 ;; Eq
 
 (class (Eq a)
-  [== : {a -> a -> Bool}])
+  [== : {a -> a -> Bool} #:fixity 4 left])
 
 (instance (Eq Unit)
   [== (λ [unit unit] true)])
@@ -158,8 +158,7 @@
 ;; Semigroup / Monoid
 
 (class (Semigroup a)
-  [++ : {a -> a -> a}
-      #:fixity right])
+  [++ : {a -> a -> a} #:fixity 5 right])
 
 (instance (Semigroup String)
   [++ append/String])
@@ -199,15 +198,15 @@
 ;; Functor
 
 (class (Functor f)
-  [map : (∀ [a b] {{a -> b} -> (f a) -> (f b)})])
+  [map : (∀ [a b] {{a -> b} -> (f a) -> (f b)}) #:fixity 4 left])
 
-(def <&> : (∀ [f a b] (Functor f) => {(f a) -> {a -> b} -> (f b)})
+(def <&> : (∀ [f a b] (Functor f) => {(f a) -> {a -> b} -> (f b)}) #:fixity 4 left
   (flip map))
 
-(def <$ : (∀ [f a b] (Functor f) => {a -> (f b) -> (f a)})
+(def <$ : (∀ [f a b] (Functor f) => {a -> (f b) -> (f a)}) #:fixity 4 left
   {map . const})
 
-(def $> : (∀ [f a b] (Functor f) => {(f b) -> a -> (f a)})
+(def $> : (∀ [f a b] (Functor f) => {(f b) -> a -> (f a)}) #:fixity 4 left
   (flip <$))
 
 (def ignore : (∀ [f a] (Functor f) => {(f a) -> (f Unit)})
@@ -236,7 +235,7 @@
 
 (class (Functor f) => (Applicative f)
   [pure : (∀ [a] {a -> (f a)})]
-  [<*> : (∀ [a b] {(f {a -> b}) -> (f a) -> (f b)})])
+  [<*> : (∀ [a b] {(f {a -> b}) -> (f a) -> (f b)}) #:fixity 4 left])
 
 (defn sequence : (∀ [f a] (Applicative f) => {(List (f a)) -> (f (List a))})
   [[{y :: ys}] {:: map y <*> (sequence ys)}]
@@ -269,10 +268,10 @@
 (class (Applicative m) => (Monad m)
   [join : (∀ [a] {(m (m a)) -> (m a)})])
 
-(defn =<< : (∀ [m a b] (Monad m) => {{a -> (m b)} -> (m a) -> (m b)})
+(defn =<< : (∀ [m a b] (Monad m) => {{a -> (m b)} -> (m a) -> (m b)}) #:fixity 1 right
   [[f x] (join (map f x))])
 
-(def >>= : (∀ [m a b] (Monad m) => {(m a) -> {a -> (m b)} -> (m b)})
+(def >>= : (∀ [m a b] (Monad m) => {(m a) -> {a -> (m b)} -> (m b)}) #:fixity 1 left
   (flip =<<))
 
 (define-syntax-parser do
@@ -286,7 +285,7 @@
    (syntax/loc #'e
      (>>= e (λ [x] (do rest ...))))])
 
-(defn ap : (∀ [m a b] (Monad m) => {(m {a -> b}) -> (m a) -> (m b)})
+(defn ap : (∀ [m a b] (Monad m) => {(m {a -> b}) -> (m a) -> (m b)}) #:fixity 4 left
   [[mf mx] (do [f <- mf]
                [x <- mx]
                (pure (f x)))])

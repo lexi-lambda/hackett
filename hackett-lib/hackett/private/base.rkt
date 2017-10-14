@@ -45,7 +45,7 @@
                                                (syntax-local-introduce #'colon))))])
 
 (define-syntax ->/prefix (make-type-variable-transformer τ:->))
-(define-syntax -> (infix-operator-impl #'->/prefix 'right))
+(define-syntax -> (infix-operator-impl #'->/prefix (right-operator-fixity 9)))
 
 (define-syntax-parser ∀
   #:literals [let-values]
