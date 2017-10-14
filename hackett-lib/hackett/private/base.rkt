@@ -192,19 +192,21 @@
     ; simplify/elaborate from earlier. This will produce a fully-expanded expression and its type,
     ; which we can return.
     (define-values [es- ts_es]
-      (for/lists [es- ts_es]
+      ; In order to ensure Check Syntax can pick up uses of typed var transformers that have been
+      ; expanded, it’s important to attach the necessary 'disappeared-binding syntax property.
+      (let ([disappeared-bindings (map (λ~>> (internal-definition-context-introduce intdef-ctx)
+                                             syntax-local-introduce)
+                                       xs)])
+        (for/lists [es- ts_es]
                  ([k (in-list ks)]
                   [e (in-list (map car es+ts))]
                   [e/elab (in-list es/elab)])
         (let* ([e- (local-expand e/elab 'expression stop-ids intdef-ctx)]
                [t_e (get-type e-)])
           (unless t_e (raise-syntax-error #f "no inferred type" e))
-          ; propagate disappeared bindings to ensure binding arrows can pick up uses of
-          ; typed var transformers that have been expanded
           (k (syntax-property e- 'disappeared-binding
-                              (cons (syntax-property e 'disappeared-binding)
-                                    (syntax-property #'inner-let 'disappeared-binding)))
-             t_e))))
+                              (cons (syntax-property e 'disappeared-binding) disappeared-bindings))
+             t_e)))))
 
     ; With everything inferred and checked, all that’s left to do is return the results.
     (values xs-* es- ts_es))
