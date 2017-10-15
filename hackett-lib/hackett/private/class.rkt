@@ -43,7 +43,7 @@
    ; a context where ‘a’ is bound, we need to bind it into a definition context before expanding it.
    ; We also want to expand superclass constraints in the same context so that the same variable is
    ; bound in both situations.
-   #:with [var-id- ...] (map syntax-local-introduce (generate-temporaries (attribute var-id)))
+   #:with [var-id- ...] (generate-temporaries (attribute var-id))
    #:do [(define t-intdef-ctx (syntax-local-make-definition-context))]
    #:with [var-id-* ...] (map #{internal-definition-context-introduce t-intdef-ctx %}
                               (attribute var-id-))
@@ -69,6 +69,12 @@
    #:with [quantified-t:type ...] #'[(∀ [var-id ...] (=> [(@%app name-t var-id ...)] bare-t)) ...]
    #:with [quantified-t-expr ...] (map preservable-property->expression (attribute quantified-t.τ))
 
+   ; This use of syntax-local-introduce is necessary due to how local-expand and
+   ; syntax-local-bind-syntaxes implicitly call syntax-local-introduce, and how types store syntax in
+   ; syntax properties. For more details, see the comment above the corresponding definition in the
+   ; ‘instance’ form.
+   #:with [var-id-** ...] (map syntax-local-introduce (attribute var-id-*))
+
    (~> (quasitemplate
         (begin-
           (define-values- []
@@ -86,7 +92,7 @@
                 fixity))
           {?? (def method-default-id- : quantified-t method-default-impl)} ...
           (define-syntax- name
-            (class:info (list #'var-id-* ...)
+            (class:info (list #'var-id-** ...)
                         (make-immutable-free-id-table
                          (list (cons #'method-id method-t-expr) ...))
                         (make-immutable-free-id-table
@@ -155,7 +161,7 @@
 
    ; Calculate the expected type of each method. First, we have to expand each provided subgoal and
    ; type in the instance head in a context where the various type variables are bound.
-   #:with [var-id- ...] (map syntax-local-introduce (generate-temporaries (attribute var-id)))
+   #:with [var-id- ...] (generate-temporaries (attribute var-id))
    #:do [(define t-intdef-ctx (syntax-local-make-definition-context))]
    #:with [var-id-* ...] (map #{internal-definition-context-introduce t-intdef-ctx %}
                               (attribute var-id-))
@@ -171,9 +177,19 @@
 
    ; With the types actually expanded, we need to skolemize them for the pupose of typechecking
    ; method implementations.
+   ;
+   ; This extra syntax-local-introduce on var-id-* is necessary because local-expand and
+   ; syntax-local-bind-syntaxes implicitly call syntax-local-introduce (because they implicitly switch
+   ; to “macro result view”, according to mflatt). Normally, this wouldn’t be a problem, since
+   ; local-expand also calls syntax-local-introduce again on its *result*, flipping the scopes back.
+   ; However, types are placed in syntax properties, and syntax properties are not adjusted by the
+   ; expander. This means the use-site and macro-introduction scopes are still in the
+   ; “macro result view”, and they won’t be free-identifier=? to the var-id-* we have a reference to
+   ; unless we explicitly call syntax-local-introduce.
+   #:with [var-id-** ...] (map syntax-local-introduce (attribute var-id-*))
    #:do [(define skolem-ids (generate-temporaries (attribute var-id)))
          (modify-type-context #{append % (map ctx:skolem skolem-ids)})
-         (define var+skolem-ids (map #{cons %1 (τ:skolem %2)} (attribute var-id-*) skolem-ids))
+         (define var+skolem-ids (map #{cons %1 (τ:skolem %2)} (attribute var-id-**) skolem-ids))
          (define constrs/skolemized (map #{insts % var+skolem-ids} (attribute constr-.τ)))
          (define bare-ts/skolemized (map #{insts % var+skolem-ids} (attribute bare-t-.τ)))]
 
@@ -210,7 +226,7 @@
            (begin-for-syntax-
              (register-global-class-instance!
               (class:instance (syntax-local-value #'class)
-                              (list (quote-syntax var-id-*) ...)
+                              (list (quote-syntax var-id-**) ...)
                               (list constr-expr ...)
                               (list bare-t-expr ...)
                               #'dict-id-)))
