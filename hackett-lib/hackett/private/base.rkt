@@ -8,8 +8,8 @@
                      threading)
          (postfix-in - (combine-in racket/base
                                    racket/promise
-                                   racket/splicing
-                                   syntax/id-table))
+                                   syntax/id-table
+                                   hackett/private/splicing))
          racket/stxparam
          syntax/parse/define
 

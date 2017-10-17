@@ -66,12 +66,12 @@
 
                      hackett/private/typecheck)
          racket/promise
-         racket/splicing
          syntax/parse/define
 
          (only-in hackett/private/base unmangle-types-in τ⇒! τ⇐!)
          (only-in (unmangle-types-in #:no-introduce hackett/private/kernel) String [#%app @%app])
-         (only-in hackett/private/prim/base show))
+         (only-in hackett/private/prim/base show)
+         hackett/private/splicing)
 
 (provide @%top-interaction)
 

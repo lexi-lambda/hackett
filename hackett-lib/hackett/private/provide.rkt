@@ -3,12 +3,12 @@
 (require (for-syntax racket/base
                      racket/provide-transform
                      syntax/id-table)
-         racket/splicing
          syntax/parse/define
 
          hackett/private/base
          (rename-in hackett/private/class [class define-class])
-         (rename-in hackett/private/adt [data define-data]))
+         (rename-in hackett/private/adt [data define-data])
+         hackett/private/splicing)
 
 (provide data class)
 
