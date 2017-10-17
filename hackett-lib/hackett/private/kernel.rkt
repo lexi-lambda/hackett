@@ -15,15 +15,43 @@
                      [@%top #%top]
                      [@%datum #%datum]
                      [@%app #%app]
-                     [λ lambda]
-                     [∀ forall])
-         require combine-in except-in only-in prefix-in rename-in
-         provide combine-out except-out prefix-out rename-out
-         : def λ let letrec ∀ -> => Integer Double String)
+                     [@%require require]
+                     [λ lambda])
+         #%require/only-types combine-in except-in only-in prefix-in rename-in
+         provide combine-out except-out prefix-out rename-out type-out
+         : def λ let letrec
+         (type-out #:no-introduce ∀ -> => Integer Double String
+                   (rename-out [∀ forall])))
+
+(module module-wrapper racket/base
+  (require syntax/parse syntax/strip-context)
+  (provide module-wrapper-insert-type-require)
+  (define (module-wrapper-insert-type-require read-module)
+    (syntax-parse (read-module)
+      [(module mod-name mod-path
+         (#%module-begin form ...))
+       (datum->syntax this-syntax
+                      (syntax-e (strip-context
+                                 #'(module mod-name mod-path
+                                     (#%module-begin
+                                      (#%require/only-types mod-path)
+                                      form ...))))
+                      this-syntax
+                      this-syntax)])))
 
 (module reader syntax/module-reader hackett/private/kernel
   #:wrapper1 call-with-hackett-reading-parameterization
-  (require hackett/private/reader))
+  #:module-wrapper module-wrapper-insert-type-require
+  (require hackett/private/reader
+           (submod ".." module-wrapper)))
+
+(define-syntax-parser @%require
+  [(_ require-spec ...)
+   #'(require (unmangle-types-in require-spec) ...)])
+
+(define-syntax-parser #%require/only-types
+  [(_ require-spec ...)
+   #'(@%require (only-types-in require-spec ...))])
 
 (define-syntax-parser λ
   [(_ [x:id] e:expr)

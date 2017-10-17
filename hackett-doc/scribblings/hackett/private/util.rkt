@@ -35,11 +35,14 @@
 ;; evaluation
 
 (define (make-hackett-eval)
-  (make-base-eval #:lang 'hackett '(require hackett/data/identity
-                                            hackett/monad/error
-                                            hackett/monad/reader
-                                            hackett/monad/trans
-                                            (only-in hackett/private/prim unsafe-run-io!))))
+  (let ([hackett-eval (make-base-eval #:lang 'hackett)])
+    (hackett-eval '(require hackett
+                            hackett/data/identity
+                            hackett/monad/error
+                            hackett/monad/reader
+                            hackett/monad/trans
+                            (only-in hackett/private/prim unsafe-run-io!)))
+    hackett-eval))
 
 (define-simple-macro (hackett-examples
                       {~or {~optional {~seq #:eval eval:expr}}

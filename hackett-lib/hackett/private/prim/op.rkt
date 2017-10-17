@@ -7,7 +7,7 @@
                                    racket/promise
                                    racket/string))
          (except-in hackett/private/base)
-         hackett/private/prim/type
+         (unmangle-types-in #:no-introduce hackett/private/prim/type)
          hackett/private/prim/type-provide)
 
 ;; ---------------------------------------------------------------------------------------------------

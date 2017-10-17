@@ -11,6 +11,7 @@
 ; These datatypes are needed by both the untyped bindings and the typed code, so we need to put them
 ; in a a common submodule that can be imported by both.
 (module shared hackett
+  (#%require/only-types hackett)
   (provide (data Request) (data Response) response-status response-body)
   (data Request (request String))
   (data Response (response Integer String))
@@ -23,8 +24,10 @@
 ; passes a request to a callback function for every request. The callback should produce a response,
 ; which contains a response body and a status code.
 (module untyped racket/base
-  (require (prefix-in hackett: (combine-in hackett (submod ".." shared)))
-           (only-in hackett : -> Integer String IO Unit)
+  (require (only-in hackett/private/base unmangle-types-in)
+           (prefix-in hackett: (unmangle-types-in #:no-introduce
+                                                  (combine-in hackett (submod ".." shared))))
+           (only-in (unmangle-types-in #:no-introduce hackett) : -> Integer String IO Unit)
            hackett/private/prim/type-provide
            (only-in hackett/private/prim/type io)
            racket/string

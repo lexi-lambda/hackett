@@ -7,4 +7,6 @@
 
 (module reader syntax/module-reader hackett/main
   #:wrapper1 call-with-hackett-reading-parameterization
-  (require hackett/private/reader))
+  #:module-wrapper module-wrapper-insert-type-require
+  (require hackett/private/reader
+           (submod hackett/private/kernel module-wrapper)))

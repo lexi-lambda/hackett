@@ -3,6 +3,7 @@
 (require (only-in racket/base all-from-out for-syntax module submod))
 
 (module shared hackett
+  (#%require/only-types hackett)
   (provide (data KeyEvent) (data MouseEvent))
 
   (data KeyEvent
@@ -23,11 +24,15 @@
 
 (module untyped racket/base
   (require hackett/private/util/require
+           (only-in hackett/private/base unmangle-types-in)
 
-           (prefix-in hackett: (combine-in hackett hackett/demo/pict (submod ".." shared)))
+           (prefix-in hackett: (unmangle-types-in #:no-introduce
+                                                  (combine-in hackett
+                                                              hackett/demo/pict
+                                                              (submod ".." shared))))
            (postfix-in - (combine-in 2htdp/universe pict racket/base racket/match racket/promise))
 
-           (only-in hackett ∀ : -> Integer Double IO Unit)
+           (only-in (unmangle-types-in #:no-introduce hackett) ∀ : -> Integer Double IO Unit)
            (only-in hackett/private/prim io unsafe-run-io!)
            hackett/private/prim/type-provide
            threading)

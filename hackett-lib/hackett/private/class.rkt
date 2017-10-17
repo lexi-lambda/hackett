@@ -14,7 +14,10 @@
          (for-syntax hackett/private/infix
                      hackett/private/util/stx)
          (except-in hackett/private/base ∀ => @%app)
-         (only-in hackett/private/kernel ∀ => [#%app @%app]))
+         (only-in hackett/private/kernel
+                  [#%hackett-type:∀ ∀]
+                  [#%hackett-type:=> =>]
+                  [#%app @%app]))
 
 (provide (for-syntax class-id)
          class instance)
@@ -25,10 +28,10 @@
 
 (define-syntax-parser class
   #:literals [: => let-values #%plain-app]
-  [(_ {~optional {~seq constr ... =>/use:=>} #:defaults ([[constr 1] '()])}
-      (name:id var-id:id ...)
+  [(_ {~optional {~seq {~type constr} ... {~type =>/use:=>}} #:defaults ([[constr 1] '()])}
+      {~type (name:id var-id:id ...)}
       [method-id:id
-       {~or {~once {~seq {~and : {~var :/use}} bare-t}}
+       {~or {~once {~seq {~and : {~var :/use}} {~type bare-t}}}
             {~optional fixity:fixity-annotation}}
        ...
        {~optional method-default-impl:expr}]
@@ -108,7 +111,7 @@
   (define-syntax-class instance-head
     #:description "instance head"
     #:attributes [class class.local-value [bare-t 1]]
-    [pattern (class:class-id bare-t ...)])
+    [pattern {~type (class:class-id bare-t ...)}])
 
   (define-syntax-class instance-spec
     #:description "instance spec"
@@ -120,12 +123,12 @@
              #:attr =>/use #f
              #:attr [var-id 1] '()
              #:attr [constr 1] '()]
-    [pattern (∀/use:∀ ~!
-              [var-id:id ...]
-              {~optional {~seq constr ... =>/use:=>}
+    [pattern ({~type ∀/use:∀} ~!
+              [{~type var-id:id} ...]
+              {~optional {~seq {~type constr} ... {~type =>/use:=>}}
                          #:defaults ([[constr 1] '()])}
               ~! {~and :instance-head head-stx})]
-    [pattern (constr ... =>/use:=> {~and :instance-head head-stx})
+    [pattern (constr ... {~type =>/use:=>} {~and :instance-head head-stx})
              #:attr ∀/use #f
              #:attr [var-id 1] '()]))
 
@@ -166,12 +169,10 @@
    #:with [var-id-* ...] (map #{internal-definition-context-introduce t-intdef-ctx %}
                               (attribute var-id-))
    #:do [(syntax-local-bind-syntaxes (attribute var-id-) #f t-intdef-ctx)
-         (for ([var-id (in-list (attribute var-id))]
-               [var-id-* (in-list (attribute var-id-*))])
-           (syntax-local-bind-syntaxes
-            (list var-id)
-            #`(make-type-variable-transformer (τ:var (quote-syntax #,var-id-*)))
-            t-intdef-ctx))]
+         (syntax-local-bind-syntaxes
+          (attribute var-id)
+          #`(values (make-type-variable-transformer (τ:var (quote-syntax var-id-*))) ...)
+          t-intdef-ctx)]
    #:with [(~var constr- (type t-intdef-ctx)) ...] (attribute constr)
    #:with [(~var bare-t- (type t-intdef-ctx)) ...] (attribute bare-t)
 

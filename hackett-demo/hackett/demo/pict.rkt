@@ -3,6 +3,7 @@
 (require (only-in racket/base all-from-out module submod))
 
 (module shared hackett
+  (#%require/only-types hackett)
   (provide (data Color) color-red color-green color-blue color-alpha
            white black red orange yellow green blue purple)
 
@@ -23,11 +24,13 @@
 
 (module untyped racket/base
   (require hackett/private/util/require
+           (only-in hackett/private/base unmangle-types-in)
 
-           (prefix-in hackett: (combine-in hackett (submod ".." shared)))
+           (prefix-in hackett: (unmangle-types-in #:no-introduce
+                                                  (combine-in hackett (submod ".." shared))))
            (postfix-in - (combine-in pict racket/base racket/draw racket/promise))
 
-           (only-in hackett : -> Integer Double String IO Unit)
+           (only-in (unmangle-types-in #:no-introduce hackett) : -> Integer Double String IO Unit)
            (only-in hackett/private/base define-base-type)
            (only-in hackett/private/prim/type io)
            hackett/private/prim/type-provide)

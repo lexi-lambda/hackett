@@ -5,6 +5,7 @@
          (for-syntax racket/base)
          (postfix-in - (combine-in racket/base racket/promise))
          syntax/parse/define
+         (only-in hackett/private/base submodule-part)
          (only-in hackett/private/kernel [#%app @%app])
 
          hackett/private/prim/base
@@ -19,5 +20,5 @@
 
 (define-syntax-parser main
   [(_ e:expr)
-   #'(module+ main
+   #'(submodule-part main
        (void- (force- (@%app unsafe-run-io! e))))])

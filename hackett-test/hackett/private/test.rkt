@@ -12,11 +12,13 @@
            (prefix-in r: rackunit/log)
            syntax/parse/define
 
-           (only-in hackett [#%app @%app] : -> IO String Unit unit tuple)
+           (only-in hackett/private/base submodule-part unmangle-types-in)
+           (only-in (unmangle-types-in #:no-introduce hackett)
+                    [#%app @%app] : -> IO String Unit unit tuple)
            (only-in hackett/private/prim io unsafe-run-io!)
            hackett/private/prim/type-provide
 
-           (submod ".." shared))
+           (unmangle-types-in #:no-introduce (submod ".." shared)))
 
   (provide (typed-out [test-log! : {Test-Result -> (IO Unit)}]
                       [println/error : {String -> (IO Unit)}])
@@ -34,8 +36,9 @@
 
   (define-syntax-parser test
     [(_ e:expr)
-     #'(module+ test
-         (void (force (@%app unsafe-run-io! e))))]))
+     ; transfer lexical context onto module body to ensure the proper #%module-begin is introduced
+     #`(submodule-part test
+         #,(datum->syntax this-syntax (syntax-e #'(#%app void (force (@%app unsafe-run-io! e))))))]))
 
 (require (submod "." shared)
          (submod "." untyped))
