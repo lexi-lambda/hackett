@@ -55,49 +55,49 @@
 (provide PRNG
          (class RandomGen)
          (class RandomValue)
-         io-prng prng/seed
-         random/below random/double random/range random random-io)
+         make-io-prng prng/seeded
+         random-below random-double random-range random random/io)
 
 
-(def io-prng : (IO PRNG)
+(def make-io-prng : (IO PRNG)
   (io (λ [w]
         (let ([prng (unsafe-make-prng unit)])
           (seq prng
                (tuple w prng))))))
 
-(defn prng/seed : {Integer -> PRNG}
+(defn prng/seeded : {Integer -> PRNG}
   [[k] (let ([prng (unsafe-make-prng/seed k)])
          (seq prng prng))])
 
 
 (class (RandomGen g)
-  [random/below : {Integer -> g -> (Tuple Integer g)}]
-  [random/double : {g -> (Tuple Double g)}]
-  [random/range : {Integer -> Integer -> g -> (Tuple Integer g)}
-             (λ [lo hi g]
-               (case (random/below (- hi lo) g)
-                 [(tuple x g-) (tuple (+ lo x) g)]))])
+  [random-below : {Integer -> g -> (Tuple Integer g)}]
+  [random-double : {g -> (Tuple Double g)}]
+  [random-range : {Integer -> Integer -> g -> (Tuple Integer g)}
+                (λ [lo hi g]
+                  (case (random-below (- hi lo) g)
+                    [(tuple x g-) (tuple (+ lo x) g)]))])
 
 (instance (RandomGen PRNG)
-  [random/below unsafe-prng-next-integer]
-  [random/double unsafe-prng-next-double])
+  [random-below unsafe-prng-next-integer]
+  [random-double unsafe-prng-next-double])
 
 
 (class (RandomValue a)
   [random : (∀ [g] (RandomGen g) => {g -> (Tuple a g)})])
 
 (instance (RandomValue Integer)
-  [random (random/below #x80000000)])
+  [random (random-below #x80000000)])
 
 (instance (RandomValue Double)
-  [random random/double])
+  [random random-double])
 
 (instance (RandomValue Bool)
-  [random (λ [g] (case (random/below 2 g)
-                [(tuple x g-) (tuple {x == 0} g-)]))])
+  [random (λ [g] (case (random-below 2 g)
+                   [(tuple x g-) (tuple {x == 0} g-)]))])
 
-(def random-io : (∀ [a] (RandomValue a) => (IO a))
-  {{fst . random} <$> io-prng})
+(def random/io : (∀ [a] (RandomValue a) => (IO a))
+  {{fst . random} <$> make-io-prng})
 
 
 #|
