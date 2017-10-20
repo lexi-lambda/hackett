@@ -69,6 +69,54 @@
   [[k] (let ([prng (unsafe-make-prng/seed k)])
          (seq prng prng))])
 
+(require "state.rkt")
+
+; With the State Monad, we can define the following three functions to extract
+; random numbers with a (State PRNG) as the backend:
+
+(def draw-double : (State PRNG Double)
+  (state (λ [prng]
+            (case (random-double prng) [{d tuple prng*} { prng* tuple d }]))))
+
+(defn draw-range : {Integer -> Integer -> (State PRNG Integer)}
+  [[lo hi] (state (λ [prng]
+                     (case (random-range lo hi prng) [{d tuple prng*} { prng* tuple d }])))])
+
+(defn draw-below : {Integer -> (State PRNG Integer)}
+  [[hi] (state (λ [prng]
+                  (case (random-below hi prng) [{d tuple prng*} { prng* tuple d }])))])
+
+
+#|
+; (provide example-of-the-draw-functions)
+(def example-of-the-draw-functions : (State PRNG (List Double))
+     (do
+        [d0 <- draw-double]
+        [d1 <- draw-double]
+        (put (prng/seeded 1337))
+        [d2 <- draw-double]
+        [d3 <- draw-double]
+        (put (prng/seeded 1337))
+        [d4 <- draw-double]
+        [d5 <- draw-double]
+        (pure {d0 :: d1 :: d2 :: d3 :: d4 :: d5 :: nil })
+        ))
+And here is an example of the above three being used:
+(main (do
+
+        ; In IO, get a PRNG seeded by the current time:
+        [prng <- make-io-prng]
+
+        (println " First two numbers in the following are different, and different on each run of this program, confirming the IO-seed PRNG is \"proceeding\",")
+        (println " and the third and fifth are the same, as as the fourth and sixth, to show the 'put' has reseeded deterministically")
+
+        ; run an example State computation with the prng we just got from IO
+        {(runState example-of-the-draw-functions prng) & fst & show & println}
+
+        ; And finally, with a deterministally-seeded PRNG (i.e. not created in IO)
+        {(runState example-of-the-draw-functions (prng/seeded 1337)) & fst & show & println}
+        ))
+|#
 
 (class (RandomGen g)
   [random-below : {Integer -> g -> (Tuple Integer g)}]
