@@ -12,7 +12,7 @@
            (prefix-in r: rackunit/log)
            syntax/parse/define
 
-           (only-in hackett/private/base submodule-part unmangle-types-in only-types-in)
+           (only-in hackett/private/base module+ unmangle-types-in only-types-in)
            (prefix-in t: (unmangle-types-in #:no-introduce (only-types-in hackett)))
            (only-in hackett [#%app @%app] : Unit Tuple)
            (only-in hackett/private/prim IO unsafe-run-io!)
@@ -36,9 +36,10 @@
 
   (define-syntax-parser test
     [(_ e:expr)
-     ; transfer lexical context onto module body to ensure the proper #%module-begin is introduced
-     #`(submodule-part test
-         #,(datum->syntax this-syntax (syntax-e #'(#%app void (force (@%app unsafe-run-io! e))))))]))
+     ; transfer lexical context to ensure the proper #%module-begin is introduced
+     (datum->syntax this-syntax
+                    (list #'module+ #'test #'(#%app void (force (@%app unsafe-run-io! e))))
+                    this-syntax)]))
 
 (require (submod "." shared)
          (submod "." untyped))

@@ -24,7 +24,7 @@
          (rename-out [#%top @%top]
                      [∀ forall])
          @%module-begin @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary
-         submodule-part type-out only-types-in unmangle-types-in
+         module+ type-out only-types-in unmangle-types-in
          define-primop define-base-type
          -> ∀ => Integer Double String
          : λ1 def let letrec)
@@ -352,7 +352,7 @@
       (for/list ([(name parts) (in-hash all-parts)])
         (let ([parts* (map syntax-local-introduce (reverse parts))])
           (datum->syntax (first parts*)
-                         (list* #'module* name #f parts*)
+                         (list* #'module*- name #f parts*)
                          (first parts*)))))))
 
 (define-syntax-parser @%module-begin
@@ -394,11 +394,14 @@
    #:with [submod-decl ...] (submodule-parts->submodules)
    #'(begin- submod-decl ...)])
 
-(define-syntax-parser submodule-part
+(define-syntax-parser module+
   [(_ name:id body ...)
    #:fail-unless (eq? (syntax-local-context) 'module) "not at module top level"
-   #:do [(for ([body (in-list (attribute body))])
-           (lift-submodule-part! (syntax-e #'name) body))]
+   #:do [(lift-submodule-part!
+          (syntax-e #'name)
+          (datum->syntax this-syntax
+                         (cons #'begin- (attribute body))
+                         this-syntax))]
    #'(begin-)])
 
 (define-syntax-parser begin/value-namespace
