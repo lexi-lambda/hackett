@@ -6,8 +6,11 @@
                                    racket/match
                                    racket/promise
                                    racket/string))
-         (except-in hackett/private/base)
-         (unmangle-types-in #:no-introduce hackett/private/prim/type)
+         hackett/private/base
+         (unmangle-types-in #:no-introduce (only-types-in hackett/private/prim/type))
+         (only-in hackett/private/prim/type
+                  True False :: Nil
+                  [Unit MkUnit] [Tuple MkTuple] [IO MkIO])
          hackett/private/prim/type-provide)
 
 ;; ---------------------------------------------------------------------------------------------------
@@ -44,12 +47,12 @@
           [error! : (∀ a {String -> a})]))
 
 (define (boolean->Bool x)
-  (if- x true false))
+  (if- x True False))
 
 (define list->List
   (match-lambda-
     [(cons x xs) ((:: x) (list->List xs))]
-    ['()         nil]))
+    ['()         Nil]))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Integer
@@ -98,8 +101,8 @@
 (define ((seq x) y) (force- x) y)
 
 (define (print str)
-  (io (λ- (rw)
-        (display- (force- str))
-        ((tuple rw) unit))))
+  (MkIO (λ- (rw)
+          (display- (force- str))
+          ((MkTuple rw) MkUnit))))
 
 (define (error! str) (error- (force- str)))

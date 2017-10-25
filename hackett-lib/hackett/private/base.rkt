@@ -445,18 +445,27 @@
 (define-syntax unmangle-types-in
   (make-require-transformer
    (syntax-parser
-     [(_ {~optional {~and #:no-introduce no-introduce?}} require-spec ...)
+     [(_ {~or {~optional {~or {~and #:no-introduce no-introduce?}
+                              {~seq #:prefix prefix:id}}}}
+         require-spec ...)
       #:do [(define-values [imports sources] (expand-import #'(combine-in require-spec ...)))]
       (values (map (match-lambda
                      [(and i (import local-id src-sym src-mod-path mode req-mode orig-mode orig-stx))
                       (let* ([local-name (symbol->string (syntax-e local-id))]
                              [unmangled-type-name (unmangle-type-name local-name)])
                         (if unmangled-type-name
-                            (let ([unmangled-id (datum->syntax local-id
-                                                               (string->symbol unmangled-type-name)
-                                                               local-id
-                                                               local-id)])
-                              (import (if (attribute no-introduce?) unmangled-id
+                            (let* ([prefixed-type-name
+                                    (if (attribute prefix)
+                                        (string-append (symbol->string (syntax-e #'prefix))
+                                                       unmangled-type-name)
+                                        unmangled-type-name)]
+                                   [unmangled-id (datum->syntax local-id
+                                                                (string->symbol prefixed-type-name)
+                                                                local-id
+                                                                local-id)])
+                              (import (if (or (attribute no-introduce?)
+                                              (attribute prefix))
+                                          unmangled-id
                                           (type-namespace-introduce unmangled-id))
                                       src-sym src-mod-path mode req-mode orig-mode orig-stx))
                             i))])

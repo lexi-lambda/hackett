@@ -6,7 +6,12 @@
                     hackett/monad/reader
                     hackett/monad/trans)
 
-         (for-syntax racket/base)
+         (for-syntax racket/base
+                     racket/list
+                     racket/match
+                     racket/require-transform
+                     racket/syntax
+                     syntax/parse/experimental/template)
 
          racket/sandbox
          scribble/core
@@ -14,6 +19,7 @@
          scribble/html-properties
          (except-in scribble/manual defclass defmethod)
          scribble/manual/hackett
+         scribble/racket
          setup/collects
          syntax/parse/define)
 
@@ -22,6 +28,7 @@
                     (all-from-out hackett/monad/error)
                     (all-from-out hackett/monad/reader)
                     (all-from-out hackett/monad/trans))
+
          (all-from-out scribble/manual/hackett)
          close-eval
 
@@ -44,27 +51,59 @@
                             (only-in hackett/private/prim unsafe-run-io!)))
     hackett-eval))
 
+(begin-for-syntax
+  (define (do-expand-eval-transformers stx)
+    (syntax-rearm
+     (syntax-parse (syntax-disarm stx (current-code-inspector))
+       [x:type-binding-id
+        #:do [(define bare-id #'x.bare-id)]
+        (datum->syntax bare-id (syntax-e bare-id) #'x)]
+       [(a . b)
+        (datum->syntax this-syntax
+                       (cons (do-expand-eval-transformers #'a)
+                             (do-expand-eval-transformers #'b))
+                       this-syntax
+                       this-syntax)]
+       [_ this-syntax])
+     stx))
+
+  (define (expand-eval-transformers stx)
+    (syntax-parse stx
+      #:datum-literals [eval:alts eval:check]
+      [(eval:alts . _)
+       stx]
+      [(eval:check eval expect)
+       #`(eval:alts eval (eval:check #,(do-expand-eval-transformers #'eval)
+                                     #,(do-expand-eval-transformers #'expect)))]
+      [_
+       #`(eval:alts #,stx #,(do-expand-eval-transformers stx))])))
+
 (define-simple-macro (hackett-examples
                       {~or {~optional {~seq #:eval eval:expr}}
                            {~optional {~and #:once once}}
                            {~optional {~seq #:label label:expr}}
                            {~optional {~and #:no-preserve-source-locations
-                                            no-preserve-source-locations}}}
+                                            no-preserve-source-locations}}
+                           {~optional {~and #:no-prompt no-prompt}}}
                       ...
                       body ...)
   #:with eval* (or (attribute eval) #'(make-hackett-eval))
   #:with [once* ...] (cond [(attribute once) #'[once]]
                            [(attribute eval) #'[]]
                            [else             #'[#:once]])
-  #:with [label* ...] (if (attribute label) #'[#:label label] #'[])
   #:with [preserve-source-locations ...] (if (attribute no-preserve-source-locations) #'[]
                                              #'[#:preserve-source-locations])
-  (examples
-   #:eval eval*
-   preserve-source-locations ...
-   once* ...
-   label* ...
-   body ...))
+  #:with [body* ...] (map expand-eval-transformers (attribute body))
+  #:with result
+  (template
+   (examples
+    #:eval eval*
+    preserve-source-locations ...
+    once* ...
+    {?? {?@ #:label label}}
+    {?? no-prompt}
+    body* ...))
+  result)
 
 (define-simple-macro (hackett-interaction body ...)
   (hackett-examples #:label #f body ...))
@@ -75,6 +114,56 @@
 (define (tech/racket-reference #:key [key #f] #:normalize? [normalize? #t] . pre-content)
   (apply tech #:doc '(lib "scribblings/reference/reference.scrbl")
          #:key key #:normalize? normalize? pre-content))
+
+;; ---------------------------------------------------------------------------------------------------
+;; type bindings
+
+(define-syntax prefix+provide-hackett-types
+  (make-require-transformer
+   (syntax-parser
+     [(_ require-spec ...)
+      (define-values [imports import-sources] (expand-import #'(for-label require-spec ...)))
+      (values (append*
+               (filter
+                values
+                (for/list ([i (in-list imports)])
+                  (match i
+                    [(import (and local-id (app (λ (id) (symbol->string (syntax-e id)))
+                                                (regexp #px"^#%hackett-type:(.+)$"
+                                                        (list _ (and (not #f) bare-str)))))
+                             src-sym src-mod-path mode req-mode orig-mode orig-stx)
+                     (let* ([bare-sym (string->symbol bare-str)]
+                            [bare-id ((make-syntax-introducer #t)
+                                      (datum->syntax #f bare-sym local-id local-id))]
+                            [prefixed-sym (string->symbol (string-append "t:" bare-str))]
+                            [prefixed-id (datum->syntax local-id prefixed-sym local-id local-id)])
+                       (syntax-local-lift-module-end-declaration
+                        #`(define+provide-hackett-type-binding #,bare-id #,prefixed-id #,local-id))
+                       (list
+                        i
+                        (import bare-id src-sym src-mod-path mode req-mode orig-mode orig-stx)))]
+                    [_ #f]))))
+              import-sources)])))
+
+(define-simple-macro (define+provide-hackett-type-binding bare-id:id prefixed-id:id orig-id:id)
+  (begin
+    (define-syntax prefixed-id
+      (make-element-id-transformer
+       (λ (stx) #`(racket #,(datum->syntax (quote-syntax bare-id)
+                                           (syntax-e (quote-syntax bare-id))
+                                           stx)))))
+    (begin-for-syntax
+      (register-type-binding!
+       (quote-syntax prefixed-id)
+       (quote-syntax orig-id)
+       (quote-syntax bare-id)))
+    (provide prefixed-id)))
+
+(require (prefix+provide-hackett-types hackett
+                                       hackett/data/identity
+                                       hackett/monad/error
+                                       hackett/monad/reader
+                                       hackett/monad/trans))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; internal references
