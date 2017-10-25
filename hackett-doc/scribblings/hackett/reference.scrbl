@@ -495,25 +495,25 @@ argument. Notably, the second argument will not be evaluated at all if the first
 
 @defmodule[hackett/data/identity]
 
-@defdata[(t:Identity a) (identity a)]{
+@defdata[(t:Identity a) (Identity a)]{
 
 A simple wrapper type with a variety of typeclass instances that defer to the value inside whenever
 possible. Most useful for its @racket[t:Functor], @racket[t:Applicate], and @racket[t:Monad] instances,
-which simply apply functions to the value inside the @racket[identity] wrapper, making it serve as
+which simply apply functions to the value inside the @racket[Identity] wrapper, making it serve as
 a “no-op” wrapper of sorts.
 
 @(hackett-interaction
-  (identity 5)
-  (map (+ 1) (identity 5))
-  {(identity (+ 1)) <*> (identity 5)}
-  {(identity "hello, ") ++ (identity "world")})}
+  (Identity 5)
+  (map (+ 1) (Identity 5))
+  {(Identity (+ 1)) <*> (Identity 5)}
+  {(Identity "hello, ") ++ (Identity "world")})}
 
 @defproc[(run-identity [x (t:Identity a)]) a]{
 
-Unwraps and returns the value inside an @racket[identity] wrapper.
+Unwraps and returns the value inside an @racket[Identity] wrapper.
 
 @(hackett-interaction
-  (run-identity (identity 5)))}
+  (run-identity (Identity 5)))}
 
 @subsection[#:tag "reference-tuples"]{Tuples}
 
@@ -1148,7 +1148,7 @@ Lifts a computation from the argument monad to the constructed monad.}}
 
 @defmodule[hackett/monad/reader]
 
-@defdata[(t:ReaderT r m a) (reader-t {r t:-> (m a)})]{
+@defdata[(t:ReaderT r m a) (ReaderT {r t:-> (m a)})]{
 
 The @deftech{reader monad transformer}, a @tech{monad transformer} that extends a monad with a
 read-only dynamic environment. The environment can be accessed with @racket[ask] and locally modified

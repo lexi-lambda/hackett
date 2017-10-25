@@ -2,29 +2,29 @@
 
 (provide (data Identity) run-identity)
 
-(data (Identity a) (identity a))
+(data (Identity a) (Identity a))
 
 (defn run-identity : (forall [a] {(Identity a) -> a})
-  [[(identity x)] x])
+  [[(Identity x)] x])
 
 (instance (forall [a] (Show a) => (Show (Identity a)))
-  [show (λ [(identity x)] {"(identity " ++ (show x) ++ ")"})])
+  [show (λ [(Identity x)] {"(Identity " ++ (show x) ++ ")"})])
 
 (instance (forall [a] (Eq a) => (Eq (Identity a)))
-  [== (λ [(identity x) (identity y)] {x == y})])
+  [== (λ [(Identity x) (Identity y)] {x == y})])
 
 (instance (forall [a] (Semigroup a) => (Semigroup (Identity a)))
-  [++ (λ [(identity x) (identity y)] (identity {x ++ y}))])
+  [++ (λ [(Identity x) (Identity y)] (Identity {x ++ y}))])
 
 (instance (forall [a] (Monoid a) => (Monoid (Identity a)))
-  [mempty (identity mempty)])
+  [mempty (Identity mempty)])
 
 (instance (Functor Identity)
-  [map (λ [f (identity x)] (identity (f x)))])
+  [map (λ [f (Identity x)] (Identity (f x)))])
 
 (instance (Applicative Identity)
-  [pure identity]
-  [<*> (λ [(identity f) (identity x)] (identity (f x)))])
+  [pure Identity]
+  [<*> (λ [(Identity f) (Identity x)] (Identity (f x)))])
 
 (instance (Monad Identity)
-  [join (λ [(identity (identity x))] (identity x))])
+  [join (λ [(Identity (Identity x))] (Identity x))])
