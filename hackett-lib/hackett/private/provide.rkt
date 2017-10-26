@@ -6,9 +6,9 @@
          syntax/parse/define
 
          hackett/private/base
+         hackett/private/type-reqprov
          (rename-in hackett/private/class [class define-class])
-         (rename-in hackett/private/adt [data define-data])
-         hackett/private/splicing)
+         (rename-in hackett/private/adt [data define-data]))
 
 (provide data class)
 

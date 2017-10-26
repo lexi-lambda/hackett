@@ -68,7 +68,8 @@
          racket/promise
          syntax/parse/define
 
-         (only-in hackett/private/base unmangle-types-in τ⇒! τ⇐!)
+         hackett/private/type-reqprov
+         (only-in hackett/private/base τ⇒! τ⇐!)
          (only-in (unmangle-types-in #:no-introduce hackett/private/kernel) String [#%app @%app])
          (only-in hackett/private/prim/base show)
          hackett/private/splicing)

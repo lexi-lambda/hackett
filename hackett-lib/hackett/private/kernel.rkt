@@ -9,7 +9,9 @@
          (rename-in hackett/private/base
                     [@%app @%app1]
                     [∀ ∀1]
-                    [=> =>1]))
+                    [=> =>1])
+         (only-in hackett/private/module-plus module+)
+         hackett/private/type-reqprov)
 
 (provide (rename-out [@%module-begin #%module-begin]
                      [@%top #%top]

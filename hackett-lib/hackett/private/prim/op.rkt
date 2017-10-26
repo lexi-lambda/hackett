@@ -1,11 +1,14 @@
 #lang racket/base
 
-(require hackett/private/util/require
+(require hackett/private/type-reqprov
+         hackett/private/util/require
+
          (postfix-in - (combine-in racket/base
                                    racket/flonum
                                    racket/match
                                    racket/promise
                                    racket/string))
+
          hackett/private/base
          (unmangle-types-in #:no-introduce (only-types-in hackett/private/prim/type))
          (only-in hackett/private/prim/type

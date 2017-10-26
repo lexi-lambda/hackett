@@ -24,7 +24,7 @@
 ; passes a request to a callback function for every request. The callback should produce a response,
 ; which contains a response body and a status code.
 (module untyped racket/base
-  (require (only-in hackett/private/base unmangle-types-in)
+  (require hackett/private/type-reqprov
            (prefix-in hackett: (unmangle-types-in #:prefix t:
                                                   (combine-in hackett (submod ".." shared))))
            (only-in (unmangle-types-in #:prefix t: hackett)

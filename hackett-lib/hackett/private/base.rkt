@@ -25,7 +25,6 @@
          (rename-out [#%top @%top]
                      [∀ forall])
          @%module-begin @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary
-         type-out only-types-in unmangle-types-in module+
          define-primop define-base-type
          -> ∀ => Integer Double String
          : λ1 def let letrec)
@@ -377,65 +376,6 @@
    (type-namespace-introduce
     (syntax/loc this-syntax
       (begin form ...)))])
-
-(begin-for-syntax
-  (define (mangle-type-name name)
-    (string-append "#%hackett-type:" name))
-
-  (define mangled-type-regexp #rx"^#%hackett-type:(.+)$")
-  (define (unmangle-type-name name)
-    (and~> (regexp-match mangled-type-regexp name) second))
-  (define (unmangle-value-name name)
-    (and (not (regexp-match? mangled-type-regexp name)) name)))
-
-(define-syntax type-out
-  (make-provide-pre-transformer
-   (λ (stx modes)
-     (syntax-parse stx
-       [(_ {~optional {~and #:no-introduce no-introduce?}} provide-spec ...)
-        (pre-expand-export
-         #`(filtered-out mangle-type-name
-                         #,((if (attribute no-introduce?) values type-namespace-introduce)
-                            #'(combine-out provide-spec ...)))
-         modes)]))))
-
-(define-syntax only-types-in
-  (make-require-transformer
-   (syntax-parser
-     [(_ require-spec ...)
-      (expand-import
-       #`(filtered-in (λ (name) (and (regexp-match? mangled-type-regexp name) name))
-                      (combine-in require-spec ...)))])))
-
-(define-syntax unmangle-types-in
-  (make-require-transformer
-   (syntax-parser
-     [(_ {~or {~optional {~or {~and #:no-introduce no-introduce?}
-                              {~seq #:prefix prefix:id}}}}
-         require-spec ...)
-      #:do [(define-values [imports sources] (expand-import #'(combine-in require-spec ...)))]
-      (values (map (match-lambda
-                     [(and i (import local-id src-sym src-mod-path mode req-mode orig-mode orig-stx))
-                      (let* ([local-name (symbol->string (syntax-e local-id))]
-                             [unmangled-type-name (unmangle-type-name local-name)])
-                        (if unmangled-type-name
-                            (let* ([prefixed-type-name
-                                    (if (attribute prefix)
-                                        (string-append (symbol->string (syntax-e #'prefix))
-                                                       unmangled-type-name)
-                                        unmangled-type-name)]
-                                   [unmangled-id (datum->syntax local-id
-                                                                (string->symbol prefixed-type-name)
-                                                                local-id
-                                                                local-id)])
-                              (import (if (or (attribute no-introduce?)
-                                              (attribute prefix))
-                                          unmangled-id
-                                          (type-namespace-introduce unmangled-id))
-                                      src-sym src-mod-path mode req-mode orig-mode orig-stx))
-                            i))])
-                   imports)
-              sources)])))
 
 ;; ---------------------------------------------------------------------------------------------------
 

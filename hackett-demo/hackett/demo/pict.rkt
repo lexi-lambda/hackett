@@ -23,8 +23,8 @@
   (def purple : Color (Color 128 0 128 1.0)))
 
 (module untyped racket/base
-  (require hackett/private/util/require
-           (only-in hackett/private/base type-out unmangle-types-in)
+  (require hackett/private/type-reqprov
+           hackett/private/util/require
 
            (prefix-in hackett: (unmangle-types-in #:prefix t:
                                                   (combine-in hackett (submod ".." shared))))

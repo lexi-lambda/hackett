@@ -23,8 +23,8 @@
     (me:unknown String)))
 
 (module untyped racket/base
-  (require hackett/private/util/require
-           (only-in hackett/private/base unmangle-types-in)
+  (require hackett/private/type-reqprov
+           hackett/private/util/require
 
            (prefix-in hackett: (unmangle-types-in #:prefix t:
                                                   (combine-in hackett
