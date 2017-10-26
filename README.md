@@ -36,8 +36,8 @@ Here’s some sample Hackett code that demonstrates some of Hackett’s features
 #lang hackett
 
 (data (Maybe a)
-  nothing
-  (just a))
+  Nothing
+  (Just a))
 
 (def x : Integer
   (let ([y 3]
@@ -48,8 +48,8 @@ Here’s some sample Hackett code that demonstrates some of Hackett’s features
   [show : {a -> String}])
 
 (instance (forall [a] (Show a) => (Show (Maybe a)))
-  [show (λ* [[(just x)] {"(just " ++ (show x) ++ ")"}]
-            [[nothing ] "nothing"])])
+  [show (λ* [[(Just x)] {"(Just " ++ (show x) ++ ")"}]
+            [[Nothing ] "Nothing"])])
 ```
 
 [**For a much more in-depth look at Hackett, see the documentation.**][hackett-docs]
