@@ -5,8 +5,7 @@
          (for-syntax racket/base)
          (postfix-in - (combine-in racket/base racket/promise))
          syntax/parse/define
-         (only-in hackett/private/base module+)
-         (only-in hackett/private/kernel [#%app @%app])
+         (only-in hackett/private/kernel module+ [#%app @%app])
 
          hackett/private/prim/base
          hackett/private/prim/op

@@ -16,7 +16,8 @@
          (for-syntax hackett/private/infix
                      hackett/private/typecheck
                      hackett/private/util/list
-                     hackett/private/util/stx))
+                     hackett/private/util/stx)
+         hackett/private/module-plus)
 
 (provide (for-syntax (all-from-out hackett/private/typecheck)
                      τs⇔/λ! τ⇔/λ! τ⇔! τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒!)
@@ -24,7 +25,7 @@
          (rename-out [#%top @%top]
                      [∀ forall])
          @%module-begin @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary
-         module+ type-out only-types-in unmangle-types-in
+         type-out only-types-in unmangle-types-in module+
          define-primop define-base-type
          -> ∀ => Integer Double String
          : λ1 def let letrec)
@@ -336,29 +337,9 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
-(define-syntax-parameter current-lifted-submodule-parts #f)
-
-(begin-for-syntax
-  (define/contract (lift-submodule-part! submod-name stx)
-    (-> symbol? syntax? void?)
-    (unless (syntax-parameter-value #'current-lifted-submodule-parts)
-      (error 'lift-submodule-part!
-             "not currently transforming in a context that supports lifting submodule parts"))
-    (hash-update! (syntax-parameter-value #'current-lifted-submodule-parts)
-                  submod-name #{cons (syntax-local-introduce stx) %} '()))
-
-  (define (submodule-parts->submodules)
-    (let ([all-parts (syntax-parameter-value #'current-lifted-submodule-parts)])
-      (for/list ([(name parts) (in-hash all-parts)])
-        (let ([parts* (map syntax-local-introduce (reverse parts))])
-          (datum->syntax (first parts*)
-                         (list* #'module*- name #f parts*)
-                         (first parts*)))))))
-
 (define-syntax-parser @%module-begin
   [(_ form ...)
-   #:with [body-form ...] #'((begin/value-namespace form ...)
-                             (lifted-submodules))
+   #:with body-form #'(with-module+-lift-target (begin/value-namespace form ...))
    ; If we expand to code that uses make-syntax-introducer directly, then we’ll end up with a
    ; different scope for each instantiation of the module. Normally this is okay, but it isn’t when
    ; dealing with (module* m #f ....) submodules, which ought to inherit the namespace scopes from
@@ -373,10 +354,7 @@
    #:with value-scoped ((make-syntax-introducer #t) #'scopeless)
    #:with type-scoped ((make-syntax-introducer #t) #'scopeless)
    (if (syntax-parameter-value #'current-value-introducer)
-       #'(#%plain-module-begin
-          (splicing-syntax-parameterize-
-              ([current-lifted-submodule-parts (make-hasheq)])
-            body-form ...))
+       #'(#%plain-module-begin body-form)
        #'(#%plain-module-begin
           (splicing-let-syntax- ([scopeless #f] [value-scoped #f] [type-scoped #f])
             (splicing-syntax-parameterize-
@@ -385,24 +363,8 @@
                                             (quote-syntax scopeless))]
                  [current-type-introducer (make-syntax-delta-introducer
                                            (quote-syntax type-scoped)
-                                           (quote-syntax scopeless))]
-                 [current-lifted-submodule-parts (make-hasheq)])
-              body-form ...))))])
-
-(define-syntax-parser lifted-submodules
-  [(_)
-   #:with [submod-decl ...] (submodule-parts->submodules)
-   #'(begin- submod-decl ...)])
-
-(define-syntax-parser module+
-  [(_ name:id body ...)
-   #:fail-unless (eq? (syntax-local-context) 'module) "not at module top level"
-   #:do [(lift-submodule-part!
-          (syntax-e #'name)
-          (datum->syntax this-syntax
-                         (cons #'begin- (attribute body))
-                         this-syntax))]
-   #'(begin-)])
+                                           (quote-syntax scopeless))])
+              body-form))))])
 
 (define-syntax-parser begin/value-namespace
   [(_ form ...)

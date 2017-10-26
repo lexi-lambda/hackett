@@ -18,7 +18,7 @@
                      [@%require require]
                      [λ lambda])
          #%require/only-types combine-in except-in only-in prefix-in rename-in
-         provide combine-out except-out prefix-out rename-out type-out
+         provide combine-out except-out prefix-out rename-out type-out module+
          : def λ let letrec
          (type-out #:no-introduce ∀ -> => Integer Double String
                    (rename-out [∀ forall])))

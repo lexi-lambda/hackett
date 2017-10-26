@@ -12,9 +12,9 @@
            (prefix-in r: rackunit/log)
            syntax/parse/define
 
-           (only-in hackett/private/base module+ unmangle-types-in only-types-in)
+           (only-in hackett/private/base unmangle-types-in only-types-in)
            (prefix-in t: (unmangle-types-in #:no-introduce (only-types-in hackett)))
-           (only-in hackett [#%app @%app] : Unit Tuple)
+           (only-in hackett [#%app @%app] module+ : Unit Tuple)
            (only-in hackett/private/prim IO unsafe-run-io!)
            hackett/private/prim/type-provide
 
