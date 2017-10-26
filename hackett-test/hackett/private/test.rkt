@@ -12,30 +12,34 @@
            (prefix-in r: rackunit/log)
            syntax/parse/define
 
-           (only-in hackett [#%app @%app] : -> IO String Unit unit tuple)
-           (only-in hackett/private/prim io unsafe-run-io!)
+           hackett/private/type-reqprov
+           (prefix-in t: (unmangle-types-in #:no-introduce (only-types-in hackett)))
+           (only-in hackett [#%app @%app] module+ : Unit Tuple)
+           (only-in hackett/private/prim IO unsafe-run-io!)
            hackett/private/prim/type-provide
 
-           (submod ".." shared))
+           (unmangle-types-in #:no-introduce (submod ".." shared)))
 
-  (provide (typed-out [test-log! : {Test-Result -> (IO Unit)}]
-                      [println/error : {String -> (IO Unit)}])
+  (provide (typed-out [test-log! : {Test-Result t:-> (t:IO t:Unit)}]
+                      [println/error : {t:String t:-> (t:IO t:Unit)}])
            test)
 
   (define (test-log! result)
-    (io (λ (rw)
+    (IO (λ (rw)
           (r:test-log! (equal? test-success (force result)))
-          ((tuple rw) unit))))
+          ((Tuple rw) Unit))))
 
   (define (println/error str)
-    (io (λ (rw)
+    (IO (λ (rw)
           (displayln (force str) (current-error-port))
-          ((tuple rw) unit))))
+          ((Tuple rw) Unit))))
 
   (define-syntax-parser test
     [(_ e:expr)
-     #'(module+ test
-         (void (force (@%app unsafe-run-io! e))))]))
+     ; transfer lexical context to ensure the proper #%module-begin is introduced
+     (datum->syntax this-syntax
+                    (list #'module+ #'test #'(#%app void (force (@%app unsafe-run-io! e))))
+                    this-syntax)]))
 
 (require (submod "." shared)
          (submod "." untyped))

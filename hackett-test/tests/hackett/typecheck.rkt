@@ -40,13 +40,13 @@
 
 (require (submod "." assertions))
 
-(typecheck-succeed unit)
-(typecheck-succeed (: unit Unit))
+(typecheck-succeed Unit)
+(typecheck-succeed (: Unit Unit))
 (typecheck-succeed 1)
 (typecheck-succeed (: 1 Integer))
-(typecheck-fail (: unit Integer))
+(typecheck-fail (: Unit Integer))
 (typecheck-fail (: 1 Unit))
-(typecheck-fail (unit unit))
+(typecheck-fail (Unit Unit))
 (typecheck-fail (1 1))
 
 (typecheck-succeed 1.0)
@@ -62,115 +62,115 @@
 
 (typecheck-succeed (λ [x] x))
 (typecheck-succeed (λ [x y] x))
-(typecheck-succeed ((λ [x] x) unit))
-(typecheck-succeed (: ((λ [x] x) unit) Unit))
+(typecheck-succeed ((λ [x] x) Unit))
+(typecheck-succeed (: ((λ [x] x) Unit) Unit))
 (typecheck-succeed ((λ [x] x) 1))
 (typecheck-succeed (: ((λ [x] x) 1) Integer))
-(typecheck-succeed ((λ [x y] x) unit 1))
-(typecheck-succeed (: ((λ [x y] x) unit 1) Unit))
-(typecheck-succeed ((λ [x y] y) unit 1))
-(typecheck-succeed (: ((λ [x y] y) unit 1) Integer))
+(typecheck-succeed ((λ [x y] x) Unit 1))
+(typecheck-succeed (: ((λ [x y] x) Unit 1) Unit))
+(typecheck-succeed ((λ [x y] y) Unit 1))
+(typecheck-succeed (: ((λ [x y] y) Unit 1) Integer))
 
 (typecheck-fail (: (λ [x] x) Unit))
 (typecheck-fail (: ((λ [x] x) 1) Unit))
 (typecheck-fail (: ((λ [x y] x) 1) Unit))
 (typecheck-fail (: ((λ [x y] y) 1) Unit))
 
-(typecheck-succeed (tuple unit unit))
-(typecheck-succeed (: (tuple unit unit) (Tuple Unit Unit)))
-(typecheck-succeed (tuple 1 1))
-(typecheck-succeed (: (tuple 1 1) (Tuple Integer Integer)))
-(typecheck-succeed (tuple 1 unit))
-(typecheck-succeed (: (tuple 1 unit) (Tuple Integer Unit)))
-(typecheck-succeed (tuple unit 1))
-(typecheck-succeed (: (tuple unit 1) (Tuple Unit Integer)))
+(typecheck-succeed (Tuple Unit Unit))
+(typecheck-succeed (: (Tuple Unit Unit) (Tuple Unit Unit)))
+(typecheck-succeed (Tuple 1 1))
+(typecheck-succeed (: (Tuple 1 1) (Tuple Integer Integer)))
+(typecheck-succeed (Tuple 1 Unit))
+(typecheck-succeed (: (Tuple 1 Unit) (Tuple Integer Unit)))
+(typecheck-succeed (Tuple Unit 1))
+(typecheck-succeed (: (Tuple Unit 1) (Tuple Unit Integer)))
 
-(typecheck-fail (: (tuple unit unit) (Tuple Integer Integer)))
-(typecheck-fail (: (tuple unit unit) (Tuple Unit Integer)))
-(typecheck-fail (: (tuple unit unit) (Tuple Integer Unit)))
+(typecheck-fail (: (Tuple Unit Unit) (Tuple Integer Integer)))
+(typecheck-fail (: (Tuple Unit Unit) (Tuple Unit Integer)))
+(typecheck-fail (: (Tuple Unit Unit) (Tuple Integer Unit)))
 
 (typecheck-succeed (: (λ [x] x) (∀ [a] {a -> a})))
 (typecheck-fail (: (λ [x] 1) (∀ [a] {a -> a})))
 (typecheck-succeed (: (λ [x y] x) (∀ [a b] {a -> b -> a})))
 (typecheck-fail (: (λ [x y] y) (∀ [a b] {a -> b -> a})))
 
-(typecheck-succeed true)
-(typecheck-succeed (: true Bool))
-(typecheck-succeed false)
-(typecheck-succeed (: false Bool))
-(typecheck-fail (: true Unit))
-(typecheck-fail (: false Unit))
+(typecheck-succeed True)
+(typecheck-succeed (: True Bool))
+(typecheck-succeed False)
+(typecheck-succeed (: False Bool))
+(typecheck-fail (: True Unit))
+(typecheck-fail (: False Unit))
 
-(typecheck-succeed just)
-(typecheck-succeed (: just (∀ [a] {a -> (Maybe a)})))
-(typecheck-succeed (: just {Unit -> (Maybe Unit)}))
-(typecheck-succeed (just unit))
-(typecheck-succeed (: (just unit) (Maybe Unit)))
-(typecheck-succeed nothing)
-(typecheck-succeed (: nothing (∀ [a] (Maybe a))))
-(typecheck-succeed (: nothing (Maybe Unit)))
-(typecheck-fail (: just (Maybe Unit)))
-(typecheck-fail (: (just unit) (∀ [a] (Maybe a))))
-(typecheck-fail (: (just unit) (Maybe Integer)))
-(typecheck-fail (: nothing Unit))
-(typecheck-fail (: (: nothing (Maybe Unit)) (∀ [a] (Maybe a))))
-(typecheck-fail (: (: nothing (Maybe Unit)) (Maybe Integer)))
+(typecheck-succeed Just)
+(typecheck-succeed (: Just (∀ [a] {a -> (Maybe a)})))
+(typecheck-succeed (: Just {Unit -> (Maybe Unit)}))
+(typecheck-succeed (Just Unit))
+(typecheck-succeed (: (Just Unit) (Maybe Unit)))
+(typecheck-succeed Nothing)
+(typecheck-succeed (: Nothing (∀ [a] (Maybe a))))
+(typecheck-succeed (: Nothing (Maybe Unit)))
+(typecheck-fail (: Just (Maybe Unit)))
+(typecheck-fail (: (Just Unit) (∀ [a] (Maybe a))))
+(typecheck-fail (: (Just Unit) (Maybe Integer)))
+(typecheck-fail (: Nothing Unit))
+(typecheck-fail (: (: Nothing (Maybe Unit)) (∀ [a] (Maybe a))))
+(typecheck-fail (: (: Nothing (Maybe Unit)) (Maybe Integer)))
 
-(typecheck-succeed (case nothing
-                     [(just x) x]
-                     [nothing unit]))
-(typecheck-succeed (: (case nothing
-                        [(just x) x]
-                        [nothing unit])
+(typecheck-succeed (case Nothing
+                     [(Just x) x]
+                     [Nothing Unit]))
+(typecheck-succeed (: (case Nothing
+                        [(Just x) x]
+                        [Nothing Unit])
                       Unit))
 (typecheck-succeed (λ [x] (case x
-                            [(just x) x]
-                            [nothing unit])))
+                            [(Just x) x]
+                            [Nothing Unit])))
 (typecheck-succeed (: (λ [x] (case x
-                               [(just x) x]
-                               [nothing unit]))
+                               [(Just x) x]
+                               [Nothing Unit]))
                       (-> (Maybe Unit) Unit)))
 (typecheck-fail (: (λ [x] (case x
-                            [(just x) x]
-                            [nothing unit]))
+                            [(Just x) x]
+                            [Nothing Unit]))
                    (-> (Maybe Integer) Unit)))
 (typecheck-fail (: (λ [x] (case x
-                            [(just x) x]
-                            [nothing unit]))
+                            [(Just x) x]
+                            [Nothing Unit]))
                    (∀ [a] (-> (Maybe a) Unit))))
-(typecheck-succeed (case nothing
-                     [(just (just x)) x]
-                     [_ unit]))
-(typecheck-succeed (: (case nothing
-                        [(just (just x)) x]
-                        [_ unit])
+(typecheck-succeed (case Nothing
+                     [(Just (Just x)) x]
+                     [_ Unit]))
+(typecheck-succeed (: (case Nothing
+                        [(Just (Just x)) x]
+                        [_ Unit])
                       Unit))
-(typecheck-fail (case nothing
-                  [(just x) x]
-                  [(just (just x)) x]
-                  [_ unit]))
+(typecheck-fail (case Nothing
+                  [(Just x) x]
+                  [(Just (Just x)) x]
+                  [_ Unit]))
 (typecheck-fail (λ [x] (case x
-                         [nothing unit]
-                         [true unit])))
+                         [Nothing Unit]
+                         [True Unit])))
 
 (typecheck-succeed (λ [m] (case m
-                            [nothing nothing]
-                            [_ nothing])))
+                            [Nothing Nothing]
+                            [_ Nothing])))
 (typecheck-succeed (: (λ [m] (case m
-                               [nothing nothing]
-                               [_ nothing]))
+                               [Nothing Nothing]
+                               [_ Nothing]))
                       (∀ [a b] {(Maybe a) -> (Maybe b)})))
 (typecheck-succeed (λ [f m] (case m
-                              [(just x) (just (f x))]
-                              [nothing nothing])))
+                              [(Just x) (Just (f x))]
+                              [Nothing Nothing])))
 (typecheck-succeed (: (λ [f m] (case m
-                                 [(just x) (just (f x))]
-                                 [nothing nothing]))
+                                 [(Just x) (Just (f x))]
+                                 [Nothing Nothing]))
                       (∀ [a b] {{a -> b} -> (Maybe a) -> (Maybe b)})))
 
-(typecheck-succeed {just . (+ 1)})
-(typecheck-succeed (: {just . (+ 1)} {Integer -> (Maybe Integer)}))
-(typecheck-fail {just . 1})
+(typecheck-succeed {Just . (+ 1)})
+(typecheck-succeed (: {Just . (+ 1)} {Integer -> (Maybe Integer)}))
+(typecheck-fail {Just . 1})
 
 (typecheck-succeed (let ([x 1]) (+ x 1)))
 (typecheck-succeed (: (let ([x 1]) (+ x 1)) Integer))
@@ -197,19 +197,19 @@
 (typecheck-fail (letrec ([xs 42]) (take 4 xs)))
 (typecheck-fail (letrec ([xs {1 :: ys}] [ys 5]) xs))
 
-(typecheck-succeed (λ [xs] (case xs [_ unit])))
+(typecheck-succeed (λ [xs] (case xs [_ Unit])))
 (typecheck-succeed (λ [xs] (case xs
-                             [nil unit]
-                             [{_ :: _} unit])))
+                             [Nil Unit]
+                             [{_ :: _} Unit])))
 (typecheck-fail (λ [xs] (case xs
-                          [nil unit])))
+                          [Nil Unit])))
 (typecheck-succeed (λ [xs] (case xs
-                             [nil unit]
-                             [{_ :: _ :: _} unit]
-                             [{_ :: _} unit])))
+                             [Nil Unit]
+                             [{_ :: _ :: _} Unit]
+                             [{_ :: _} Unit])))
 (typecheck-fail (λ [xs] (case xs
-                          [nil unit]
-                          [{_ :: _ :: _} unit])))
+                          [Nil Unit]
+                          [{_ :: _ :: _} Unit])))
 (typecheck-fail (λ [xs] (case xs
-                          [{_ :: _ :: _} unit]
-                          [{_ :: _} unit])))
+                          [{_ :: _ :: _} Unit]
+                          [{_ :: _} Unit])))

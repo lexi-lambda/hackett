@@ -6,14 +6,14 @@
 (provide (data Unit) (data Bool) (data Tuple) (data Maybe) (data Either) (data List)
          (data IO) (data Real-World))
 
-(data Unit unit)
-(data Bool true false)
-(data (Tuple a b) (tuple a b))
-(data (Maybe a) (just a) nothing)
-(data (Either a b) (left a) (right b))
+(data Unit Unit)
+(data Bool True False)
+(data (Tuple a b) (Tuple a b))
+(data (Maybe a) (Just a) Nothing)
+(data (Either a b) (Left a) (Right b))
 (data (List a)
   {a :: (List a)} #:fixity right
-  nil)
+  Nil)
 
-(data Real-World real-world)
-(data (IO a) (io (-> Real-World (Tuple Real-World a))))
+(data Real-World Real-World)
+(data (IO a) (IO (-> Real-World (Tuple Real-World a))))

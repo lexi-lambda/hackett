@@ -2,7 +2,11 @@
 
 (require (for-label hackett)
 
-         (for-syntax racket/base)
+         (for-syntax racket/base
+                     racket/contract
+                     racket/list
+                     syntax/id-table
+                     syntax/parse/experimental/template)
 
          racket/list
          scribble/struct
@@ -19,9 +23,12 @@
                   id-to-target-maker with-exporting-libraries
                   definition-site)
 
-         (only-meta-in 1 hackett/private/adt))
+         (only-meta-in 1 hackett/private/adt)
 
-(provide |.| \|\| defdata defclass defmethod)
+         (prefix-in patched/ scribble/manual/hackett/private/manual-bind))
+
+(provide (for-syntax register-type-binding! type-binding-value type-binding-id)
+         |.| \|\| deftycon deftycon* deftype defdata defclass defmethod)
 
 ; Provide an element transformer to typeset |.| (the function composition operator) without vertical
 ; bars.
@@ -35,6 +42,27 @@
    (λ (stx) #'(racketlink \|\| (racketidfont "||")))))
 
 (begin-for-syntax
+  (struct type-binding (prefixed-id bare-id)
+    #:transparent)
+
+  (define type-label-bindings (make-free-id-table))
+  (define/contract (register-type-binding! id prefixed-id bare-id)
+    (-> identifier? identifier? identifier? void?)
+    (free-id-table-set! type-label-bindings id (type-binding prefixed-id bare-id)))
+  (define/contract (type-binding-value id)
+    (-> identifier? (or/c type-binding? #f))
+    (free-id-table-ref type-label-bindings id #f)))
+
+(begin-for-syntax
+  (define-syntax-class type-binding-id
+    #:description "type binding"
+    #:attributes [prefixed-id bare-id]
+    [pattern x:id
+             #:do [(define type-binding (type-binding-value #'x))]
+             #:when type-binding
+             #:attr prefixed-id (type-binding-prefixed-id type-binding)
+             #:attr bare-id (type-binding-bare-id type-binding)])
+
   (define-splicing-syntax-class kind-kw
     #:description "#:kind keyword"
     (pattern (~optional (~seq #:kind kind)
@@ -44,17 +72,60 @@
     #:description "#:link-target? keyword"
     (pattern (~seq #:link-target? expr))
     (pattern (~seq)
-             #:with expr #'#t))
+             #:with expr #'#t)))
 
-  (define-syntax-class id-or-false
-    (pattern i:id)
-    (pattern #f #:with i #'#f))
-   
-  (define-splicing-syntax-class id-kw
-    #:description "#:id keyword"
-    (pattern (~optional (~seq #:id [key:id-or-false expr])
-                        #:defaults ([key #'#f]
-                                    [expr #'#f])))))
+(define-syntax-parser deftycon
+  [(_ k:patched/kind-kw lt:patched/link-target?-kw l:patched/literals-kw
+      {~and spec (type:type-binding-id . spec-body)}
+      subs:patched/subs-kw c:patched/contracts-kw desc ...)
+   (quasitemplate/loc this-syntax
+     (patched/defform
+      {?? {?@ . k} {?@ #:kind "type constructor"}} {?? {?@ . lt}} {?? {?@ . l}}
+      #:id type.prefixed-id
+      #,(datum->syntax #'here
+                       (cons (datum->syntax #'type.bare-id
+                                            (syntax-e #'type.bare-id)
+                                            #'type
+                                            #'type.bare-id)
+                             #'spec-body)
+                       #'spec)
+      {?? {?@ . subs}} {?? {?@ . c}} desc ...))])
+
+(define-syntax-parser deftycon*
+  [(_ k:patched/kind-kw lt:patched/link-target?-kw l:patched/literals-kw
+      [{~and spec (type:type-binding-id . spec-body)} ...+]
+      subs:patched/subs-kw c:patched/contracts-kw desc ...)
+   #:with defined-id (first (attribute type.prefixed-id))
+   #:with [spec* ...] (for/list ([spec (in-list (attribute spec))]
+                                 [type (in-list (attribute type))]
+                                 [display-id (in-list (attribute type.bare-id))]
+                                 [spec-body (in-list (attribute spec-body))])
+                        (datum->syntax #f
+                                       (cons (datum->syntax display-id
+                                                            (syntax-e display-id)
+                                                            type
+                                                            display-id)
+                                             spec-body)
+                                       spec
+                                       spec))
+   (quasitemplate/loc this-syntax
+     (patched/defform*
+      {?? {?@ . k} {?@ #:kind "type constructor"}} {?? {?@ . lt}}
+      #:id defined-id
+      {?? {?@ . l}}
+      [spec* ...]
+      {?? {?@ . subs}} {?? {?@ . c}}
+      desc ...))])
+
+(define-syntax-parser deftype
+  [(_ k:patched/kind-kw lt:patched/link-target?-kw d:patched/id-kw type:type-binding-id
+      desc ...)
+   (quasitemplate/loc this-syntax
+     (patched/defidform
+      {?? {?@ . k} {?@ #:kind "type"}} {?? {?@ . lt}}
+      #:id type.prefixed-id
+      #,(datum->syntax #'type.bare-id (syntax-e #'type.bare-id) #'type #'type.bare-id)
+      desc ...))])
 
 (define-syntax-parser defdata
   [(_ kind:kind-kw 
@@ -62,14 +133,14 @@
       type:type-constructor-spec
       constructor:data-constructor-spec ...
       desc ...)
+   #:with tag:type-binding-id #'type.tag
    #'(let-syntax ([type.arg (make-variable-id 'type.arg)] ...)
        (*defdata kind.kind
                  lt.expr
-                 (quote-syntax type.tag)
-                 'type.tag
+                 (quote-syntax tag.prefixed-id)
+                 (quote-syntax tag.bare-id)
                  (list (racket type.arg) ...)
                  (list (quote-syntax constructor.tag) ...)
-                 (list 'constructor.tag ...)
                  (list (list (racket constructor.arg) ...) ...)
                  (lambda () (list desc ...))))])
 
@@ -78,14 +149,14 @@
       lt:link-target?-kw
       {~optional {~seq #:super [super-constraint ...]}
                  #:defaults ([[super-constraint 1] '()])}
-      (name:id var-id:id)
+      (name:type-binding-id var-id:id)
       [method-id:id method-type:expr] ...
       desc ...)
    #'(let-syntax ([var-id (make-variable-id 'var-id)])
        (*defclass kind.kind
                   lt.expr
-                  (quote-syntax name)
-                  'name
+                  (quote-syntax name.prefixed-id)
+                  (quote-syntax name.bare-id)
                   (list (racket super-constraint) ...)
                   (racket var-id)
                   (list (racket method-id) ...)
@@ -100,11 +171,11 @@
 (define boxed-style 
   (make-style 'boxed (list (make-attributes (list (cons 'class "RBoxed"))))))
 
-(define (*defdata kind link? type-id type-name type-args ctor-ids ctor-names ctor-argss content-thunk)
-  (define (make-constructor stx-id name args)
-    (let* ([content (to-element (make-just-context name stx-id) #:defn? #t)]
-           [ref-content (to-element (make-just-context name stx-id))]
-           [thing-id ((id-to-target-maker stx-id #t)
+(define (*defdata kind link? type-orig-id type-bare-id type-args ctor-ids ctor-argss content-thunk)
+  (define (make-constructor binding-id display-id args)
+    (let* ([content (to-element display-id #:defn? #t)]
+           [ref-content (to-element display-id)]
+           [thing-id ((id-to-target-maker binding-id #t)
                       content
                       (λ (tag)
                         (make-toc-target2-element
@@ -113,10 +184,10 @@
                           #f
                           content
                           tag
-                          (list (symbol->string name))
+                          (list (symbol->string (syntax-e display-id)))
                           (list ref-content)
                           (with-exporting-libraries
-                           (λ (libs) (make-thing-index-desc name libs))))
+                           (λ (libs) (make-thing-index-desc (syntax-e display-id) libs))))
                          tag
                          ref-content)))])
       (if (empty? args)
@@ -141,22 +212,21 @@
                                         (list (racketparenfont "(")
                                               (racket data)
                                               (hspace 1)
-                                              (make-constructor type-id type-name type-args)
+                                              (make-constructor type-orig-id type-bare-id type-args)
                                               (for/list ([ctor-id (in-list ctor-ids)]
-                                                         [ctor-name (in-list ctor-names)]
                                                          [ctor-args (in-list ctor-argss)])
                                                 (list (linebreak)
                                                       (hspace 2)
-                                                      (make-constructor ctor-id ctor-name ctor-args)))
+                                                      (make-constructor ctor-id ctor-id ctor-args)))
                                               (racketparenfont ")")))))))))))))
     (content-thunk))))
 
-(define (*defclass kind link? class-id class-name super-constraints var-id method-ids method-types
-                   content-thunk)
+(define (*defclass kind link? class-orig-id class-bare-id super-constraints var-id method-ids
+                   method-types content-thunk)
   (define class-head
-    (let* ([content (to-element (make-just-context class-name class-id) #:defn? #t)]
-           [ref-content (to-element (make-just-context class-name class-id))]
-           [thing-id ((id-to-target-maker class-id #t)
+    (let* ([content (to-element class-bare-id #:defn? #t)]
+           [ref-content (to-element class-bare-id)]
+           [thing-id ((id-to-target-maker class-orig-id #t)
                       content
                       (λ (tag)
                         (make-toc-target2-element
@@ -165,10 +235,10 @@
                           #f
                           content
                           tag
-                          (list (symbol->string class-name))
+                          (list (symbol->string (syntax-e class-bare-id)))
                           (list ref-content)
                           (with-exporting-libraries
-                           (λ (libs) (make-thing-index-desc class-name libs))))
+                           (λ (libs) (make-thing-index-desc (syntax-e class-bare-id) libs))))
                          tag
                          ref-content)))])
       (list (racketparenfont "(") thing-id (hspace 1) var-id (racketparenfont ")"))))

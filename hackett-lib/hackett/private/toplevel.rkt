@@ -68,9 +68,11 @@
          racket/promise
          syntax/parse/define
 
+         hackett/private/type-reqprov
          (only-in hackett/private/base τ⇒! τ⇐!)
-         (only-in hackett/private/kernel String [#%app @%app])
-         (only-in hackett/private/prim/base show))
+         (only-in (unmangle-types-in #:no-introduce hackett/private/kernel) String [#%app @%app])
+         (only-in hackett/private/prim/base show)
+         hackett/private/splicing)
 
 (provide @%top-interaction)
 
@@ -85,7 +87,17 @@
   [(define (write-proc result port mode)
      (fprintf port ": ~a" (type-result-type result)))])
 
+(begin-for-syntax
+  (define top-level-value-introducer (make-syntax-introducer #t))
+  (define top-level-type-introducer (make-syntax-introducer #t)))
+
 (define-syntax-parser @%top-interaction
+  [(_ . form)
+   #'(splicing-syntax-parameterize ([current-value-introducer top-level-value-introducer]
+                                    [current-type-introducer top-level-type-introducer])
+       (@%top-interaction* . form))])
+
+(define-syntax-parser @%top-interaction*
   [(_ . (#:type ~! expr:expr))
    (match-let-values ([(_ τ_e) (τ⇒! #'expr)])
      #`(type-result '#,(τ->string (apply-current-subst τ_e))))]
@@ -93,13 +105,13 @@
    (syntax-parse (local-expand #'form 'top-level (kernel-form-identifier-list))
      #:context this-syntax
      #:literal-sets [kernel-literals]
-     [({~or begin-for-syntax define-syntaxes define-values} . _)
+     [({~or #%require begin-for-syntax define-syntaxes define-values} . _)
       this-syntax]
      [(begin)
       this-syntax]
      [(begin form ... form*)
       (syntax/loc this-syntax
-        (begin form ... (@%top-interaction . form*)))]
+        (begin form ... (@%top-interaction* . form*)))]
      [expr
       (match-let*-values ([(e- τ_e) (τ⇒! #'expr)]
                           [(e-/show) (τ⇐! (quasisyntax/loc this-syntax

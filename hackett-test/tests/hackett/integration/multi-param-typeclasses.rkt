@@ -12,4 +12,4 @@
   [coerce integer->double])
 
 (test {(: (coerce 5) String) ==! "5"})
-(test {{{5.0 d- (coerce 5)} d< 0.1} ==! true})
+(test {{{5.0 d- (coerce 5)} d< 0.1} ==! True})

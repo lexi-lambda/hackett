@@ -402,7 +402,7 @@
    ; calculate the type of the underlying constructor, with arguments, unquantified
    #:with τ_con_unquantified (foldr #{begin #`(@%app -> #,%1 #,%2)}
                                     #'τ_result
-                                    (attribute constructor.arg))
+                                    (map type-namespace-introduce (attribute constructor.arg)))
    ; quantify the type using the type variables in τ, then evaluate the type
    #:with τ_con:type (foldr #{begin #`(∀ #,%1 #,%2)} #'τ_con_unquantified (attribute τ.arg))
    #:with τ_con-expr (preservable-property->expression (attribute τ_con.τ))
@@ -435,12 +435,13 @@
 
 (define-syntax-parser data
   [(_ τ:type-constructor-spec constructor:data-constructor-spec ...)
+   #:with [τ*:type-constructor-spec] (type-namespace-introduce #'τ)
    #`(begin-
        #,(indirect-infix-definition
-          #'(define-syntax- τ.tag (make-type-variable-transformer
-                                   (τ:con #'τ.tag (list #'constructor.tag ...))))
+          #'(define-syntax- τ*.tag (make-type-variable-transformer
+                                    (τ:con #'τ*.tag (list #'constructor.tag ...))))
           (attribute τ.fixity))
-       (define-data-constructor τ constructor) ...)])
+       (define-data-constructor τ* constructor) ...)])
 
 (begin-for-syntax
   (define-syntax-class (case*-clause num-pats)
@@ -565,7 +566,7 @@
 (define-syntax-parser defn
   #:literals [:]
   [(_ id:id
-      {~or {~optional {~seq : t:type}}
+      {~or {~optional {~seq : {~type t:type}}}
            {~optional fixity:fixity-annotation}}
       ...
       clauses:λ*-clauses)

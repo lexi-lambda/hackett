@@ -3,6 +3,7 @@
 (require (only-in racket/base all-from-out for-syntax module submod))
 
 (module shared hackett
+  (#%require/only-types hackett)
   (provide (data KeyEvent) (data MouseEvent))
 
   (data KeyEvent
@@ -22,28 +23,35 @@
     (me:unknown String)))
 
 (module untyped racket/base
-  (require hackett/private/util/require
+  (require hackett/private/type-reqprov
+           hackett/private/util/require
 
-           (prefix-in hackett: (combine-in hackett hackett/demo/pict (submod ".." shared)))
+           (prefix-in hackett: (unmangle-types-in #:prefix t:
+                                                  (combine-in hackett
+                                                              hackett/demo/pict
+                                                              (submod ".." shared))))
            (postfix-in - (combine-in 2htdp/universe pict racket/base racket/match racket/promise))
 
-           (only-in hackett ∀ : -> Integer Double IO Unit)
-           (only-in hackett/private/prim io unsafe-run-io!)
+           (only-in (unmangle-types-in #:prefix t: hackett)
+                    : t:IO t:Unit
+                    [t:∀ ∀] [t:-> ->] [t:Integer Integer] [t:Double Double])
+           (only-in hackett/private/prim IO unsafe-run-io!)
            hackett/private/prim/type-provide
            threading)
 
   (provide (typed-out
-            [random-integer : {Integer -> Integer -> (IO Integer)}]
-            [random-double : (IO Double)]
-            [animate : {{Integer -> hackett:Pict} -> (IO Unit)}]
-            [big-bang/proc : (∀ [state]
-                                {state
-                                 -> {state -> (IO state)} -> Double
-                                 -> {state -> hackett:Pict}
-                                 -> {hackett:KeyEvent -> state -> (IO state)}
-                                 -> {hackett:KeyEvent -> state -> (IO state)}
-                                 -> {Integer -> Integer -> hackett:MouseEvent -> state -> (IO state)}
-                                 -> (IO state)})]))
+            [random-integer : {Integer -> Integer -> (t:IO Integer)}]
+            [random-double : (t:IO Double)]
+            [animate : {{Integer -> hackett:t:Pict} -> (t:IO t:Unit)}]
+            [big-bang/proc
+             : (∀ [state]
+                  {state
+                   -> {state -> (t:IO state)} -> Double
+                   -> {state -> hackett:t:Pict}
+                   -> {hackett:t:KeyEvent -> state -> (t:IO state)}
+                   -> {hackett:t:KeyEvent -> state -> (t:IO state)}
+                   -> {Integer -> Integer -> hackett:t:MouseEvent -> state -> (t:IO state)}
+                   -> (t:IO state)})]))
 
   (define (pict->image p) (pict->bitmap- (force- p)))
 
@@ -67,15 +75,15 @@
       [_ (hackett:me:unknown str)]))
 
   (define ((random-integer low) high)
-    (io (λ- (rw) ((hackett:tuple rw) (random- (force- low) (force- high))))))
+    (IO (λ- (rw) ((hackett:Tuple rw) (random- (force- low) (force- high))))))
 
   (define random-double
-    (io (λ- (rw) ((hackett:tuple rw) (real->double-flonum- (random-))))))
+    (IO (λ- (rw) ((hackett:Tuple rw) (real->double-flonum- (random-))))))
 
   (define (animate f)
-    (io (λ- (rw)
+    (IO (λ- (rw)
           (animate- (λ- (x) (pict->image ((force- f) x))))
-          ((hackett:tuple rw) hackett:unit))))
+          ((hackett:Tuple rw) hackett:Unit))))
 
   (define (((((((big-bang/proc init-state)
                 tick-fn) tick-rate)
@@ -83,8 +91,8 @@
              key-fn)
             release-fn)
            mouse-fn)
-    (io (λ- (rw)
-          ((hackett:tuple rw)
+    (IO (λ- (rw)
+          ((hackett:Tuple rw)
            (big-bang- init-state
              [on-tick- (λ- (s) (force- (unsafe-run-io! ((force- tick-fn) s))))
                        (force- tick-rate)]

@@ -3,38 +3,43 @@
 (require (only-in racket/base all-from-out module submod))
 
 (module shared hackett
+  (#%require/only-types hackett)
   (provide (data Color) color-red color-green color-blue color-alpha
            white black red orange yellow green blue purple)
 
-  (data Color (color Integer Integer Integer Double))
-  (defn color-red : {Color -> Integer} [[(color x _ _ _)] x])
-  (defn color-green : {Color -> Integer} [[(color _ x _ _)] x])
-  (defn color-blue : {Color -> Integer} [[(color _ _ x _)] x])
-  (defn color-alpha : {Color -> Double} [[(color _ _ _ x)] x])
+  (data Color (Color Integer Integer Integer Double))
+  (defn color-red : {Color -> Integer} [[(Color x _ _ _)] x])
+  (defn color-green : {Color -> Integer} [[(Color _ x _ _)] x])
+  (defn color-blue : {Color -> Integer} [[(Color _ _ x _)] x])
+  (defn color-alpha : {Color -> Double} [[(Color _ _ _ x)] x])
 
-  (def white : Color (color 255 255 255 1.0))
-  (def black : Color (color 0 0 0 1.0))
-  (def red : Color (color 255 0 0 1.0))
-  (def orange : Color (color 255 165 0 1.0))
-  (def yellow : Color (color 255 255 0 1.0))
-  (def green : Color (color 0 255 0 1.0))
-  (def blue : Color (color 0 0 255 1.0))
-  (def purple : Color (color 128 0 128 1.0)))
+  (def white : Color (Color 255 255 255 1.0))
+  (def black : Color (Color 0 0 0 1.0))
+  (def red : Color (Color 255 0 0 1.0))
+  (def orange : Color (Color 255 165 0 1.0))
+  (def yellow : Color (Color 255 255 0 1.0))
+  (def green : Color (Color 0 255 0 1.0))
+  (def blue : Color (Color 0 0 255 1.0))
+  (def purple : Color (Color 128 0 128 1.0)))
 
 (module untyped racket/base
-  (require hackett/private/util/require
+  (require hackett/private/type-reqprov
+           hackett/private/util/require
 
-           (prefix-in hackett: (combine-in hackett (submod ".." shared)))
+           (prefix-in hackett: (unmangle-types-in #:prefix t:
+                                                  (combine-in hackett (submod ".." shared))))
            (postfix-in - (combine-in pict racket/base racket/draw racket/promise))
 
-           (only-in hackett : -> Integer Double String IO Unit)
+           (only-in (unmangle-types-in #:prefix t: hackett)
+                    : t:IO t:Unit
+                    [t:-> ->] [t:Integer Integer] [t:Double Double] [t:String String])
            (only-in hackett/private/base define-base-type)
-           (only-in hackett/private/prim/type io)
+           (only-in hackett/private/prim/type IO)
            hackett/private/prim/type-provide)
 
   (define-base-type Pict)
 
-  (provide Pict
+  (provide (type-out #:no-introduce Pict)
            (typed-out
             [pict-width : {Pict -> Double}]
             [pict-height : {Pict -> Double}]
@@ -78,11 +83,11 @@
             [scale : {Double -> Pict -> Pict}]
             [scale* : {Double -> Double -> Pict -> Pict}]
 
-            [colorize : {hackett:Color -> Pict -> Pict}]
+            [colorize : {hackett:t:Color -> Pict -> Pict}]
 
             [freeze : {Pict -> Pict}]
 
-            [print-pict : {Pict -> (IO Unit)}]))
+            [print-pict : {Pict -> (t:IO t:Unit)}]))
 
   (define (Color->color% c)
     (make-color- (force- (hackett:color-red c))
@@ -140,12 +145,13 @@
   (define (freeze p) (freeze- (force- p)))
 
   (define (print-pict p)
-    (io (λ (rw)
+    (IO (λ (rw)
           (println (force- p))
-          ((hackett:tuple rw) hackett:unit)))))
+          ((hackett:Tuple rw) hackett:Unit)))))
 
 (require (submod "." shared)
          (submod "." untyped))
 
 (provide (all-from-out (submod "." shared))
-         (all-from-out (submod "." untyped)))
+         (all-from-out (submod "." untyped))
+         (type-out Color Pict))

@@ -1,28 +1,30 @@
 #lang curly-fn racket/base
 
-(require racket/require hackett/private/util/require)
+(require racket/provide racket/require hackett/private/util/require)
 
-(require (for-syntax (multi-in racket [base contract list match syntax])
+(require (for-syntax (multi-in racket [base contract list match provide-transform require-transform
+                                       syntax])
                      syntax/parse/experimental/template
                      threading)
          (postfix-in - (combine-in racket/base
                                    racket/promise
-                                   syntax/id-table))
+                                   syntax/id-table
+                                   hackett/private/splicing))
          racket/stxparam
          syntax/parse/define
 
          (for-syntax hackett/private/infix
                      hackett/private/typecheck
                      hackett/private/util/list
-                     hackett/private/util/stx))
+                     hackett/private/util/stx)
+         hackett/private/module-plus)
 
 (provide (for-syntax (all-from-out hackett/private/typecheck)
                      τs⇔/λ! τ⇔/λ! τ⇔! τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒!)
          #%module-begin #%top
-         (rename-out [#%plain-module-begin @%module-begin]
-                     [#%top @%top]
+         (rename-out [#%top @%top]
                      [∀ forall])
-         @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary
+         @%module-begin @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary
          define-primop define-base-type
          -> ∀ => Integer Double String
          : λ1 def let letrec)
@@ -332,6 +334,51 @@
                      constrs)))])
        dict-expr)])
 
+;; ---------------------------------------------------------------------------------------------------
+
+(define-syntax-parser @%module-begin
+  [(_ form ...)
+   #:with body-form #'(with-module+-lift-target (begin/value-namespace form ...))
+   ; If we expand to code that uses make-syntax-introducer directly, then we’ll end up with a
+   ; different scope for each instantiation of the module. Normally this is okay, but it isn’t when
+   ; dealing with (module* m #f ....) submodules, which ought to inherit the namespace scopes from
+   ; their enclosing modules.
+   ;
+   ; To accommodate this case, we can expand to pieces of syntax, then use
+   ; make-syntax-delta-introducer to ensure that the scopes remain the same across multiple module
+   ; instantiations. Additionally, when we detect we’re inside such a submodule, we don’t want to
+   ; re-parameterize the introducers (since we want to use the ones we inherit from the enclosing
+   ; module).
+   #:with scopeless (datum->syntax #f 'introducer-id)
+   #:with value-scoped ((make-syntax-introducer #t) #'scopeless)
+   #:with type-scoped ((make-syntax-introducer #t) #'scopeless)
+   (if (syntax-parameter-value #'current-value-introducer)
+       #'(#%plain-module-begin body-form)
+       #'(#%plain-module-begin
+          (splicing-let-syntax- ([scopeless #f] [value-scoped #f] [type-scoped #f])
+            (splicing-syntax-parameterize-
+                ([current-value-introducer (make-syntax-delta-introducer
+                                            (quote-syntax value-scoped)
+                                            (quote-syntax scopeless))]
+                 [current-type-introducer (make-syntax-delta-introducer
+                                           (quote-syntax type-scoped)
+                                           (quote-syntax scopeless))])
+              body-form))))])
+
+(define-syntax-parser begin/value-namespace
+  [(_ form ...)
+   (value-namespace-introduce
+    (syntax/loc this-syntax
+      (begin form ...)))])
+
+(define-syntax-parser begin/type-namespace
+  [(_ form ...)
+   (type-namespace-introduce
+    (syntax/loc this-syntax
+      (begin form ...)))])
+
+;; ---------------------------------------------------------------------------------------------------
+
 (define-syntax-parser @%datum
   [(_ . n:exact-integer)
    (attach-type #'(#%datum . n) (parse-type #'Integer))]
@@ -344,7 +391,7 @@
    (raise-syntax-error #f "literal not supported" #'x)])
 
 (define-syntax-parser :
-  [(_ e t-expr:type)
+  [(_ e {~type t-expr:type})
    (attach-type #`(let-values- ([() (begin- (λ- () t-expr.expansion) (values-))])
                     #,(τ⇐! #'e (attribute t-expr.τ)))
                 (apply-current-subst (attribute t-expr.τ)))])
@@ -381,7 +428,7 @@
 (define-syntax-parser def
   #:literals [:]
   [(_ id:id
-      {~or {~once {~seq : t:type}}
+      {~or {~once {~seq : {~type t:type}}}
            {~optional fixity:fixity-annotation}}
       ...
       e:expr)
@@ -411,7 +458,7 @@
 
 (define-syntax-parser let1
   #:literals [:]
-  [(_ [id:id {~optional {~seq colon:: t-ann:type}} val:expr] body:expr)
+  [(_ [id:id {~optional {~seq colon:: {~type t-ann:type}}} val:expr] body:expr)
    #:do [(define-values [val- t_val] (τ⇔! #'val (attribute t-ann.τ)))
          (match-define-values [(list id-) body- t_body]
            (τ⇔/λ! #'body (get-expected this-syntax) (list (cons #'id t_val))))]
@@ -424,7 +471,7 @@
 
 (define-syntax-parser let
   #:literals [:]
-  [(_ ([id:id {~optional {~seq colon:: t-ann:type}} val:expr] ...+) body:expr)
+  [(_ ([id:id {~optional {~seq colon:: {~type t-ann:type}}} val:expr] ...+) body:expr)
    (syntax-parse this-syntax
      [(_ (binding-pair) body)
       (syntax/loc this-syntax
@@ -437,7 +484,7 @@
 
 (define-syntax-parser letrec
   #:literals [:]
-  [(_ ([id:id {~optional {~seq colon:: t-ann:type}} val:expr] ...+) body:expr)
+  [(_ ([id:id {~optional {~seq colon:: {~type t-ann:type}}} val:expr] ...+) body:expr)
    ; First, infer or check the type of each binding. Use τ⇐!\λ to check the type if a type annotation
    ; is provided. Otherwise, use τ⇒!/λ to infer it, and synthesize a fresh type variable for id’s
    ; type during inference. If a type is successfully inferred, unify it with the fresh type variable

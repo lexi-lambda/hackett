@@ -2,6 +2,12 @@
 
 @(require scribblings/hackett/private/util)
 
+@(module racket-labels racket/base
+   (require scribble/manual (for-label racket/base))
+   (provide racket-require)
+   (define racket-require @racket[require]))
+@(require 'racket-labels)
+
 @title[#:tag "reference" #:style 'toc]{The Hackett Reference}
 
 This section provides reference-style documentation for all of the bindings provided by @hash-lang[]
@@ -42,9 +48,9 @@ error is produced.
 
 @(hackett-examples
   #:no-preserve-source-locations
-  (: 42 Integer)
-  (: "hello" String)
-  (eval:error (: "hello" Integer)))
+  (: 42 t:Integer)
+  (: "hello" t:String)
+  (eval:error (: "hello" t:Integer)))
 
 Additionally, some forms (such as @racket[def] and @racket[defn]) recognize literal uses of @racket[:]
 to provide additional locations for type annotations.}
@@ -69,8 +75,8 @@ inferred from @racket[val-expr].
   #:no-preserve-source-locations
   (def x 7)
   (eval:check x 7)
-  (def y : Integer 7)
-  (eval:error (def z : String 7)))
+  (def y : t:Integer 7)
+  (eval:error (def z : t:String 7)))
 
 If @racket[fixity] is specified, it defines @racket[id]’s @tech{operator fixity} when used as an
 @tech{infix operator}.
@@ -101,7 +107,7 @@ following combination of @racket[def], @racket[lambda], and @racket[case*]:
 The @racket[defn] form is generally preferred when defining top-level functions.
 
 @(hackett-examples
-  (defn square : (-> Integer Integer)
+  (defn square : (t:-> t:Integer t:Integer)
     [[x] {x * x}])
   (eval:check (square 5) 25))}
 
@@ -131,9 +137,9 @@ combination of @racket[lambda] and @racket[case*]:
       [[arg-pat ...] body-expr] ...)))
 
 @(hackett-examples
-  (eval:check ((λ* [[(just x)] x]
-                   [[nothing] 0])
-               (just 42))
+  (eval:check ((λ* [[(Just x)] x]
+                   [[Nothing] 0])
+               (Just 42))
               42))}
 
 @subsection[#:tag "reference-local-binding"]{Local Bindings}
@@ -195,9 +201,9 @@ Matches @racket[val-expr] against each @racket[pat], in order. The result of the
 result of the @racket[body-expr] for the first matching @racket[pat].
 
 @(hackett-examples
-  (eval:check (case (just 42)
-                [(just x) x]
-                [nothing 0])
+  (eval:check (case (Just 42)
+                [(Just x) x]
+                [Nothing 0])
               42))}
 
 @defform[(case* [val-expr ...+]
@@ -207,12 +213,20 @@ Like @racket[case], but matches against multiple values at once. Each case only 
 @racket[pat]s succeed.
 
 @(hackett-examples
-  (eval:check (case* [(just 1) (just 2)]
-                [[(just _) nothing] "first"]
-                [[nothing (just _)] "second"]
-                [[(just _) (just _)] "both"]
-                [[nothing nothing] "neither"])
+  (eval:check (case* [(Just 1) (Just 2)]
+                [[(Just _) Nothing] "first"]
+                [[Nothing (Just _)] "second"]
+                [[(Just _) (Just _)] "both"]
+                [[Nothing Nothing] "neither"])
               "both"))}
+
+@subsection[#:tag "reference-imports-exports"]{Imports}
+
+@defform[(require require-spec ...)]{
+
+Imports bindings from a module, just like @racket-require from @racketmodname[racket/base]. The
+@racket[require] binding provided by @racketmodname[hackett] adds support for properly importing
+bindings in the type namespace, but otherwise, the behavior is the same.}
 
 @section[#:tag "reference-datatypes"]{Datatypes}
 
@@ -250,16 +264,16 @@ contains the provided values.
 @(hackett-examples
   #:eval data-examples-eval
   (data Foo
-    (foo1 Integer Bool)
-    (foo2 String)
+    (foo1 t:Integer t:Bool)
+    (foo2 t:String)
     foo3)
-  (instance (Show Foo)
+  (instance (t:Show Foo)
     [show (λ* [[(foo1 a b)] {"(foo1 " ++ (show a) ++ " "
                                       ++ (show b) ++ ")"}]
               [[(foo2 a)] {"(foo2 " ++ (show a) ++ ")"}]
               [[foo3] "foo3"])])
   (#:type foo1)
-  (foo1 42 true)
+  (foo1 42 True)
   (#:type foo2)
   (foo2 "hello")
   foo3)
@@ -271,7 +285,7 @@ pattern-matching allows extracting values stored “inside” data constructors.
 
 @(hackett-examples
   #:eval data-examples-eval
-  (case (foo1 42 true)
+  (case (foo1 42 True)
     [(foo1 n _) n]
     [(foo2 _)   2]
     [foo3       3]))
@@ -284,7 +298,7 @@ specified controls the fixity used by the associated @racket[type-constructor-id
   (data (Tree a)
     {(Tree a) :&: (Tree a)} #:fixity right
     (leaf a))
-  (instance (forall [a] (Show a) => (Show (Tree a)))
+  (instance (t:forall [a] (t:Show a) t:=> (t:Show (Tree a)))
     [show (λ* [[{a :&: b}] {"{" ++ (show a) ++ " :&: " ++ (show b) ++ "}"}]
               [[(leaf a)] {"(leaf " ++ (show a) ++ ")"}])])
   {(leaf 1) :&: (leaf 2) :&: (leaf 3)})}
@@ -292,7 +306,7 @@ specified controls the fixity used by the associated @racket[type-constructor-id
 
 @subsection[#:tag "reference-numbers"]{Numbers}
 
-@defidform[#:kind "type" Integer]{
+@deftype[t:Integer]{
 
 The type of arbitrary-precision integers. Just as with numbers in @hash-lang[] @racketmodname[racket],
 integers will be represented as @tech[#:doc '(lib "scribblings/reference/reference.scrbl")]{fixnums},
@@ -300,41 +314,41 @@ machine integers, where possible. Values that exceed this range will automatical
 arbitrary-precision “bignums”.}
 
 @deftogether[
- [@defthing[+ {Integer -> Integer -> Integer}]
-  @defthing[- {Integer -> Integer -> Integer}]
-  @defthing[* {Integer -> Integer -> Integer}]]]{
+ [@defthing[+ {t:Integer t:-> t:Integer t:-> t:Integer}]
+  @defthing[- {t:Integer t:-> t:Integer t:-> t:Integer}]
+  @defthing[* {t:Integer t:-> t:Integer t:-> t:Integer}]]]{
 
 These functions provide simple, arbitrary-precision, integral arithmetic.}
 
 @deftogether[
- [@defthing[> {Integer -> Integer -> Bool}]
-  @defthing[< {Integer -> Integer -> Bool}]
-  @defthing[>= {Integer -> Integer -> Bool}]
-  @defthing[<= {Integer -> Integer -> Bool}]]]{
+ [@defthing[> {t:Integer t:-> t:Integer t:-> t:Bool}]
+  @defthing[< {t:Integer t:-> t:Integer t:-> t:Bool}]
+  @defthing[>= {t:Integer t:-> t:Integer t:-> t:Bool}]
+  @defthing[<= {t:Integer t:-> t:Integer t:-> t:Bool}]]]{
 
 Comparison operators on integers.}
 
-@defidform[#:kind "type" Double]{
+@deftype[t:Double]{
 
 The type of double-precision IEEE 754 floating-point numbers, known as
 @tech[#:doc '(lib "scribblings/reference/reference.scrbl")]{flonums} in @hash-lang[]
 @racketmodname[racket].}
 
 @deftogether[
- [@defthing[d+ {Double -> Double -> Double}]
-  @defthing[d- {Double -> Double -> Double}]
-  @defthing[d* {Double -> Double -> Double}]
-  @defthing[d/ {Double -> Double -> Double}]]]{
+ [@defthing[d+ {t:Double t:-> t:Double t:-> t:Double}]
+  @defthing[d- {t:Double t:-> t:Double t:-> t:Double}]
+  @defthing[d* {t:Double t:-> t:Double t:-> t:Double}]
+  @defthing[d/ {t:Double t:-> t:Double t:-> t:Double}]]]{
 
-These functions provide simple, floating-point arithmentic on @racket[Double]s.}
+These functions provide simple, floating-point arithmentic on @racket[t:Double]s.}
 
 @subsection[#:tag "reference-strings"]{Strings}
 
-@defidform[#:kind "type" String]{
+@deftype[t:String]{
 
 The type of strings, which can be constructed using string literals.}
 
-@defthing[string-length {String -> Integer}]{
+@defthing[string-length {t:String t:-> t:Integer}]{
 
 Returns the length of a string, in characters.
 
@@ -342,7 +356,7 @@ Returns the length of a string, in characters.
   (eval:check (string-length "hello") 5)
   (eval:check (string-length "Λάμβδα") 6))}
 
-@defthing[string-split {String -> String -> (List String)}]{
+@defthing[string-split {t:String t:-> t:String t:-> (t:List t:String)}]{
 
 Splits a string on all instances of a separator string.
 
@@ -353,25 +367,25 @@ Splits a string on all instances of a separator string.
 
 @subsection[#:tag "reference-functions"]{Functions}
 
-@defform[#:kind "type constructor" (-> a b)]{
+@deftycon[(t:-> a b)]{
 
 A type constructor of arity 2 that represents functions, where @racket[a] is the type of value the
 function accepts as an argument, and @racket[b] is the type of the result. Functions of higher arities
 are represented via @tech[#:key "curried"]{currying}.}
 
-@defthing[id (forall [a] {a -> a})]{
+@defthing[id (t:forall [a] {a t:-> a})]{
 
 The identity function. Returns its argument unchanged.}
 
-@defthing[const (forall [a b] {a -> b -> a})]{
+@defthing[const (t:forall [a b] {a t:-> b t:-> a})]{
 
 Accepts two arguments and returns the first, ignoring the second.
 
 @(hackett-examples
   (eval:check (const "hello" "goodbye") "hello")
-  (eval:check (const unit (error! "never gets here")) unit))}
+  (eval:check (const Unit (error! "never gets here")) Unit))}
 
-@defthing[|.| (forall [a b c] {{b -> c} -> {a -> b} -> {a -> c}})]{
+@defthing[|.| (t:forall [a b c] {{b t:-> c} t:-> {a t:-> b} t:-> {a t:-> c}})]{
 
 Function composition. Given two functions @racket[_f] and @racket[_g], then @racket[({_f |.| _g} _x)]
 is equivalent to @racket[(_f (_g _x))].
@@ -380,311 +394,311 @@ is equivalent to @racket[(_f (_g _x))].
   (def add1AndDouble {(* 2) |.| (+ 1)})
   (eval:check (add1AndDouble 3) 8))}
 
-@defthing[$ (forall [a b] {{a -> b} -> a -> b})]{
+@defthing[$ (t:forall [a b] {{a t:-> b} t:-> a t:-> b})]{
 
 Function application as a binary operator. Not especially useful, since @racket[{_f $ _x}] is
 equivalent to @racket[(_f _x)], but sometimes convenient when used higher-order.}
 
-@defthing[& (forall [a b] {a -> {a -> b} -> b})]{
+@defthing[& (t:forall [a b] {a t:-> {a t:-> b} t:-> b})]{
 
 Reverse function application. This function is a flipped version of @racket[$] that accepts the
 argument first and the function second.}
 
-@defthing[flip (forall [a b c] {{a -> b -> c} -> b -> a -> c})]{
+@defthing[flip (t:forall [a b c] {{a t:-> b t:-> c} t:-> b t:-> a t:-> c})]{
 
 Produces a function with the same behavior as another function, but with its first two arguments
 flipped.
 
 @(hackett-examples
-  (flip :: nil 3))}
+  (flip :: Nil 3))}
 
 @subsection[#:tag "reference-quantification"]{Quantification and Constrained Types}
 
 @deftogether[
- [@defform*[#:literals [=>]
-            [(forall [var-id ...+] type)
-             (forall [var-id ...+] constraint ...+ => type)]]
-  @defform*[#:literals [=>]
-            [(∀ [var-id ...+] type)
-             (∀ [var-id ...+] constraint ...+ => type)]]]]{
+ [@deftycon*[#:literals [t:=>]
+             [(t:forall [var-id ...+] type)
+              (t:forall [var-id ...+] constraint ...+ t:=> type)]]
+  @deftycon*[#:literals [t:=>]
+             [(t:∀ [var-id ...+] type)
+              (t:∀ [var-id ...+] constraint ...+ t:=> type)]]]]{
 
 Universal quantification over types. Within @racket[type], each @racket[var-id] is bound to a fresh,
 universally quantified type.
 
-The second form is a shorthand that provides a nicer syntax for types constructed with @racket[=>]
-nested immediately within @racket[forall]: @racket[(forall [var-id ...] constraint ... => type)] is
-precisely equivalent to @racket[(forall [var-id ...] (=> [constraint ...] type))].}
+The second form is a shorthand that provides a nicer syntax for types constructed with @racket[t:=>]
+nested immediately within @racket[t:forall]: @racket[(t:forall [var-id ...] constraint ... t:=> type)]
+is precisely equivalent to @racket[(t:forall [var-id ...] (t:=> [constraint ...] type))].}
 
-@defform[(=> [constraint ...+] type)]{
+@deftycon[(t:=> [constraint ...+] type)]{
 
 Builds a type that includes typeclass constraints. The resulting type is equivalent to @racket[type],
 with the requirement that each @racket[constraint] must hold.}
 
 @subsection[#:tag "reference-unit"]{Unit}
 
-@defdata[Unit unit]{
+@defdata[t:Unit Unit]{
 
-The unit type. Values of type @racket[Unit] only have one possible value (ignoring @tech{bottom}),
-@racket[unit]. A value of type @racket[unit] carries no information, so it is similar to @void-const
+The unit type. Values of type @racket[t:Unit] only have one possible value (ignoring @tech{bottom}),
+@racket[Unit]. A value of type @racket[t:Unit] carries no information, so it is similar to @void-const
 in @hash-lang[] @racketmodname[racket] or the @tt{void} return “type” in many C-like languages.}
 
 @subsection[#:tag "reference-booleans"]{Booleans}
 
-@defdata[Bool true false]{
+@defdata[t:Bool True False]{
 
 The @deftech{boolean} type, representing two binary states.}
 
-@defthing[not {Bool -> Bool}]{
+@defthing[not {t:Bool t:-> t:Bool}]{
 
-Inverts the @tech{boolean} it is applied to; that is, produces @racket[false] when given @racket[true]
-and produces @racket[true] when given @racket[false].}
+Inverts the @tech{boolean} it is applied to; that is, produces @racket[False] when given @racket[True]
+and produces @racket[True] when given @racket[False].}
 
-@defthing[if (forall [a] {Bool -> a -> a -> a})]{
+@defthing[if (t:forall [a] {t:Bool t:-> a t:-> a t:-> a})]{
 
-Performs case analysis on a @tech{boolean} value. If the supplied boolean is @racket[true], returns
+Performs case analysis on a @tech{boolean} value. If the supplied boolean is @racket[True], returns
 its second argument; otherwise, returns its third argument.
 
 Since Hackett is lazy, @racket[if] is an ordinary function, not a macro or special form, and it can be
 used higher-order if desired.
 
 @(hackett-examples
-  (eval:check (if true "first" "second") "first")
-  (eval:check (if false "first" "second") "second"))}
+  (eval:check (if True "first" "second") "first")
+  (eval:check (if False "first" "second") "second"))}
 
-@defthing[\|\| {Bool -> Bool -> Bool}]{
+@defthing[\|\| {t:Bool t:-> t:Bool t:-> t:Bool}]{
 
-Returns @racket[true] if its first argument is @racket[true]; otherwise, returns its second argument.
-Notably, the second argument will not be evaluated at all if the first argument is @racket[true], but
+Returns @racket[True] if its first argument is @racket[True]; otherwise, returns its second argument.
+Notably, the second argument will not be evaluated at all if the first argument is @racket[True], but
 the first argument will always be forced when the result is forced.
 
 @(hackett-examples
-  (eval:check {true \|\| true} true)
-  (eval:check {false \|\| true} true)
-  (eval:check {true \|\| false} true)
-  (eval:check {false \|\| false} false)
-  (eval:check {true \|\| (error! "never gets here")} true))}
+  (eval:check {True \|\| True} True)
+  (eval:check {False \|\| True} True)
+  (eval:check {True \|\| False} True)
+  (eval:check {False \|\| False} False)
+  (eval:check {True \|\| (error! "never gets here")} True))}
 
-@defthing[&& {Bool -> Bool -> Bool}]{
+@defthing[&& {t:Bool t:-> t:Bool t:-> t:Bool}]{
 
-Returns @racket[false] if its first argument is @racket[false]; otherwise, returns its second
+Returns @racket[False] if its first argument is @racket[False]; otherwise, returns its second
 argument. Notably, the second argument will not be evaluated at all if the first argument is
-@racket[false], but the first argument will always be forced when the result is forced.
+@racket[False], but the first argument will always be forced when the result is forced.
 
 @(hackett-examples
-  (eval:check {true && true} true)
-  (eval:check {false && true} false)
-  (eval:check {true && false} false)
-  (eval:check {false && false} false)
-  (eval:check {false && (error! "never gets here")} false))}
+  (eval:check {True && True} True)
+  (eval:check {False && True} False)
+  (eval:check {True && False} False)
+  (eval:check {False && False} False)
+  (eval:check {False && (error! "never gets here")} False))}
 
 @subsection[#:tag "reference-identity"]{The Identity Type}
 
 @defmodule[hackett/data/identity]
 
-@defdata[(Identity a) (identity a)]{
+@defdata[(t:Identity a) (Identity a)]{
 
 A simple wrapper type with a variety of typeclass instances that defer to the value inside whenever
-possible. Most useful for its @racket[Functor], @racket[Applicative], and @racket[Monad] instances,
-which simply apply functions to the value inside the @racket[identity] wrapper, making it serve as
+possible. Most useful for its @racket[t:Functor], @racket[t:Applicate], and @racket[t:Monad] instances,
+which simply apply functions to the value inside the @racket[Identity] wrapper, making it serve as
 a “no-op” wrapper of sorts.
 
 @(hackett-interaction
-  (identity 5)
-  (map (+ 1) (identity 5))
-  {(identity (+ 1)) <*> (identity 5)}
-  {(identity "hello, ") ++ (identity "world")})}
+  (Identity 5)
+  (map (+ 1) (Identity 5))
+  {(Identity (+ 1)) <*> (Identity 5)}
+  {(Identity "hello, ") ++ (Identity "world")})}
 
-@defproc[(run-identity [x (Identity a)]) a]{
+@defproc[(run-identity [x (t:Identity a)]) a]{
 
-Unwraps and returns the value inside an @racket[identity] wrapper.
+Unwraps and returns the value inside an @racket[Identity] wrapper.
 
 @(hackett-interaction
-  (run-identity (identity 5)))}
+  (run-identity (Identity 5)))}
 
 @subsection[#:tag "reference-tuples"]{Tuples}
 
-@defdata[(Tuple a b) (tuple a b)]{
+@defdata[(t:Tuple a b) (Tuple a b)]{
 
 The @deftech{tuple} type, which contains a pair of possibly heterogenous values.}
 
-@defthing[fst (forall [a b] {(Tuple a b) -> a})]{
+@defthing[fst (t:forall [a b] {(t:Tuple a b) t:-> a})]{
 
 Extracts the first element of a @tech{tuple}.
 
 @(hackett-examples
-  (eval:check (fst (tuple 42 "hello")) 42))}
+  (eval:check (fst (Tuple 42 "hello")) 42))}
 
-@defthing[snd (forall [a b] {(Tuple a b) -> b})]{
+@defthing[snd (t:forall [a b] {(t:Tuple a b) t:-> b})]{
 
 Extracts the second element of a @tech{tuple}.
 
 @(hackett-examples
-  (eval:check (snd (tuple 42 "hello")) "hello"))}
+  (eval:check (snd (Tuple 42 "hello")) "hello"))}
 
 @subsection[#:tag "reference-optionals"]{Optionals}
 
-@defdata[(Maybe a) (just a) nothing]{
+@defdata[(t:Maybe a) (Just a) Nothing]{
 
-A type that encodes the notion of an optional or nullable value. A value of type @racket[(Maybe a)]
+A type that encodes the notion of an optional or nullable value. A value of type @racket[(t:Maybe a)]
 implies that it @emph{might} contain a value of type @racket[a], but it also might contain nothing at
-all. This type is usually used to represent operations that can fail (where @racket[nothing]
+all. This type is usually used to represent operations that can fail (where @racket[Nothing]
 represents failure) or values that are not required to be present.
 
 @(hackett-examples
-  (map (+ 1) (just 5))
-  (map (+ 1) nothing))}
+  (map (+ 1) (Just 5))
+  (map (+ 1) Nothing))}
 
-@defproc[(maybe [v b] [f {a -> b}] [x (Maybe a)]) b]{
+@defproc[(maybe [v b] [f {a t:-> b}] [x (t:Maybe a)]) b]{
 
-The catamorphism for @racket[Maybe]. Produces @racket[v] when @racket[x] is @racket[nothing] and
-produces @racket[(f _y)] when @racket[x] is @racket[(just _y)].
+The catamorphism for @racket[t:Maybe]. Produces @racket[v] when @racket[x] is @racket[Nothing] and
+produces @racket[(f _y)] when @racket[x] is @racket[(Just _y)].
 
 @(hackett-examples
-  (eval:check (maybe 0 (+ 1) (just 5)) 6)
-  (eval:check (maybe 0 (+ 1) nothing) 0))}
+  (eval:check (maybe 0 (+ 1) (Just 5)) 6)
+  (eval:check (maybe 0 (+ 1) Nothing) 0))}
 
-@defproc[(from-maybe [v a] [x (Maybe a)]) a]{
+@defproc[(from-maybe [v a] [x (t:Maybe a)]) a]{
 
 Extracts the value inside @racket[x], producing a default value @racket[v] when @racket[x] is
-@racket[nothing]. Equivalent to @racket[(maybe v id)].
+@racket[Nothing]. Equivalent to @racket[(maybe v id)].
 
 @(hackett-examples
-  (eval:check (from-maybe 0 (just 5)) 5)
-  (eval:check (from-maybe 0 nothing) 0))}
+  (eval:check (from-maybe 0 (Just 5)) 5)
+  (eval:check (from-maybe 0 Nothing) 0))}
 
-@defdata[(Either a b) (left a) (right b)]{
+@defdata[(t:Either a b) (Left a) (Right b)]{
 
-A type that encodes the notion of a successful result or an error. The @racket[Functor],
-@racket[Applicative], and @racket[Monad] instances for @racket[(Either a)] are “right-biased”, so they
-will short-circuit on values wrapped in @racket[left] and will perform mapping or sequencing on values
-wrapped in @racket[right].
+A type that encodes the notion of a successful result or an error. The @racket[t:Functor],
+@racket[t:Applicate], and @racket[t:Monad] instances for @racket[(t:Either a)] are “right-biased”, so
+they will short-circuit on values wrapped in @racket[Left] and will perform mapping or sequencing on
+values wrapped in @racket[Right].
 
-This type is generally used in a similar way to @racket[Maybe], but it allows the sort of failure to
-be explicitly tagged, usually returning a error message or failure reason on the @racket[left] side.
-
-@(hackett-examples
-  (map (+ 1) (: (right 5) (Either String Integer)))
-  (map (+ 1) (: (left "an error happened") (Either String Integer))))}
-
-@defproc[(either [f {a -> c}] [g {b -> c}] [x (Either a b)]) c]{
-
-The catamorphism for @racket[Either]. Produces @racket[(f _y)] when @racket[x] is @racket[(left _y)]
-and produces @racket[(g _z)] when @racket[x] is @racket[(right _z)].
+This type is generally used in a similar way to @racket[t:Maybe], but it allows the sort of failure to
+be explicitly tagged, usually returning a error message or failure reason on the @racket[Left] side.
 
 @(hackett-examples
-  (eval:check (either (+ 1) (* 2) (left 5)) 6)
-  (eval:check (either (+ 1) (* 2) (right 5)) 10))}
+  (map (+ 1) (: (Right 5) (t:Either t:String t:Integer)))
+  (map (+ 1) (: (Left "an error happened") (t:Either t:String t:Integer))))}
 
-@defproc[(is-left [e (Either a b)]) Bool]{
+@defproc[(either [f {a t:-> c}] [g {b t:-> c}] [x (t:Either a b)]) c]{
 
-This predicate is @racket[true] when @racket[e] is of the form @racket[(left x)] for some @racket[x],
-and is false when @racket[e] is @racket[(right x)].
-
-@(hackett-examples
-  (eval:check (is-left (left "nifty")) true)
-  (eval:check (is-left (right "tubular")) false))}
-
-@defproc[(is-right [e (Either a b)]) Bool]{
-
-This predicate is @racket[true] when @racket[e] is of the form @racket[(right x)] for some @racket[x],
-and is false when @racket[e] is @racket[(left x)].
+The catamorphism for @racket[t:Either]. Produces @racket[(f _y)] when @racket[x] is @racket[(Left _y)]
+and produces @racket[(g _z)] when @racket[x] is @racket[(Right _z)].
 
 @(hackett-examples
-  (eval:check (is-right (left "nifty")) false)
-  (eval:check (is-right (right "tubular")) true))}
+  (eval:check (either (+ 1) (* 2) (Left 5)) 6)
+  (eval:check (either (+ 1) (* 2) (Right 5)) 10))}
 
-@defproc[(lefts [es (List (Either a b))]) (List a)]{
+@defproc[(is-left [e (t:Either a b)]) t:Bool]{
 
-Extract all values of the form @racket[(left x)] from es.
-
-@(hackett-examples
-  (lefts {(left 1) :: (right "haskell") :: (right "racket") :: (left -32) :: nil}))}
-
-@defproc[(rights [es (List (Either a b))]) (List b)]{
-
-Extract all values of the form @racket[(right x)] from es.
+This predicate is @racket[True] when @racket[e] is of the form @racket[(Left x)] for some @racket[x],
+and is @racket[False] when @racket[e] is @racket[(Right x)].
 
 @(hackett-examples
-  (rights {(left 1) :: (right "haskell") :: (right "racket") :: (left -32) :: nil}))}
+  (eval:check (is-left (Left "nifty")) True)
+  (eval:check (is-left (Right "tubular")) False))}
 
-@defproc[(partition-eithers [es (List (Either a b))]) (Tuple (List a) (List b))]{
+@defproc[(is-right [e (t:Either a b)]) t:Bool]{
 
-Extract every @racket[(left x)] to the first element of the pair and each @racket[(right x)] to the
-second. @racket[(partition-eithers es)] is equivalent to @racket[(tuple (lefts es) (rights es))]
+This predicate is @racket[True] when @racket[e] is of the form @racket[(Right x)] for some @racket[x],
+and is @racket[False] when @racket[e] is @racket[(Left x)].
 
 @(hackett-examples
-  (partition-eithers {(left 1) :: (right "haskell") :: (right "racket") :: (left -32) :: nil}))}
+  (eval:check (is-right (Left "nifty")) False)
+  (eval:check (is-right (Right "tubular")) True))}
+
+@defproc[(lefts [es (t:List (t:Either a b))]) (t:List a)]{
+
+Extract all values of the form @racket[(Left x)] from es.
+
+@(hackett-examples
+  (lefts {(Left 1) :: (Right "haskell") :: (Right "racket") :: (Left -32) :: Nil}))}
+
+@defproc[(rights [es (t:List (t:Either a b))]) (t:List b)]{
+
+Extract all values of the form @racket[(Right x)] from es.
+
+@(hackett-examples
+  (rights {(Left 1) :: (Right "haskell") :: (Right "racket") :: (Left -32) :: Nil}))}
+
+@defproc[(partition-eithers [es (t:List (t:Either a b))]) (t:Tuple (t:List a) (t:List b))]{
+
+Extract every @racket[(Left x)] to the first element of the pair and each @racket[(Right x)] to the
+second. @racket[(partition-eithers es)] is equivalent to @racket[(Tuple (lefts es) (rights es))]
+
+@(hackett-examples
+  (partition-eithers {(Left 1) :: (Right "haskell") :: (Right "racket") :: (Left -32) :: Nil}))}
 
 @subsection[#:tag "reference-lists"]{Lists}
 
-@defdata[(List a) (:: a (List a)) nil]{
+@defdata[(t:List a) (:: a (t:List a)) Nil]{
 
 The @deftech{list} type, which describes lazy linked lists. Since a list is lazy, it may be infinite,
 as long as the entire list is never demanded. The @racket[::] constructor is pronounced “cons”, and it
 is generally intended to be used infix.}
 
-@defthing[head (forall [a] {(List a) -> (Maybe a)})]{
+@defthing[head (t:forall [a] {(t:List a) t:-> (t:Maybe a)})]{
 
-Returns @racket[just] the first element of a list, or @racket[nothing] if the list is @racket[nil].
-
-@(hackett-examples
-  (head {1 :: 2 :: 3 :: nil})
-  (head (: nil (List Integer))))}
-
-@defthing[tail (forall [a] {(List a) -> (Maybe (List a))})]{
-
-Returns @racket[just] a list without its first element, or @racket[nothing] if the list is
-@racket[nil].
+Returns @racket[Just] the first element of a list, or @racket[Nothing] if the list is @racket[Nil].
 
 @(hackett-examples
-  (tail {1 :: 2 :: 3 :: nil})
-  (tail (: nil (List Integer))))}
+  (head {1 :: 2 :: 3 :: Nil})
+  (head (: Nil (t:List t:Integer))))}
 
-@defthing[head! (forall [a] {(List a) -> a})]{
+@defthing[tail (t:forall [a] {(t:List a) t:-> (t:Maybe (t:List a))})]{
+
+Returns @racket[Just] a list without its first element, or @racket[Nothing] if the list is
+@racket[Nil].
+
+@(hackett-examples
+  (tail {1 :: 2 :: 3 :: Nil})
+  (tail (: Nil (t:List t:Integer))))}
+
+@defthing[head! (t:forall [a] {(t:List a) t:-> a})]{
 
 A @tech[#:key "partial function"]{partial} version of @racket[head] that returns the first element of
 a list. If the list is empty, it raises an error.
 
 @(hackett-examples
-  (head! {1 :: 2 :: 3 :: nil})
-  (eval:error (head! (: nil (List Integer)))))}
+  (head! {1 :: 2 :: 3 :: Nil})
+  (eval:error (head! (: Nil (t:List t:Integer)))))}
 
-@defthing[tail! (forall [a] {(List a) -> (List a)})]{
+@defthing[tail! (t:forall [a] {(t:List a) t:-> (t:List a)})]{
 
 A @tech[#:key "partial function"]{partial} version of @racket[tail] that returns a list without its
 first element. If the list is empty, it raises an error.
 
 @(hackett-examples
-  (tail! {1 :: 2 :: 3 :: nil})
-  (eval:error (tail! (: nil (List Integer)))))}
+  (tail! {1 :: 2 :: 3 :: Nil})
+  (eval:error (tail! (: Nil (t:List t:Integer)))))}
 
-@defproc[(take [n Integer] [xs (List a)]) (List a)]{
+@defproc[(take [n t:Integer] [xs (t:List a)]) (t:List a)]{
 
 Produces a list with the first @racket[n] elements of @racket[xs]. If @racket[xs] contains fewer than
 @racket[n] elements, @racket[xs] is returned unmodified.
 
 @(hackett-examples
-  (take 2 {1 :: 2 :: 3 :: nil})
-  (take 2 {1 :: nil}))}
+  (take 2 {1 :: 2 :: 3 :: Nil})
+  (take 2 {1 :: Nil}))}
 
-@defproc[(drop [n Integer] [xs (List a)]) (List a)]{
+@defproc[(drop [n t:Integer] [xs (t:List a)]) (t:List a)]{
 
 Produces a list like @racket[xs] without its first @racket[n] elements. If @racket[xs] contains fewer
-then @racket[n] elements, the result is @racket[nil].
+then @racket[n] elements, the result is @racket[Nil].
 
 @(hackett-examples
-  (drop 2 {1 :: 2 :: 3 :: nil})
-  (drop 2 {1 :: nil}))}
+  (drop 2 {1 :: 2 :: 3 :: Nil})
+  (drop 2 {1 :: Nil}))}
 
-@defproc[(filter [f {a -> Bool}] [xs (List a)]) (List a)]{
+@defproc[(filter [f {a t:-> t:Bool}] [xs (t:List a)]) (t:List a)]{
 
 Produces a list that contains each element, @racket[_x], for which @racket[_x] is an element of
-@racket[xs] and @racket[(f _x)] is @racket[true].
+@racket[xs] and @racket[(f _x)] is @racket[True].
 
 @(hackett-examples
-  (filter (λ [x] {x > 5}) {3 :: 7 :: 2 :: 9 :: 12 :: 4 :: nil}))}
+  (filter (λ [x] {x > 5}) {3 :: 7 :: 2 :: 9 :: 12 :: 4 :: Nil}))}
 
-@defproc[(foldr [f {a -> b -> b}] [acc b] [xs (List a)]) b]{
+@defproc[(foldr [f {a t:-> b t:-> b}] [acc b] [xs (t:List a)]) b]{
 
 Reduces @racket[xs] to a single value using a right-associative binary operator, @racket[f], using
 @racket[acc] as a “seed” element. Uses of @racket[foldr] can be thought of as a series of nested,
@@ -696,12 +710,12 @@ the following expression:
   {_x0 f {_x1 f {_x2 f .... {_xn f acc} ....}}})
 
 @(hackett-examples
-  (foldr + 0 {1 :: 2 :: 3 :: 4 :: 5 :: nil})
-  (foldr * 1 {1 :: 2 :: 3 :: 4 :: 5 :: nil})
-  (foldr - 0 {1 :: 2 :: 3 :: 4 :: 5 :: nil})
-  (foldr :: nil {1 :: 2 :: 3 :: 4 :: 5 :: nil}))}
+  (foldr + 0 {1 :: 2 :: 3 :: 4 :: 5 :: Nil})
+  (foldr * 1 {1 :: 2 :: 3 :: 4 :: 5 :: Nil})
+  (foldr - 0 {1 :: 2 :: 3 :: 4 :: 5 :: Nil})
+  (foldr :: Nil {1 :: 2 :: 3 :: 4 :: 5 :: Nil}))}
 
-@defproc[(foldl [f {b -> a -> b}] [acc b] [xs (List a)]) b]{
+@defproc[(foldl [f {b t:-> a t:-> b}] [acc b] [xs (t:List a)]) b]{
 
 Reduces @racket[xs] to a single value using a left-associative binary operator, @racket[f], using
 @racket[acc] as a “seed” element. Uses of @racket[foldr] can be thought of as a series of nested,
@@ -713,27 +727,27 @@ the following expression:
   {.... {{{acc f _x0} f _x1} f _x2} .... _xn})
 
 @(hackett-examples
-  (foldl + 0 {1 :: 2 :: 3 :: 4 :: 5 :: nil})
-  (foldl * 1 {1 :: 2 :: 3 :: 4 :: 5 :: nil})
-  (foldl - 0 {1 :: 2 :: 3 :: 4 :: 5 :: nil}))}
+  (foldl + 0 {1 :: 2 :: 3 :: 4 :: 5 :: Nil})
+  (foldl * 1 {1 :: 2 :: 3 :: 4 :: 5 :: Nil})
+  (foldl - 0 {1 :: 2 :: 3 :: 4 :: 5 :: Nil}))}
 
-@defproc[(sum [xs (List Integer)]) Integer]{
+@defproc[(sum [xs (t:List t:Integer)]) t:Integer]{
 
 Adds the elements of @racket[xs] together and returns the sum. Equivalent to @racket[(foldl + 0)].
 
 @(hackett-examples
-  (eval:check (sum {1 :: 2 :: 3 :: nil}) 6)
-  (eval:check (sum nil) 0))}
+  (eval:check (sum {1 :: 2 :: 3 :: Nil}) 6)
+  (eval:check (sum Nil) 0))}
 
 @section[#:tag "reference-typeclasses"]{Typeclasses}
 
 @subsection[#:tag "reference-defining-typeclasses"]{Defining typeclasses and typeclass instances}
 
-@defform[#:literals [: =>]
+@defform[#:literals [: t:=>]
          (class maybe-superclasses (class-id var-id ...)
            [method-id : method-type maybe-default-method-impl] ...)
          #:grammar
-         ([maybe-superclasses (code:line superclass-constraint ... =>)
+         ([maybe-superclasses (code:line superclass-constraint ... t:=>)
                               (code:line)]
           [maybe-default-method-impl default-method-impl-expr
                                      (code:line)])]{
@@ -755,14 +769,14 @@ typeclass method may be defined in terms of other typeclass methods, but the imp
 a choice of which methods to implement, or they can provide a more efficient implementation for
 commonly-used methods.}
 
-@defform[#:literals [forall =>]
+@defform[#:literals [t:forall t:=>]
          (instance instance-spec
            [method-id method-expr] ...)
          #:grammar
          ([instance-spec (class-id instance-type ...)
-                         (forall [var-id ...] maybe-constraints
-                                 (class-id instance-type ...))]
-          [maybe-constraints (code:line instance-constraint ... =>)
+                         (t:forall [var-id ...] maybe-constraints
+                                   (class-id instance-type ...))]
+          [maybe-constraints (code:line instance-constraint ... t:=>)
                              (code:line)])]{
 
 Defines a @deftech{typeclass instance}, which declares that the given @racket[instance-type]s belong
@@ -770,47 +784,47 @@ to the @tech{typeclass} bound to @racket[class-id].}
 
 @subsection[#:tag "reference-show"]{Printing for debugging}
 
-@defclass[(Show a)
-          [show {a -> String}]]{
+@defclass[(t:Show a)
+          [show {a t:-> t:String}]]{
 
-A class for converting values to @racket[String] representations for the purposes of debugging.
-Generally, the @racket[Show] instance for a type should produce a valid Hackett expression that, when
+A class for converting values to @racket[t:String] representations for the purposes of debugging.
+Generally, the @racket[t:Show] instance for a type should produce a valid Hackett expression that, when
 evaluated, produces the value.
 
-@defmethod[show {a -> String}]{
+@defmethod[show {a t:-> t:String}]{
 
 @(hackett-examples
   (show 42)
   (show "hello")
-  (show (just 11))
-  (show {1 :: 2 :: 3 :: nil}))}}
+  (show (Just 11))
+  (show {1 :: 2 :: 3 :: Nil}))}}
 
 @subsection[#:tag "reference-equality"]{Equality}
 
-@defclass[(Eq a)
-          [== {a -> a -> Bool}]]{
-The class of types with a notion of equality. The @racket[==] method should produce @racket[true] if
-both of its arguments are equal, otherwise it should produce @racket[false].
+@defclass[(t:Eq a)
+          [== {a t:-> a t:-> t:Bool}]]{
+The class of types with a notion of equality. The @racket[==] method should produce @racket[True] if
+both of its arguments are equal, otherwise it should produce @racket[False].
 
-@defmethod[== {a -> a -> Bool}]{
+@defmethod[== {a t:-> a t:-> t:Bool}]{
 
 @(hackett-examples
-  (eval:check {10 == 10} true)
-  (eval:check {10 == 11} false)
-  (eval:check {{1 :: 2 :: nil} == {1 :: 2 :: nil}} true)
-  (eval:check {{1 :: 2 :: nil} == {1 :: nil}} false)
-  (eval:check {{1 :: 2 :: nil} == {1 :: 3 :: nil}} false))}}
+  (eval:check {10 == 10} True)
+  (eval:check {10 == 11} False)
+  (eval:check {{1 :: 2 :: Nil} == {1 :: 2 :: Nil}} True)
+  (eval:check {{1 :: 2 :: Nil} == {1 :: Nil}} False)
+  (eval:check {{1 :: 2 :: Nil} == {1 :: 3 :: Nil}} False))}}
 
 @subsection[#:tag "reference-semigroup-monoid"]{Semigroups and monoids}
 
-@defclass[(Semigroup a)
-          [++ {a -> a -> a}]]{
+@defclass[(t:Semigroup a)
+          [++ {a t:-> a t:-> a}]]{
 
 The class of @deftech{semigroups}, types with an associative binary operation, @racket[++]. Generally,
 @racket[++] defines some notion of combining or appending, as is the case with the instances for
-@racket[String] and @racket[(List _a)], but this is not necessarily true.
+@racket[t:String] and @racket[(t:List _a)], but this is not necessarily true.
 
-@defmethod[++ {a -> a -> a}]{
+@defmethod[++ {a t:-> a t:-> a}]{
 
 An associative operation. That is, @racket[++] must obey the following law:
 
@@ -819,10 +833,10 @@ An associative operation. That is, @racket[++] must obey the following law:
 
 @(hackett-examples
   {"hello" ++ ", " ++ "world!"}
-  {{1 :: 2 :: nil} ++ {3 :: 4 :: nil}})}}
+  {{1 :: 2 :: Nil} ++ {3 :: 4 :: Nil}})}}
 
-@defclass[#:super [(Semigroup a)]
-          (Monoid a)
+@defclass[#:super [(t:Semigroup a)]
+          (t:Monoid a)
           [mempty a]]{
 
 A @deftech{monoid} extends the notion of a @tech{semigroup} with the notion of an identity element,
@@ -837,26 +851,26 @@ An identity element for @racket[++]. That is, @racket[mempty] must obey the foll
   @#,racket[{mempty ++ _a}] @#,elem[#:style 'roman]{=} @#,racket[_a]]
 
 @(hackett-examples
-  (: mempty String)
-  (: mempty (List Integer)))}}
+  (: mempty t:String)
+  (: mempty (t:List t:Integer)))}}
 
 @subsection[#:tag "reference-functor"]{Functors}
 
-@defclass[(Functor f)
-          [map (forall [a b] {{a -> b} -> (f a) -> (f b)})]]{
+@defclass[(t:Functor f)
+          [map (t:forall [a b] {{a t:-> b} t:-> (f a) t:-> (f b)})]]{
 
 A class of types that are @deftech{functors}, essentially types that provide a mapping or “lifting”
 operation. The @racket[map] function can be viewed in different ways:
 
   @itemlist[
     @item{The @racket[map] function can be thought of as applying a function to each “element” of some
-          “container”. This metaphor applies to many members of the @racket[Functor] typeclass, such
-          as @racket[List] and @racket[Maybe], but does not apply well to all of them.}
+          “container”. This metaphor applies to many members of the @racket[t:Functor] typeclass, such
+          as @racket[t:List] and @racket[t:Maybe], but does not apply well to all of them.}
 
     @item{More generally, @racket[map] can be viewed as a “lifting” operation, which “lifts” a
-          function of type @racket[{_a -> _b}] to a function of type @racket[{(f _a) -> (f _b)}] for
-          some type @racket[f]. This is a very general notion, and the meaning of such an operation is
-          highly dependent on the particular choice of @racket[f].}]
+          function of type @racket[{_a t:-> _b}] to a function of type @racket[{(f _a) t:-> (f _b)}]
+          for some type @racket[f]. This is a very general notion, and the meaning of such an
+          operation is highly dependent on the particular choice of @racket[f].}]
 
 All @racket[map] implementations must obey the following laws:
 
@@ -864,51 +878,51 @@ All @racket[map] implementations must obey the following laws:
   @#,racket[(map id)] @#,elem[#:style 'roman]{=} @#,racket[id]
   @#,racket[(map {_f |.| _g}) @#,elem[#:style 'roman]{=} @#,racket[{(map _f) |.| (map _g)}]]]
 
-@defmethod[map (forall [a b] {{a -> b} -> (f a) -> (f b)})]{
+@defmethod[map (t:forall [a b] {{a t:-> b} t:-> (f a) t:-> (f b)})]{
 
 @(hackett-examples
-  (map (+ 1) {1 :: 2 :: nil})
-  (map (+ 1) (just 10))
-  (map (+ 1) nothing))}}
+  (map (+ 1) {1 :: 2 :: Nil})
+  (map (+ 1) (Just 10))
+  (map (+ 1) Nothing))}}
 
-@defthing[<$> (forall [f a b] (Functor f) => {{a -> b} -> (f a) -> (f b)})]{
+@defthing[<$> (t:forall [f a b] (t:Functor f) t:=> {{a t:-> b} t:-> (f a) t:-> (f b)})]{
 
 An alias for @racket[map], intended to be used in @tech{infix mode} instead of prefix, especially when
 mixed with @racket[<*>] in the same expression.
 
 @(hackett-examples
-  {(+ 1) <$> {1 :: 2 :: nil}}
-  {(+ 1) <$> (just 10)}
-  {(+ 1) <$> nothing})}
+  {(+ 1) <$> {1 :: 2 :: Nil}}
+  {(+ 1) <$> (Just 10)}
+  {(+ 1) <$> Nothing})}
 
-@defthing[<&> (forall [f a b] (Functor f) => {(f a) -> {a -> b} -> (f b)})]{
+@defthing[<&> (t:forall [f a b] (t:Functor f) t:=> {(f a) t:-> {a t:-> b} t:-> (f b)})]{
 
 A flipped version of @racket[<$>] for when it’s preferable to take the function argument second, like
 @racket[&] but lifted to a @tech{functor}.}
 
-@defthing[<$ (forall [f a b] (Functor f) => {b -> (f a) -> (f b)})]{
+@defthing[<$ (t:forall [f a b] (t:Functor f) t:=> {b t:-> (f a) t:-> (f b)})]{
 
 Equivalent to @racket[{map |.| const}]. Replaces all values of type @racket[_a] with a new value of
 type @racket[_b].
 
 @(hackett-examples
-  {10 <$ (just 1)}
-  {10 <$ {1 :: 2 :: 3 :: nil}})}
+  {10 <$ (Just 1)}
+  {10 <$ {1 :: 2 :: 3 :: Nil}})}
 
-@defthing[$> (forall [f a b] (Functor f) => {(f a) -> b -> (f b)})]{
+@defthing[$> (t:forall [f a b] (t:Functor f) t:=> {(f a) t:-> b t:-> (f b)})]{
 
 A flipped version of @racket[<$].}
 
-@defthing[ignore (forall [f a] (Functor f) => {(f a) -> (f Unit)})]{
+@defthing[ignore (t:forall [f a] (t:Functor f) t:=> {(f a) t:-> (f t:Unit)})]{
 
-Replaces the result of a @tech{functor} with @racket[unit]. Equivalent to @racket[(<$ unit)].}
+Replaces the result of a @tech{functor} with @racket[Unit]. Equivalent to @racket[(<$ Unit)].}
 
 @subsection[#:tag "reference-applicative"]{Applicative functors}
 
-@defclass[#:super [(Functor f)]
-          (Applicative f)
-          [pure (forall [a] {a -> (f a)})]
-          [<*> (forall [a b] {(f {a -> b}) -> (f a) -> (f b)})]]{
+@defclass[#:super [(t:Functor f)]
+          (t:Applicative f)
+          [pure (t:forall [a] {a t:-> (f a)})]
+          [<*> (t:forall [a b] {(f {a t:-> b}) t:-> (f a) t:-> (f b)})]]{
 
 The class of @deftech{applicative functors}, which are @tech{functors} with some notion of
 application, @racket[<*>]. Additionally, applicative functors must provided a lifting operation,
@@ -922,70 +936,71 @@ Applicative functors must satisfy the following laws:
   @#,racket[{(pure _f) <*> (pure _x)}] @#,elem[#:style 'roman]{=} @#,racket[(pure (_f _x))]
   @#,racket[{_u <*> (pure _y)}] @#,elem[#:style 'roman]{=} @#,racket[{(pure (& _y) <*> _u)}]]
 
-As a consequence of these laws, the @racket[Functor] instance for @racket[f] will satisfy:
+As a consequence of these laws, the @racket[t:Functor] instance for @racket[f] will satisfy:
 
 @racketblock[
   @#,racket[(map _f _x)] @#,elem[#:style 'roman]{=} @#,racket[{(pure _f) <*> _x}]]
 
-@defmethod[pure (forall [a] {a -> (f a)})]{
+@defmethod[pure (t:forall [a] {a t:-> (f a)})]{
 
 Lifts a value.
 
 @(hackett-examples
-  (: (pure 11) (Maybe Integer))
-  (: (pure 11) (List Integer)))}
+  (: (pure 11) (t:Maybe t:Integer))
+  (: (pure 11) (t:List t:Integer)))}
 
-@defmethod[<*> (forall [a b] {(f {a -> b}) -> (f a) -> (f b)})]{
+@defmethod[<*> (t:forall [a b] {(f {a t:-> b}) t:-> (f a) t:-> (f b)})]{
 
 Applies a function in a context. While @racket[map]/@racket[<$>] “lifts” a pure function to a function
 that operates on a functor, @racket[<*>] applies a function that is already inside the context of a
 @tech{functor}.
 
 @(hackett-examples
-  {(just not) <*> (just true)}
-  {(just not) <*> (just false)}
-  {(just not) <*> nothing}
-  {(: nothing (Maybe {Bool -> Bool})) <*> (just true)})
+  {(Just not) <*> (Just True)}
+  {(Just not) <*> (Just False)}
+  {(Just not) <*> Nothing}
+  {(: Nothing (t:Maybe {t:Bool t:-> t:Bool})) <*> (Just True)})
 
 Due to currying, this is especially useful in combination with @racket[<$>] to apply a multi-argument
-function to multiple arguments within the context of some functor. For example, @racket[Maybe]
-implements a sort of short-circuiting, where any @racket[nothing] will cause the entire computation to
-produce @racket[nothing].
+function to multiple arguments within the context of some functor. For example, @racket[t:Maybe]
+implements a sort of short-circuiting, where any @racket[Nothing] will cause the entire computation to
+produce @racket[Nothing].
 
 @(hackett-examples
-  {+ <$> (just 1) <*> (just 2)}
-  {+ <$> nothing <*> (just 2)}
-  {+ <$> (just 1) <*> nothing})
+  {+ <$> (Just 1) <*> (Just 2)}
+  {+ <$> Nothing <*> (Just 2)}
+  {+ <$> (Just 1) <*> Nothing})
 
 This works because @racket[{_f <$> _x}] is guaranteed to be equivalent to @racket[{(pure _f) <*> _x}]
 by the applicative laws, and since functions are curried, each use of @racket[<*>] applies a single
 argument to the (potentially partially-applied) function.}}
 
-@defthing[sequence (forall [f a] (Applicative f) => {(List (f a)) -> (f (List a))})]{
+@defthing[sequence (t:forall [f a] (t:Applicate f) t:=> {(t:List (f a)) t:-> (f (t:List a))})]{
 
 Produces an action that runs a @tech{list} of @tech[#:key "applicative functor"]{applicative} actions
 from left to right, then collects the results into a new list.
 
 @(hackett-examples
-  (sequence {(just 1) :: (just 2) :: (just 3) :: nil})
-  (sequence {(just 1) :: nothing :: (just 3) :: nil}))}
+  (sequence {(Just 1) :: (Just 2) :: (Just 3) :: Nil})
+  (sequence {(Just 1) :: Nothing :: (Just 3) :: Nil}))}
 
-@defthing[traverse (forall [f a b] (Applicative f) => {{a -> (f b)} -> (List a) -> (f (List b))})]{
+@defthing[traverse
+          (t:forall [f a b] (t:Applicate f) t:=> {{a t:-> (f b)} t:-> (t:List a) t:-> (f (t:List b))})]{
 
 Applies a function to each element of a @tech{list} to produce an @tech[#:key "applicative functor"]{
 applicative} action, then collects them left to right @italic{a la} @racket[sequence]
 (@racket[(traverse _f _xs)] is equivalent to @racket[(sequence (map _f _xs))]).
 
 @(hackett-examples
-  (traverse head {{1 :: nil} :: {2 :: 3 :: nil} :: nil})
-  (traverse head {{1 :: nil} :: nil :: nil}))}
+  (traverse head {{1 :: Nil} :: {2 :: 3 :: Nil} :: Nil})
+  (traverse head {{1 :: Nil} :: Nil :: Nil}))}
 
 @subsection[#:tag "reference-monad"]{Monads}
 
-@defclass[#:super [(Applicative m)]
-          (Monad m)
-          [join (forall [a] {(m (m a)) -> (m a)})]
-          [=<< (forall [a b] {{a -> (m b)} -> (m a) -> (m b)})]]{
+@defclass[#:super [(t:Applicate m)]
+          (t:Monad m)
+          [join (t:forall [a] {(m (m a)) t:-> (m a)})]
+          [=<< (t:forall [a b] {{a t:-> (m b)} t:-> (m a) t:-> (m b)})]]{
 
 The class of @deftech{monads}, which are @tech{applicative functors} augmented with a single
 @racket[join] operation that allows multiple “layers” of @racket[m] to be “flattened” into a single
@@ -1007,15 +1022,15 @@ if a more efficient implementation can be provided.
 
 It is often more useful to use @racket[do] than to use @racket[join] or @racket[=<<] directly.
 
-@defmethod[join (forall [a] {(m (m a)) -> (m a)})]{
+@defmethod[join (t:forall [a] {(m (m a)) t:-> (m a)})]{
 
 @(hackett-examples
-  (join (just (just 3)))
-  (join (just (: nothing (Maybe Integer))))
-  (join (: nothing (Maybe (Maybe Integer))))
-  (join {{1 :: nil} :: {2 :: 3 :: nil} :: nil}))}
+  (join (Just (Just 3)))
+  (join (Just (: Nothing (t:Maybe t:Integer))))
+  (join (: Nothing (t:Maybe (t:Maybe t:Integer))))
+  (join {{1 :: Nil} :: {2 :: 3 :: Nil} :: Nil}))}
 
-@defmethod[=<< (forall [a b] {{a -> (m b)} -> (m a) -> (m b)})]{
+@defmethod[=<< (t:forall [a b] {{a t:-> (m b)} t:-> (m a) t:-> (m b)})]{
 
 Applies a function that produces a monadic value to a monadic value. The expression
 @racket[{_f =<< _x}] is equivalent to @racket[(join {_f <$> _x})] (and an explicit implementation of
@@ -1024,11 +1039,11 @@ both methods must maintain that law). It is worth comparing and contrasting the 
 different.
 
 @(hackett-examples
-  {head =<< (tail {1 :: 2 :: nil})}
-  {head =<< (tail {1 :: nil})}
-  {head =<< (tail (: nil (List Integer)))})}}
+  {head =<< (tail {1 :: 2 :: Nil})}
+  {head =<< (tail {1 :: Nil})}
+  {head =<< (tail (: Nil (t:List t:Integer)))})}}
 
-@defthing[>>= (forall [m a b] (Monad m) => {(m a) -> {a -> (m b)} -> (m b)})]{
+@defthing[>>= (t:forall [m a b] (t:Monad m) t:=> {(m a) t:-> {a t:-> (m b)} t:-> (m b)})]{
 
 A flipped version of @racket[=<<].}
 
@@ -1041,7 +1056,7 @@ A flipped version of @racket[=<<].}
 A convenient, imperative-style shorthand for a sequence of monadic expressions chained together with
 @racket[>>=]. Each @racket[do-clause] corresponds to a single use of @racket[>>=], and each
 @racket[monadic-expr] must have a type with the shape @racket[(_m _a)], where @racket[_m] is a
-@racket[Monad].
+@racket[t:Monad].
 
 Any use of @racket[do] with a single subform expands to the subform: @racket[(do _expr)] is equivalent
 to @racket[_expr]. Each @racket[do-clause] introduces a use of @racket[>>=], with the result
@@ -1053,16 +1068,16 @@ This is often much more readable than writing the uses of @racket[>>=] out by ha
 the result of each action must be give a name.
 
 @(hackett-examples
-  (do [xs <- (tail {1 :: 2 :: 3 :: 4 :: nil})]
+  (do [xs <- (tail {1 :: 2 :: 3 :: 4 :: Nil})]
       [ys <- (tail xs)]
       [zs <- (tail ys)]
       (head zs))
-  (do [xs <- (tail {1 :: 2 :: 3 :: nil})]
+  (do [xs <- (tail {1 :: 2 :: 3 :: Nil})]
       [ys <- (tail xs)]
       [zs <- (tail ys)]
       (head zs)))}
 
-@defthing[ap (forall [m a b] (Monad m) => {(m {a -> b}) -> (m a) -> (m b)})]{
+@defthing[ap (t:forall [m a b] (t:Monad m) t:=> {(m {a t:-> b}) t:-> (m a) t:-> (m b)})]{
 
 An implementation of @racket[<*>] in terms of @racket[map], @racket[pure], and @racket[join]. This can
 be used as an implementation of @racket[<*>] as long as @racket[join] does not use @racket[<*>] (if it
@@ -1079,8 +1094,8 @@ runtime to perform the actual I/O actions described by the @racket[IO] value.
 
 It may be helpful to think of a value of type @racket[(IO a)] as a set of @emph{instructions} to
 obtain a value of type @racket[a]. This makes it clear that it is @bold{impossible} to get the value
-“inside” an @racket[IO] action, since no such value exists; there is no @racket[String] “inside” a
-value of type @racket[(IO String)].
+“inside” an @racket[IO] action, since no such value exists; there is no @racket[t:String] “inside” a
+value of type @racket[(IO t:String)].
 
 Since @racket[main] is the only way to ask the runtime to execute the instructions contained within
 an @racket[IO] action, and @racket[main] is only legal at the top level of a module, it is impossible
@@ -1100,11 +1115,11 @@ Uses of this form correspond to definitions of @racketid[main] submodules in @ha
 @racketmodname[racket]. For more information, see
 @secref["main-and-test" #:doc '(lib "scribblings/guide/guide.scrbl")].}
 
-@defproc[(print [str String]) (IO Unit)]{
+@defproc[(print [str t:String]) (IO t:Unit)]{
 
 Produces an @tech{I/O action} that prints @racket[str] to standard output.}
 
-@defproc[(println [str String]) (IO Unit)]{
+@defproc[(println [str t:String]) (IO t:Unit)]{
 
 Like @racket[print], but appends a newline to the end of the printed message.}
 
@@ -1112,8 +1127,8 @@ Like @racket[print], but appends a newline to the end of the printed message.}
 
 @defmodule[hackett/monad/trans]
 
-@defclass[(MonadTrans t)
-          [lift (forall [m a] {(m a) -> (t m a)})]]{
+@defclass[(t:MonadTrans t)
+          [lift (t:forall [m a] {(m a) t:-> (t m a)})]]{
 
 The class of @deftech{monad transformers}. A monad transformer builds a new monad from an existing
 one, extending it with additional functionality. In this sense, monad transformers can be thought of
@@ -1125,7 +1140,7 @@ Instances should satisfy the following laws:
   @#,racket[{lift |.| pure}] @#,elem[#:style 'roman]{=} @#,racket[pure]
   @#,racket[(lift {_m >>= _f})] @#,elem[#:style 'roman]{=} @#,racket[{(lift _m) >>= {lift |.| _f}}]]
 
-@defmethod[lift (forall [m a] {(m a) -> (t m a)})]{
+@defmethod[lift (t:forall [m a] {(m a) t:-> (t m a)})]{
 
 Lifts a computation from the argument monad to the constructed monad.}}
 
@@ -1133,7 +1148,7 @@ Lifts a computation from the argument monad to the constructed monad.}}
 
 @defmodule[hackett/monad/reader]
 
-@defdata[(ReaderT r m a) (reader-t {r -> (m a)})]{
+@defdata[(t:ReaderT r m a) (ReaderT {r t:-> (m a)})]{
 
 The @deftech{reader monad transformer}, a @tech{monad transformer} that extends a monad with a
 read-only dynamic environment. The environment can be accessed with @racket[ask] and locally modified
@@ -1141,21 +1156,21 @@ with @racket[local].
 
 @(hackett-interaction
   (run-reader-t (do [x <- ask]
-                    [y <- (lift {{x + 1} :: {x - 1} :: nil})]
-                    (lift {{y * 2} :: {y * 3} :: nil}))
+                    [y <- (lift {{x + 1} :: {x - 1} :: Nil})]
+                    (lift {{y * 2} :: {y * 3} :: Nil}))
                 10))}
 
-@defproc[(run-reader-t [x (ReaderT r m a)] [ctx r]) (m a)]{
+@defproc[(run-reader-t [x (t:ReaderT r m a)] [ctx r]) (m a)]{
 
 Runs the @tech{reader monad transformer} computation @racket[x] with the context @racket[ctx] and
 produces a computation in the argument monad.}
 
-@defproc[(run-reader [x (ReaderT r Identity a)] [ctx r]) a]{
+@defproc[(run-reader [x (t:ReaderT r t:Identity a)] [ctx r]) a]{
 
 Runs the @tech{reader monad transformer} computation @racket[x] with the context @racket[ctx] and
 extracts the result.}
 
-@defthing[ask (forall [r m] (ReaderT r m r))]{
+@defthing[ask (t:forall [r m] (t:ReaderT r m r))]{
 
 A computation that fetches the value of the current dynamic environment.
 
@@ -1163,16 +1178,16 @@ A computation that fetches the value of the current dynamic environment.
   (eval:check (run-reader ask 5) 5)
   (eval:check (run-reader ask "hello") "hello"))}
 
-@defproc[(asks [f {r -> a}]) (ReaderT r m a)]{
+@defproc[(asks [f {r t:-> a}]) (t:ReaderT r m a)]{
 
 Produces a computation that fetches a value from the current dynamic environment, applies @racket[f]
 to it, and returns the result.
 
 @(hackett-interaction
   (eval:check (run-reader (asks (+ 1)) 5) 6)
-  (eval:check (run-reader (asks head) {5 :: nil}) (just 5)))}
+  (eval:check (run-reader (asks head) {5 :: Nil}) (Just 5)))}
 
-@defproc[(local [f {r -> r}] [x (ReaderT r m a)]) (ReaderT r m a)]{
+@defproc[(local [f {r t:-> r}] [x (t:ReaderT r m a)]) (t:ReaderT r m a)]{
 
 Produces a computation like @racket[x], except that the environment is modified in its dynamic extent
 by applying @racket[f] to it.}
@@ -1181,7 +1196,7 @@ by applying @racket[f] to it.}
 
 @defmodule[hackett/monad/error]
 
-@defdata[(ErrorT e m a) (error-t (m (Either e a)))]{
+@defdata[(t:ErrorT e m a) (ErrorT (m (t:Either e a)))]{
 
 The @deftech{error monad transformer}, a @tech{monad transformer} that extends a monad with a notion
 of failure. Failures short-circuit other computations in the monad, and they can carry information,
@@ -1196,53 +1211,53 @@ usually information about what caused the failure.
                                (throw "Oops!")
                                (lift (println "Never gets here.")))))))}
 
-@defproc[(run-error-t [x (ErrorT e m a)]) (m (Either e a))]{
+@defproc[(run-error-t [x (t:ErrorT e m a)]) (m (t:Either e a))]{
 
 Runs the @tech{error monad transformer} computation @racket[x] and produces the possibly-aborted
 result in the argument monad.}
 
-@defproc[(run-error [x (ErrorT e Identity a)]) (Either e a)]{
+@defproc[(run-error [x (t:ErrorT e t:Identity a)]) (t:Either e a)]{
 
 Runs the @tech{error monad transformer} computation @racket[x] and extracts the possibly-aborted
 result.}
 
-@defproc[(throw [ex e]) (ErrorT e m a)]{
+@defproc[(throw [ex e]) (t:ErrorT e m a)]{
 
 Produces a computation that raises @racket[ex] as an error, aborting the current computation (unless
 caught with @racket[catch]).
 
 @(hackett-interaction
-  (eval:check (: (run-error (pure 42)) (Either String Integer))
-              (: (right 42) (Either String Integer)))
+  (eval:check (: (run-error (pure 42)) (t:Either t:String t:Integer))
+              (: (Right 42) (t:Either t:String t:Integer)))
   (eval:check (run-error (do (throw "Ack!") (pure 42)))
-              (: (left "Ack!") (Either String Integer))))}
+              (: (Left "Ack!") (t:Either t:String t:Integer))))}
 
-@defproc[(catch [x (ErrorT e m a)] [handler {e -> (ErrorT e* m a)}]) (ErrorT e* m a)]{
+@defproc[(catch [x (t:ErrorT e m a)] [handler {e t:-> (t:ErrorT e* m a)}]) (t:ErrorT e* m a)]{
 
 Produces a computation like @racket[x], except any errors raised are handled via @racket[handler]
 instead of immediately aborting.
 
 @(hackett-interaction
-  (eval:check (: (run-error (throw "Ack!")) (Either String String))
-              (: (left "Ack!") (Either String String)))
+  (eval:check (: (run-error (throw "Ack!")) (t:Either t:String t:String))
+              (: (Left "Ack!") (t:Either t:String t:String)))
   (eval:check (: (run-error (catch (throw "Ack!")
                               (λ [str] (pure {"Caught error: " ++ str}))))
-                 (Either Unit String))
-              (: (right "Caught error: Ack!") (Either Unit String))))}
+                 (t:Either t:Unit t:String))
+              (: (Right "Caught error: Ack!") (t:Either t:Unit t:String))))}
 
 @section[#:tag "reference-controlling-evaluation"]{Controlling Evaluation}
 
-@defthing[seq (forall [a b] {a -> b -> b})]{
+@defthing[seq (t:forall [a b] {a t:-> b t:-> b})]{
 
 Accepts two arguments and returns its second argument. When the result is forced, the first argument
 will also be evaluated to weak head normal form. This can be used to reduce laziness.}
 
-@defthing[error! (forall [a] {String -> a})]{
+@defthing[error! (t:forall [a] {t:String t:-> a})]{
 
 @see-guide-note["guide-bottoms"]{partial functions}
 
 A simple @tech{partial function} that crashes the program with a message when evaluated.}
 
-@defthing[undefined! (forall [a] a)]{
+@defthing[undefined! (t:forall [a] a)]{
 
 A @tech[#:key "partial function"]{partial} value that crashes the program when evaluated.}
