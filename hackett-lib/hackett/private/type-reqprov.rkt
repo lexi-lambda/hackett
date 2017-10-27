@@ -35,14 +35,9 @@
 (provide type-out only-types-in unmangle-types-in)
 
 (begin-for-syntax
-  (define (mangle-type-name name)
-    (string-append "#%hackett-type:" name))
-
   (define mangled-type-regexp #rx"^#%hackett-type:(.+)$")
   (define (unmangle-type-name name)
-    (and~> (regexp-match mangled-type-regexp name) second))
-  (define (unmangle-value-name name)
-    (and (not (regexp-match? mangled-type-regexp name)) name)))
+    (and~> (regexp-match mangled-type-regexp name) second)))
 
 (define-syntax type-out
   (make-provide-pre-transformer
@@ -50,9 +45,9 @@
      (syntax-parse stx
        [(_ {~optional {~and #:no-introduce no-introduce?}} provide-spec ...)
         (pre-expand-export
-         #`(filtered-out mangle-type-name
-                         #,((if (attribute no-introduce?) values type-namespace-introduce)
-                            #'(combine-out provide-spec ...)))
+         #`(prefix-out #%hackett-type:
+                       #,((if (attribute no-introduce?) values type-namespace-introduce)
+                          #'(combine-out provide-spec ...)))
          modes)]))))
 
 (define-syntax only-types-in

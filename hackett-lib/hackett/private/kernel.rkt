@@ -10,7 +10,6 @@
                     [@%app @%app1]
                     [∀ ∀1]
                     [=> =>1])
-         (only-in hackett/private/module-plus module+)
          hackett/private/type-reqprov)
 
 (provide (rename-out [@%module-begin #%module-begin]
@@ -23,7 +22,9 @@
          provide combine-out except-out prefix-out rename-out type-out module+
          : def λ let letrec
          (type-out #:no-introduce ∀ -> => Integer Double String
-                   (rename-out [∀ forall])))
+                   (rename-out [@%top #%top]
+                               [@%app #%app]
+                               [∀ forall])))
 
 (module module-wrapper racket/base
   (require syntax/parse syntax/strip-context)
@@ -53,7 +54,8 @@
 
 (define-syntax-parser #%require/only-types
   [(_ require-spec ...)
-   #'(@%require (only-types-in require-spec ...))])
+   (type-namespace-introduce
+    #'(@%require (only-types-in require-spec ...)))])
 
 (define-syntax-parser λ
   [(_ [x:id] e:expr)

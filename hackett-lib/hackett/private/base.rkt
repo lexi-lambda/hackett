@@ -8,20 +8,17 @@
                      threading)
          (postfix-in - (combine-in racket/base
                                    racket/promise
-                                   syntax/id-table
-                                   hackett/private/splicing))
+                                   syntax/id-table))
          racket/stxparam
          syntax/parse/define
 
          (for-syntax hackett/private/infix
                      hackett/private/typecheck
                      hackett/private/util/list
-                     hackett/private/util/stx)
-         hackett/private/module-plus)
+                     hackett/private/util/stx))
 
 (provide (for-syntax (all-from-out hackett/private/typecheck)
                      τs⇔/λ! τ⇔/λ! τ⇔! τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒!)
-         #%module-begin #%top
          (rename-out [#%top @%top]
                      [∀ forall])
          @%module-begin @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary
@@ -338,46 +335,9 @@
 
 (define-syntax-parser @%module-begin
   [(_ form ...)
-   #:with body-form #'(with-module+-lift-target (begin/value-namespace form ...))
-   ; If we expand to code that uses make-syntax-introducer directly, then we’ll end up with a
-   ; different scope for each instantiation of the module. Normally this is okay, but it isn’t when
-   ; dealing with (module* m #f ....) submodules, which ought to inherit the namespace scopes from
-   ; their enclosing modules.
-   ;
-   ; To accommodate this case, we can expand to pieces of syntax, then use
-   ; make-syntax-delta-introducer to ensure that the scopes remain the same across multiple module
-   ; instantiations. Additionally, when we detect we’re inside such a submodule, we don’t want to
-   ; re-parameterize the introducers (since we want to use the ones we inherit from the enclosing
-   ; module).
-   #:with scopeless (datum->syntax #f 'introducer-id)
-   #:with value-scoped ((make-syntax-introducer #t) #'scopeless)
-   #:with type-scoped ((make-syntax-introducer #t) #'scopeless)
-   (if (syntax-parameter-value #'current-value-introducer)
-       #'(#%plain-module-begin body-form)
-       #'(#%plain-module-begin
-          (splicing-let-syntax- ([scopeless #f] [value-scoped #f] [type-scoped #f])
-            (splicing-syntax-parameterize-
-                ([current-value-introducer (make-syntax-delta-introducer
-                                            (quote-syntax value-scoped)
-                                            (quote-syntax scopeless))]
-                 [current-type-introducer (make-syntax-delta-introducer
-                                           (quote-syntax type-scoped)
-                                           (quote-syntax scopeless))])
-              body-form))))])
-
-(define-syntax-parser begin/value-namespace
-  [(_ form ...)
    (value-namespace-introduce
     (syntax/loc this-syntax
-      (begin form ...)))])
-
-(define-syntax-parser begin/type-namespace
-  [(_ form ...)
-   (type-namespace-introduce
-    (syntax/loc this-syntax
-      (begin form ...)))])
-
-;; ---------------------------------------------------------------------------------------------------
+      (#%plain-module-begin- form ...)))])
 
 (define-syntax-parser @%datum
   [(_ . n:exact-integer)

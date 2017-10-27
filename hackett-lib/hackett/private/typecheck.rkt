@@ -12,7 +12,6 @@
 
 (require (for-template racket/base)
          (for-syntax racket/base
-                     syntax/parse
                      syntax/transformer)
          data/gvector
          racket/contract
@@ -24,6 +23,7 @@
          racket/stxparam-exptime
          syntax/id-table
          syntax/parse
+         syntax/parse/define
          threading
 
          hackett/private/util/list
@@ -59,7 +59,7 @@
          make-type-variable-transformer attach-type attach-expected get-type get-expected
          make-typed-var-transformer
 
-         (for-template local-class-instances current-value-introducer current-type-introducer))
+         (for-template local-class-instances))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; type representation
@@ -525,39 +525,6 @@
 ; represents the resulting type. When types are being expanded, (type-transforming?) will be #t, which
 ; Hackett uses to invoke a custom #%app that converts application expressions to uses of τ:app.
 
-(module namespaces-stxparams racket/base
-  (require (for-syntax racket/base) racket/stxparam)
-  (provide current-value-introducer current-type-introducer)
-  (define-syntax-parameter current-value-introducer #f)
-  (define-syntax-parameter current-type-introducer #f))
-(require (for-template 'namespaces-stxparams))
-
-(define (value-namespace-introduce stx)
-  (unless (and (syntax-parameter-value #'current-value-introducer)
-               (syntax-parameter-value #'current-type-introducer))
-    (raise-arguments-error
-     'value-namespace-introduce "not currently transforming a module with namespaces"
-     "stx" stx))
-  (~> stx
-      ((syntax-parameter-value #'current-value-introducer) 'add)
-      ((syntax-parameter-value #'current-type-introducer) 'remove)))
-
-(define (type-namespace-introduce stx)
-  (unless (and (syntax-parameter-value #'current-value-introducer)
-               (syntax-parameter-value #'current-type-introducer))
-    (raise-arguments-error
-     'type-namespace-introduce "not currently transforming a module with namespaces"
-     "stx" stx))
-  (~> stx
-      ((syntax-parameter-value #'current-value-introducer) 'remove)
-      ((syntax-parameter-value #'current-type-introducer) 'add)))
-
-(define-syntax ~type
-  (pattern-expander
-   (syntax-parser
-     [(_ pat)
-      #'{~and tmp {~parse pat (type-namespace-introduce #'tmp)}}])))
-
 (define type-transforming?-param (make-parameter #f))
 (define (type-transforming?) (type-transforming?-param))
 
@@ -607,3 +574,39 @@
 (define/contract (make-typed-var-transformer x t)
   (-> identifier? τ? any)
   (make-variable-like-transformer (attach-type x t)))
+
+;; ---------------------------------------------------------------------------------------------------
+;; type and value namespaces
+
+; Hackett programs have two namespaces: types and values. These are represented by two syntax
+; introducers, each with a unique scope. However, in order to properly cooperate with
+; (module* _ #f ....) submodules, it’s important that the scopes are *global*; that is, they are
+; shared across module instantiations. If we simply define value-introducer and type-introducer by
+; directly invoking make-syntax-introducer, the introducers will be recreated on each module
+; instantiation, producing a fresh scope.
+;
+; To work around this, we can embed syntax objects with the appropriate scopes in the expansion of
+; this module, then use make-syntax-delta-introducer to produce a syntax introducer that will always
+; operate on the same scope, even across multiple module instantiations.
+
+(define-simple-macro (define-value/type-introducers value-introducer:id type-introducer:id)
+  #:with scopeless-id (datum->syntax #f 'introducer-id)
+  #:with value-id ((make-syntax-introducer #t) #'scopeless-id)
+  #:with type-id ((make-syntax-introducer #t) #'scopeless-id)
+  (begin
+    (define value-introducer (make-syntax-delta-introducer #'value-id #'scopeless-id))
+    (define type-introducer (make-syntax-delta-introducer #'type-id #'scopeless-id))))
+
+(define-value/type-introducers value-introducer type-introducer)
+
+(define value-namespace-introduce
+  (λ~> (value-introducer 'add) (type-introducer 'remove)))
+
+(define type-namespace-introduce
+  (λ~> (value-introducer 'remove) (type-introducer 'add)))
+
+(define-syntax ~type
+  (pattern-expander
+   (syntax-parser
+     [(_ pat)
+      #'{~and tmp {~parse pat (type-namespace-introduce #'tmp)}}])))
