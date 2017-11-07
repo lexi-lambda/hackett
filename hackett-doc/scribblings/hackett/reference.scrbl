@@ -498,7 +498,7 @@ argument. Notably, the second argument will not be evaluated at all if the first
 @defdata[(t:Identity a) (Identity a)]{
 
 A simple wrapper type with a variety of typeclass instances that defer to the value inside whenever
-possible. Most useful for its @racket[t:Functor], @racket[t:Applicate], and @racket[t:Monad] instances,
+possible. Most useful for its @racket[t:Functor], @racket[t:Applicative], and @racket[t:Monad] instances,
 which simply apply functions to the value inside the @racket[Identity] wrapper, making it serve as
 a “no-op” wrapper of sorts.
 
@@ -569,7 +569,7 @@ Extracts the value inside @racket[x], producing a default value @racket[v] when 
 @defdata[(t:Either a b) (Left a) (Right b)]{
 
 A type that encodes the notion of a successful result or an error. The @racket[t:Functor],
-@racket[t:Applicate], and @racket[t:Monad] instances for @racket[(t:Either a)] are “right-biased”, so
+@racket[t:Applicative], and @racket[t:Monad] instances for @racket[(t:Either a)] are “right-biased”, so
 they will short-circuit on values wrapped in @racket[Left] and will perform mapping or sequencing on
 values wrapped in @racket[Right].
 
@@ -975,7 +975,7 @@ This works because @racket[{_f <$> _x}] is guaranteed to be equivalent to @racke
 by the applicative laws, and since functions are curried, each use of @racket[<*>] applies a single
 argument to the (potentially partially-applied) function.}}
 
-@defthing[sequence (t:forall [f a] (t:Applicate f) t:=> {(t:List (f a)) t:-> (f (t:List a))})]{
+@defthing[sequence (t:forall [f a] (t:Applicative f) t:=> {(t:List (f a)) t:-> (f (t:List a))})]{
 
 Produces an action that runs a @tech{list} of @tech[#:key "applicative functor"]{applicative} actions
 from left to right, then collects the results into a new list.
@@ -985,7 +985,7 @@ from left to right, then collects the results into a new list.
   (sequence {(Just 1) :: Nothing :: (Just 3) :: Nil}))}
 
 @defthing[traverse
-          (t:forall [f a b] (t:Applicate f) t:=> {{a t:-> (f b)} t:-> (t:List a) t:-> (f (t:List b))})]{
+          (t:forall [f a b] (t:Applicative f) t:=> {{a t:-> (f b)} t:-> (t:List a) t:-> (f (t:List b))})]{
 
 Applies a function to each element of a @tech{list} to produce an @tech[#:key "applicative functor"]{
 applicative} action, then collects them left to right @italic{a la} @racket[sequence]
@@ -997,7 +997,7 @@ applicative} action, then collects them left to right @italic{a la} @racket[sequ
 
 @subsection[#:tag "reference-monad"]{Monads}
 
-@defclass[#:super [(t:Applicate m)]
+@defclass[#:super [(t:Applicative m)]
           (t:Monad m)
           [join (t:forall [a] {(m (m a)) t:-> (m a)})]
           [=<< (t:forall [a b] {{a t:-> (m b)} t:-> (m a) t:-> (m b)})]]{
