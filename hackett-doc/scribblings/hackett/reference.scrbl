@@ -1085,26 +1085,26 @@ does, the two will likely infinitely mutually recur).}
 
 @section[#:tag "reference-io"]{I/O}
 
-@defform[#:kind "type constructor" (IO a)]{
+@deftycon[#:kind "type constructor" (t:IO a)]{
 
 The type of @deftech{I/O actions}, which are @tech{monads}. Hackett’s encoding of I/O is semantically
 pure—evaluating an I/O action does not cause any side-effects to be performed. The only way to
 “execute” an I/O action is to provide it to the @racket[main] form, which instructs the Hackett
-runtime to perform the actual I/O actions described by the @racket[IO] value.
+runtime to perform the actual I/O actions described by the @racket[t:IO] value.
 
-It may be helpful to think of a value of type @racket[(IO a)] as a set of @emph{instructions} to
+It may be helpful to think of a value of type @racket[(t:IO a)] as a set of @emph{instructions} to
 obtain a value of type @racket[a]. This makes it clear that it is @bold{impossible} to get the value
-“inside” an @racket[IO] action, since no such value exists; there is no @racket[t:String] “inside” a
-value of type @racket[(IO t:String)].
+“inside” an @racket[t:IO] action, since no such value exists; there is no @racket[t:String] “inside” a
+value of type @racket[(t:IO t:String)].
 
 Since @racket[main] is the only way to ask the runtime to execute the instructions contained within
-an @racket[IO] action, and @racket[main] is only legal at the top level of a module, it is impossible
-for I/O to be performed locally. This is how Hackett preserves referential transparency @emph{even
-within} functions that produce values of type @racket[IO].}
+an @racket[t:IO] action, and @racket[main] is only legal at the top level of a module, it is
+impossible for I/O to be performed locally. This is how Hackett preserves referential transparency
+@emph{even within} functions that produce values of type @racket[t:IO].}
 
 @defform[(main action)
          #:contracts
-         ([action (IO _a)])]{
+         ([action (t:IO _a)])]{
 
 Appends an @tech{I/O action} to the current module’s @deftech{main actions}. Main actions are executed
 by the runtime whenever a module is run directly, e.g. from DrRacket or via the @tt{racket}
@@ -1115,11 +1115,11 @@ Uses of this form correspond to definitions of @racketid[main] submodules in @ha
 @racketmodname[racket]. For more information, see
 @secref["main-and-test" #:doc '(lib "scribblings/guide/guide.scrbl")].}
 
-@defproc[(print [str t:String]) (IO t:Unit)]{
+@defproc[(print [str t:String]) (t:IO t:Unit)]{
 
 Produces an @tech{I/O action} that prints @racket[str] to standard output.}
 
-@defproc[(println [str t:String]) (IO t:Unit)]{
+@defproc[(println [str t:String]) (t:IO t:Unit)]{
 
 Like @racket[print], but appends a newline to the end of the printed message.}
 
