@@ -177,7 +177,7 @@
                           [t t])
        (match t
          [(τ:∀ x t) (flatten-forall (cons x xs) t)]
-         [other `(∀ ,(map syntax-e (reverse xs)) ,(τ->datum t))]))]
+         [other `(forall ,(map syntax-e (reverse xs)) ,(τ->datum t))]))]
     [(τ:qual constr t)
      (let flatten-qual ([constrs (list constr)]
                         [t t])

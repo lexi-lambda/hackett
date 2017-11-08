@@ -191,7 +191,7 @@
 
 (define (later-guide-note tag . pre-content)
   @other-reference-note{
-    @secref[tag] (later in this guide) explains more about @|pre-content|.})
+    @Secref[tag] (later in this guide) explains more about @|pre-content|.})
 
 (define (see-reference-note tag . pre-content)
   @other-reference-note{

@@ -502,12 +502,93 @@ the week:
     {sunday :: monday :: tuesday :: wednesday
      :: thursday :: friday :: saturday :: Nil}))
 
-Using @racket[filter] combined with the @racket[is-weekend?] function we wrote earlier, it’s possible
-to produce a list that contains only weekends:
+The @racket[filter] allows selecting elements from a list that match a given predicate. Using
+@racket[filter] combined with the @racket[is-weekend?] function we wrote earlier, it’s possible to
+produce a list that contains only weekends:
 
 @(hackett-interaction
   #:eval enumerations-eval
   (filter is-weekend? weekdays))
+
+@subsection[#:tag "guide-intro-to-maybe"]{Representing operations that can fail}
+
+While it’s interesting that we can construct lists and iterate over them, it’s important to be able to
+@emph{consume} lists as well. In many languages, there are functions to access the first element of a
+list, and Hackett has such a function, too, called @racket[head]. However, @racket[head] is an
+interesting operation, since it can @emph{fail}. What happens if we try to get the first element of
+an empty list?
+
+@(hackett-interaction
+  (eval:check (head (: Nil (t:List t:Integer))) (: Nothing (t:Maybe t:Integer))))
+
+Rather than produce an error, Hackett returns @racket[Nothing]. At first, this might seem like
+@tt{null} or @tt{nil} in other languages, but it isn’t—in those languages, almost @emph{anything} has
+the potential to be @tt{null}, so it’s easy to accidentally forget to properly handle @tt{null} cases.
+In Hackett, @racket[Nothing] is just an ordinary value of type @racket[(t:Maybe _a)].
+
+To see why this is different, let’s apply @racket[head] to a list that actually does contain some
+elements:
+
+@(hackett-interaction
+  (eval:check (head {1 :: 2 :: 3 :: Nil}) (Just 1)))
+
+Note that it is wrapped in @racket[Just]. This is because the @racket[t:Maybe] type is a wrapper that
+encodes the notion that the value might not be there. If it is, it is wrapped in @racket[Just]. If it
+isn’t, it’s the plain value @racket[Nothing].
+
+Many Hackett functions produce @racket[t:Maybe]-wrapped values, since there are many operations that
+have the potential to fail. Importantly, this is always expressed in the function’s type:
+
+@(hackett-interaction
+  (#:type head)
+  (#:type tail))
+
+@margin-note{
+  While this is generally true—the majority of Hackett functions express failure potential at the type
+  level—this is not @emph{guaranteed} by the typechecker. For more information on the ways functions
+  can fail at runtime, see @secref["guide-bottoms"].}
+
+Since @racket[t:Maybe] is explicitly annotated in the return type (rather than always implicitly
+possible, like @tt{null} in many other languages), you can know exactly which functions can fail, and
+the typechecker will ensure you properly handle the failure case.
+
+Of course, while this is very nice, it’s not completely useful to get back a value of type
+@racket[(t:Maybe t:Integer)] if we really need an @racket[t:Integer], since the two are entirely
+different types. We cannot, for example, add an @racket[t:Integer] to a @racket[(t:Maybe t:Integer)]:
+
+@(hackett-interaction
+  (eval:error {1 + (Just 2)}))
+
+So, at some point, we need to have @emph{some} way to unwrap the @racket[t:Maybe] wrapper. One way to
+do this is using the @racket[from-maybe] function:
+
+@(hackett-interaction
+  (#:type from-maybe))
+
+Note that this function is @emph{not} @racket[(t:forall [a] {(t:Maybe a) t:-> a})]! Such a function
+would entirely defeat the purpose of using @racket[t:Maybe] to indicate failure, since it would not
+have any way to properly handle the @racket[Nothing] case. Instead, @racket[from-maybe] requires that
+you specify a default value to produce in the event that the second argument is @racket[Nothing]:
+
+@(hackett-interaction
+  (eval:check (from-maybe 0 (Just 42)) 42)
+  (eval:check (from-maybe 0 (: Nothing (t:Maybe t:Integer))) 0))
+
+However, this is not always the right thing to do. Sometimes, a default value might not make any
+sense. Sometimes, a failure is something that needs to be handled at a different level, not
+immediately, but you might still want to modify the value inside a @racket[Just] wrapper. To do this,
+it’s actually possible to use the @racket[map] function to modify the value inside @racket[Just], in
+the same way that it’s possible to modify the values inside a list:
+
+@(hackett-interaction
+  (eval:check (map (+ 1) (Just 11)) (Just 12))
+  (eval:check (map (+ 1) (: Nothing (t:Maybe t:Integer))) (: Nothing (t:Maybe t:Integer))))
+
+If this is confusing to you, you can think of @racket[t:Maybe] as a special case of @racket[t:List]:
+while a value of type @racket[(t:List _a)] can hold @emph{any number} of @racket[_a]s, a value of type
+@racket[(t:Maybe _a)] can hold @emph{exactly zero or one} @racket[_a]. Using the @racket[map] function
+on a value wrapped in @racket[Just] is therefore sort of like mapping over a single-element list, and
+using it on @racket[Nothing] is like mapping over the empty list.
 
 @(close-eval enumerations-eval)
 
