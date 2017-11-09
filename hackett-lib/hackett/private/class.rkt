@@ -60,7 +60,9 @@
    #:with [(~var super-constr (type t-intdef-ctx)) ...] (attribute constr)
    
    #:with [method-id- ...] (generate-temporaries #'[method-id ...])
-   #:with [method-default-id- ...] (generate-temporaries #'[method-id ...])
+   #:attr [method-default-id- 1] (map #{and %1 %2}
+                                      (attribute method-default-impl)
+                                      (generate-temporaries #'[method-id ...]))
    #:with [method-t-expr ...] (map preservable-property->expression (attribute method-t.τ))
    #:with [super-constr-expr ...] (map preservable-property->expression
                                        (attribute super-constr.τ))
