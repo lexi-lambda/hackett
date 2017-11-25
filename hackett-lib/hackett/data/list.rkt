@@ -8,8 +8,8 @@
          delete-by intersperse)
 
 (defn head : (∀ [a] {(List a) -> (Maybe a)})
-  [[{x :: _}] (just x)]
-  [[nil     ] nothing])
+  [[{x :: _}] (Just x)]
+  [[Nil     ] Nothing])
 
 (defn last : (forall [a] {(List a) -> (Maybe a)})
   [[{x :: nil}] (just x)]
@@ -17,8 +17,8 @@
   [[_         ] nothing])
 
 (defn tail : (∀ [a] {(List a) -> (Maybe (List a))})
-  [[{_ :: xs}] (just xs)]
-  [[nil      ] nothing])
+  [[{_ :: xs}] (Just xs)]
+  [[Nil      ] Nothing])
 
 (defn init : (forall [a] {(List a) -> (Maybe (List a))})
   [[nil] nothing]
@@ -55,33 +55,33 @@
 (defn take : (∀ [a] {Integer -> (List a) -> (List a)})
   [[n {x :: xs}]
    (if {n == 0}
-       nil
+       Nil
        {x :: (take {n - 1} xs)})]
-  [[_ nil]
-   nil])
+  [[_ Nil]
+   Nil])
 
 (defn drop : (∀ [a] {Integer -> (List a) -> (List a)})
   [[n {x :: xs}]
    (if {n == 0}
        {x :: xs}
        (drop {n - 1} xs))]
-  [[_ nil]
-   nil])
+  [[_ Nil]
+   Nil])
 
 (defn filter : (∀ [a] {{a -> Bool} -> (List a) -> (List a)})
   [[f {x :: xs}] (let ([ys (filter f xs)]) (if (f x) {x :: ys} ys))]
-  [[_ nil      ] nil])
+  [[_ Nil      ] Nil])
 
 (defn foldl : (∀ [a b] {{b -> a -> b} -> b -> (List a) -> b})
   [[f a {x :: xs}] (let ([b (f a x)]) {b seq (foldl f b xs)})]
-  [[_ a nil      ] a])
+  [[_ a Nil      ] a])
 
 (def reverse : (∀ [a] {(List a) -> (List a)})
-  (foldl (flip ::) nil))
+  (foldl (flip ::) Nil))
 
 (defn zip-with : (∀ [a b c] {{a -> b -> c} -> (List a) -> (List b) -> (List c)})
   [[f {x :: xs} {y :: ys}] {(f x y) :: (zip-with f xs ys)}]
-  [[_ _         _        ] nil])
+  [[_ _         _        ] Nil])
 
 (def sum : {(List Integer) -> Integer}
   (foldl + 0))
@@ -90,14 +90,14 @@
   [[x] (letrec ([xs {x :: xs}]) xs)])
 
 (defn cycle! : (∀ [a] {(List a) -> (List a)})
-  [[nil] (error! "cycle!: empty list")]
+  [[Nil] (error! "cycle!: empty list")]
   [[xs ] (letrec ([ys {xs ++ ys}]) ys)])
 
 (def or : {(List Bool) -> Bool}
-  (foldr || false))
+  (foldr || False))
 
 (def and : {(List Bool) -> Bool}
-  (foldr && true))
+  (foldr && True))
 
 (defn any? : (∀ [a] {{a -> Bool} -> (List a) -> Bool})
   [[f] {or . (map f)}])
@@ -119,8 +119,8 @@
    (if {y =? x}
        ys
        {y :: (delete-by =? x ys)})]
-  [[_ _ nil]
-   nil])
+  [[_ _ Nil]
+   Nil])
 
 (defn intersperse : (forall [a] {a -> (List a) -> (List a)})
   [[_  nil      ] nil]

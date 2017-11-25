@@ -43,18 +43,18 @@ Once you have a REPL started, you can try evaluating some simple expressions:
 
 @(hackett-interaction
   3
-  true)
+  True)
 
 Note that the result is printed out, such as @racketresultfont{3}, but so is the type, such as
-@racket[Integer]. In Hackett, all valid expressions have a type, and the type can usually be inferred
-by the typechecker.
+@racket[t:Integer]. In Hackett, all valid expressions have a type, and the type can usually be
+inferred by the typechecker.
 
 The above expressions were very simple, just simple constants, so they are immediately returned
 without any additional evaluation. Calling some functions is slightly more interesting:
 
 @(hackett-interaction
   (eval:check (+ 1 2) 3)
-  (eval:check (not true) false))
+  (eval:check (not True) False))
 
 In Hackett, like any other Lisp, function calls are syntactically represented by surrounding
 subexpressions with parentheses. In any expression @racket[(_f _x _y _z)], @racket[_f] is a function
@@ -75,21 +75,21 @@ However, we can ask Hackett to only print the type of an expression by wrapping 
 @(hackett-interaction
   (#:type not))
 
-The type of @racket[not] is a @tech{function type}, which is represented by @racket[->]. The type can
-be read as “a function that takes a @racket[Bool] and produces (or returns) a @racket[Bool]”. If you
-attempt to apply something that is not a function, like @racket[3], the typechecker will reject the
-expression as ill-typed:
+The type of @racket[not] is a @tech{function type}, which is represented by @racket[t:->]. The type
+can be read as “a function that takes a @racket[t:Bool] and produces (or returns) a @racket[t:Bool]”.
+If you attempt to apply something that is not a function, like @racket[3], the typechecker will reject
+the expression as ill-typed:
 
 @(hackett-interaction
   #:no-preserve-source-locations
-  (eval:error (3 true)))
+  (eval:error (3 True)))
 
 The type of @racket[+] is slightly more complicated:
 
 @(hackett-interaction
   (#:type +))
 
-This type has two @racket[->] constructors in it, and it actually represents a function that
+This type has two @racket[t:->] constructors in it, and it actually represents a function that
 @emph{returns} another function. This is because all functions in Hackett are @deftech{curried}—that
 is, all functions actually only take a single argument, and multi-argument functions are simulated by
 writing functions that return other functions.
@@ -161,7 +161,7 @@ serve as extremely useful documentation to people reading the code.
 It’s possible to add a type signature to any definition by placing a type annotation after its name:
 
 @(hackett-interaction
-  (defn square : (-> Integer Integer)
+  (defn square : (t:-> t:Integer t:Integer)
     [[x] (* x x)])
   (eval:check (square 5) 25))
 
@@ -171,7 +171,7 @@ expected type, the typechecker will raise an error at compile time:
 
 @(hackett-interaction
   #:no-preserve-source-locations
-  (eval:error (def x : Integer "not an integer")))
+  (eval:error (def x : t:Integer "not an integer")))
 
 @section[#:tag "guide-hackett-essentials"]{Hackett Essentials}
 
@@ -190,8 +190,9 @@ itself:
   "Hello, world!")
 
 Generally, a single type describes many values, sometimes infinitely many! Hackett can represent any
-integer that will fit in memory, and all of them have the @racket[Integer] type. Similarly, there are
-infinitely many possible arrangements of characters, and all of them have the @racket[String] type.
+integer that will fit in memory, and all of them have the @racket[t:Integer] type. Similarly, there
+are infinitely many possible arrangements of characters, and all of them have the @racket[t:String]
+type.
 
 In Hackett, types are @emph{exclusively} a compile-time concept; they never persist at runtime. After
 a program has passed the typechecker, type information is thrown away; this process is known as
@@ -206,8 +207,8 @@ following syntax:
 @specform[(_function-expr arg-expr)]{
 
 @(hackett-examples
-  (not true)
-  (not (not true))
+  (not True)
+  (not (not True))
   ((+ 1) 2))}
 
 The above syntax @italic{applies} @racket[_function-expr] to @racket[_arg-expr], evaluating to the
@@ -229,23 +230,23 @@ the programmer is expected to specify a type rather than a value. The syntax of 
 the syntax of values, but be careful to never confuse the two: remember that types are evaluated at
 compile-time, and they will never mix with runtime values, they simply describe them.
 
-The simplest types are just names. For example, @racket[Integer], @racket[Bool], and @racket[String]
-are all types. These can be successfully used anywhere a type is expected:
+The simplest types are just names. For example, @racket[t:Integer], @racket[t:Bool], and
+@racket[t:String] are all types. These can be successfully used anywhere a type is expected:
 
 @(hackett-interaction
-  (: 42 Integer)
-  (: false Bool))
+  (: 42 t:Integer)
+  (: False t:Bool))
 
 Some types, however, are more complex. For example, consider the type of a @tech{list}. It would be
 silly to have many different types for all the different sorts of list one might need—that would
 require completely separate types for things like @racket[Integer-List], @racket[Bool-List], and
-@racket[String-List]. Instead, there is only a single @racket[List] type, but @racket[List] is not
-actually a type on its own. Rather, @racket[List] is combined with another type to produce a new type,
-such as @racket[(List Integer)] or @racket[(List String)].
+@racket[String-List]. Instead, there is only a single @racket[t:List] type, but @racket[t:List] is not
+actually a type on its own. Rather, @racket[t:List] is combined with another type to produce a new
+type, such as @racket[(t:List t:Integer)] or @racket[(t:List t:String)].
 
-This means that @racket[List] isn’t really a type, since types describe values, and @racket[List] is
-not a valid type on its own. Instead, @racket[List] is known as a @deftech{type constructor}, which
-can be applied to other types to produce a type.
+This means that @racket[t:List] isn’t really a type, since types describe values, and @racket[t:List]
+is not a valid type on its own. Instead, @racket[t:List] is known as a @deftech{type constructor},
+which can be applied to other types to produce a type.
 
 @subsection[#:tag "guide-infix-syntax"]{Infix Syntax}
 
@@ -328,7 +329,7 @@ to decide on a case-by-case basis. Some operators should be grouped the first wa
 
 @(hackett-interaction
   (eval:check {10 - 15 - 6} -11)
-  {1 :: 2 :: 3 :: nil})
+  {1 :: 2 :: 3 :: Nil})
 
 Operator fixity can be specified when a binding is defined by providing a @deftech{fixity annotation},
 which is either @racket[#:fixity left] or @racket[#:fixity right]. Using a fixity annotation, it is
@@ -341,10 +342,11 @@ possible to write a version of @racket[-] that associates right:
 If no fixity annotation is specified, the default fixity is @racket[left].
 
 Additionally, infix syntax can be used in types as well as expressions, and it works the same way.
-Type constructors may also have @tech{operator fixity}, most notably @racket[->], which associates
+Type constructors may also have @tech{operator fixity}, most notably @racket[t:->], which associates
 right. This makes writing type signatures for curried functions much more palatable, since
-@racket[{_a -> _b -> _c}] tends to be easier to visually scan than @racket[(-> _a (-> _b _c))],
-especially when the argument types are long or function types are nested in argument positions.
+@racket[{_a t:-> _b t:-> _c}] tends to be easier to visually scan than
+@racket[(t:-> _a (t:-> _b _c))], especially when the argument types are long or function types are
+nested in argument positions.
 
 @section[#:tag "guide-working-with-data"]{Working with data}
 
@@ -405,14 +407,14 @@ the different values of an enumeration. Here’s one way to write our @racket[is
 
 @(hackett-interaction
   #:eval enumerations-eval
-  (defn is-weekend? : {Weekday -> Bool}
-    [[sunday] true]
-    [[monday] false]
-    [[tuesday] false]
-    [[wednesday] false]
-    [[thursday] false]
-    [[friday] false]
-    [[saturday] true])
+  (defn is-weekend? : {Weekday t:-> t:Bool}
+    [[sunday] True]
+    [[monday] False]
+    [[tuesday] False]
+    [[wednesday] False]
+    [[thursday] False]
+    [[friday] False]
+    [[saturday] True])
   (is-weekend? saturday)
   (is-weekend? wednesday))
 
@@ -425,10 +427,10 @@ sort of “fallthrough” case:
 
 @(hackett-interaction
   #:eval enumerations-eval
-  (defn is-weekend? : {Weekday -> Bool}
-    [[sunday] true]
-    [[saturday] true]
-    [[_] false])
+  (defn is-weekend? : {Weekday t:-> t:Bool}
+    [[sunday] True]
+    [[saturday] True]
+    [[_] False])
   (is-weekend? saturday)
   (is-weekend? wednesday))
 
@@ -443,53 +445,53 @@ multiple values of the same type. One such data structure is a @tech{list}, whic
 singly-linked list. Lists are @emph{homogenous}, which means they hold a set of values that all have
 the same @tech{type}.
 
-A list is built out of two fundamental pieces: the empty list, named @racket[nil], and the “cons”
+A list is built out of two fundamental pieces: the empty list, named @racket[Nil], and the “cons”
 constructor, named @racket[::]. These have the following types:
 
 @margin-note{
-  The use of @racket[forall] in the types of @racket[nil] and @racket[::] indicates that lists are
+  The use of @racket[t:forall] in the types of @racket[Nil] and @racket[::] indicates that lists are
   @emph{polymorphic}—that is, they can hold values of any type. This will be covered in more detail
   in a future section.}
 
 @nested[#:style 'inset]{
   @deftogether[
-    [@defthing[#:link-target? #f nil (forall [a] (List a))]
-     @defthing[#:link-target? #f :: (forall [a] {a -> (List a) -> (List a)})]]]}
+    [@defthing[#:link-target? #f Nil (t:forall [a] (t:List a))]
+     @defthing[#:link-target? #f :: (t:forall [a] {a t:-> (t:List a) t:-> (t:List a)})]]]}
 
 Essentially, @racket[::] prepends a single element to an existing list (known as the “tail” of the
-list), and @racket[nil] is the end of every list. To create a single-element list, use @racket[::]
+list), and @racket[Nil] is the end of every list. To create a single-element list, use @racket[::]
 to prepend an element to the empty list:
 
 @(hackett-interaction
-  {1 :: nil})
+  {1 :: Nil})
 
 A list of more elements can be created with nested uses of @racket[::]:
 
 @(hackett-interaction
-  {1 :: {2 :: {3 :: nil}}})
+  {1 :: {2 :: {3 :: Nil}}})
 
 Additionally, @racket[::] is an @tech{infix operator} that associates right, so nested braces can be
 elided when constructing lists:
 
 @(hackett-interaction
-  {1 :: 2 :: 3 :: nil})
+  {1 :: 2 :: 3 :: Nil})
 
 Once we have a list, we can do various things with it. For example, we can concatenate two lists
 together using the @racket[++] operator:
 
 @(hackett-interaction
-  {{1 :: 2 :: nil} ++ {3 :: 4 :: nil}})
+  {{1 :: 2 :: Nil} ++ {3 :: 4 :: Nil}})
 
 We can sum a list of numbers using the @racket[sum] function:
 
 @(hackett-interaction
-  (eval:check (sum {1 :: 2 :: 3 :: nil}) 6))
+  (eval:check (sum {1 :: 2 :: 3 :: Nil}) 6))
 
 We can even apply a function to each element of a list to produce a new list by using the @racket[map]
 function:
 
 @(hackett-interaction
-  (map (+ 1) {1 :: 2 :: 3 :: nil}))
+  (map (+ 1) {1 :: 2 :: 3 :: Nil}))
 
 Combining this with our @racket[Weekday] type from earlier, we can create a list of all the days in
 the week:
@@ -498,14 +500,95 @@ the week:
   #:eval enumerations-eval
   (def weekdays : (List Weekday)
     {sunday :: monday :: tuesday :: wednesday
-     :: thursday :: friday :: saturday :: nil}))
+     :: thursday :: friday :: saturday :: Nil}))
 
-Using @racket[filter] combined with the @racket[is-weekend?] function we wrote earlier, it’s possible
-to produce a list that contains only weekends:
+The @racket[filter] allows selecting elements from a list that match a given predicate. Using
+@racket[filter] combined with the @racket[is-weekend?] function we wrote earlier, it’s possible to
+produce a list that contains only weekends:
 
 @(hackett-interaction
   #:eval enumerations-eval
   (filter is-weekend? weekdays))
+
+@subsection[#:tag "guide-intro-to-maybe"]{Representing operations that can fail}
+
+While it’s interesting that we can construct lists and iterate over them, it’s important to be able to
+@emph{consume} lists as well. In many languages, there are functions to access the first element of a
+list, and Hackett has such a function, too, called @racket[head]. However, @racket[head] is an
+interesting operation, since it can @emph{fail}. What happens if we try to get the first element of
+an empty list?
+
+@(hackett-interaction
+  (eval:check (head (: Nil (t:List t:Integer))) (: Nothing (t:Maybe t:Integer))))
+
+Rather than produce an error, Hackett returns @racket[Nothing]. At first, this might seem like
+@tt{null} or @tt{nil} in other languages, but it isn’t—in those languages, almost @emph{anything} has
+the potential to be @tt{null}, so it’s easy to accidentally forget to properly handle @tt{null} cases.
+In Hackett, @racket[Nothing] is just an ordinary value of type @racket[(t:Maybe _a)].
+
+To see why this is different, let’s apply @racket[head] to a list that actually does contain some
+elements:
+
+@(hackett-interaction
+  (eval:check (head {1 :: 2 :: 3 :: Nil}) (Just 1)))
+
+Note that it is wrapped in @racket[Just]. This is because the @racket[t:Maybe] type is a wrapper that
+encodes the notion that the value might not be there. If it is, it is wrapped in @racket[Just]. If it
+isn’t, it’s the plain value @racket[Nothing].
+
+Many Hackett functions produce @racket[t:Maybe]-wrapped values, since there are many operations that
+have the potential to fail. Importantly, this is always expressed in the function’s type:
+
+@(hackett-interaction
+  (#:type head)
+  (#:type tail))
+
+@margin-note{
+  While this is generally true—the majority of Hackett functions express failure potential at the type
+  level—this is not @emph{guaranteed} by the typechecker. For more information on the ways functions
+  can fail at runtime, see @secref["guide-bottoms"].}
+
+Since @racket[t:Maybe] is explicitly annotated in the return type (rather than always implicitly
+possible, like @tt{null} in many other languages), you can know exactly which functions can fail, and
+the typechecker will ensure you properly handle the failure case.
+
+Of course, while this is very nice, it’s not completely useful to get back a value of type
+@racket[(t:Maybe t:Integer)] if we really need an @racket[t:Integer], since the two are entirely
+different types. We cannot, for example, add an @racket[t:Integer] to a @racket[(t:Maybe t:Integer)]:
+
+@(hackett-interaction
+  (eval:error {1 + (Just 2)}))
+
+So, at some point, we need to have @emph{some} way to unwrap the @racket[t:Maybe] wrapper. One way to
+do this is using the @racket[from-maybe] function:
+
+@(hackett-interaction
+  (#:type from-maybe))
+
+Note that this function is @emph{not} @racket[(t:forall [a] {(t:Maybe a) t:-> a})]! Such a function
+would entirely defeat the purpose of using @racket[t:Maybe] to indicate failure, since it would not
+have any way to properly handle the @racket[Nothing] case. Instead, @racket[from-maybe] requires that
+you specify a default value to produce in the event that the second argument is @racket[Nothing]:
+
+@(hackett-interaction
+  (eval:check (from-maybe 0 (Just 42)) 42)
+  (eval:check (from-maybe 0 (: Nothing (t:Maybe t:Integer))) 0))
+
+However, this is not always the right thing to do. Sometimes, a default value might not make any
+sense. Sometimes, a failure is something that needs to be handled at a different level, not
+immediately, but you might still want to modify the value inside a @racket[Just] wrapper. To do this,
+it’s actually possible to use the @racket[map] function to modify the value inside @racket[Just], in
+the same way that it’s possible to modify the values inside a list:
+
+@(hackett-interaction
+  (eval:check (map (+ 1) (Just 11)) (Just 12))
+  (eval:check (map (+ 1) (: Nothing (t:Maybe t:Integer))) (: Nothing (t:Maybe t:Integer))))
+
+If this is confusing to you, you can think of @racket[t:Maybe] as a special case of @racket[t:List]:
+while a value of type @racket[(t:List _a)] can hold @emph{any number} of @racket[_a]s, a value of type
+@racket[(t:Maybe _a)] can hold @emph{exactly zero or one} @racket[_a]. Using the @racket[map] function
+on a value wrapped in @racket[Just] is therefore sort of like mapping over a single-element list, and
+using it on @racket[Nothing] is like mapping over the empty list.
 
 @(close-eval enumerations-eval)
 
@@ -513,10 +596,10 @@ to produce a list that contains only weekends:
 
 In Hackett, functions are generally expected to be @deftech[#:key "total function"]{total}, which
 means they should produce a result for all possible inputs. For example, @racket[not] is obviously
-defined for both @racket[true] and @racket[false], which are the only possible values of the
-@racket[Bool] type. Total functions allow a programmer to reason about programs using the types alone;
-a function with the type @racket[{A -> B}] implies that is is always possible to get a @racket[B] when
-you have an @racket[A].
+defined for both @racket[True] and @racket[False], which are the only possible values of the
+@racket[t:Bool] type. Total functions allow a programmer to reason about programs using the types
+alone; a function with the type @racket[{A t:-> B}] implies that is is always possible to get a
+@racket[B] when you have an @racket[A].
 
 @see-reference-note["reference-controlling-evaluation"]{partial functions}
 
@@ -540,7 +623,7 @@ anything, but this is only possible because it will never actually return anythi
 
 @(hackett-interaction
   #:no-preserve-source-locations
-  (eval:error (: (error! "urk!") Unit)))
+  (eval:error (: (error! "urk!") t:Unit)))
 
 Partial functions in Hackett are idiomatically indicated by including a @litchar{!} symbol at the end
 of their names, but this is only a convention; it is not enforced by the compiler or typechecker.
@@ -549,7 +632,7 @@ The @racket[error!] function can be considered a way to subvert the type system.
 is to provide a programmer the ability to mark cases which are “impossible” based on the logic of the
 program, but the typechecker cannot determine that is true. Of course, in practice, things that where
 once truly impossible may eventually become possible as code changes, so using some other notion of
-failure (such as returning a value wrapped in @racket[Maybe]) is generally preferred whenever
+failure (such as returning a value wrapped in @racket[t:Maybe]) is generally preferred whenever
 possible.
 
 In addition to @racket[error!], another partial value provided by Hackett is @racket[undefined!]. This
@@ -566,7 +649,7 @@ never return, but there is another possibility besides halting: the function can
 loop. Here is an example of such a function, called @racket[diverge!]:
 
 @(racketblock
-  (defn diverge! : (forall [a] {String -> a})
+  (defn diverge! : (t:forall [a] {t:String t:-> a})
     [[x] (diverge! x)]))
 
 This sort of function is often @emph{also} considered partial, since it does not return a value for
@@ -577,7 +660,7 @@ that! This can result in curious behavior, where a partial function does not cau
 or diverge, simply because it isn’t evaluated:
 
 @(hackett-interaction
-  (const unit (error! "never gets here")))
+  (const Unit (error! "never gets here")))
 
 In fact, a partial function can “lurk” in an unevaluated thunk for quite a long time, but forcing its
 evaluation will cause its effects to become visible. These unpredictable effects are another reason to

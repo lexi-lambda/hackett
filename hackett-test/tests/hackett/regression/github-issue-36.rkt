@@ -2,4 +2,4 @@
 
 (require hackett/private/test)
 
-(test {(show (tuple 1 2)) ==! "(tuple 1 2)"})
+(test {(show (Tuple 1 "str")) ==! "(Tuple 1 \"str\")"})

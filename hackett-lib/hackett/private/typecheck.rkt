@@ -12,7 +12,6 @@
 
 (require (for-template racket/base)
          (for-syntax racket/base
-                     syntax/parse
                      syntax/transformer)
          data/gvector
          racket/contract
@@ -24,6 +23,7 @@
          racket/stxparam-exptime
          syntax/id-table
          syntax/parse
+         syntax/parse/define
          threading
 
          hackett/private/util/list
@@ -39,16 +39,22 @@
                        [struct ctx:var ([x identifier?])]
                        [struct ctx:skolem ([x^ identifier?])]
                        [struct ctx:solution ([x^ identifier?] [t τ?])]
-                       [struct class:info ([var identifier?]
+                       [struct class:info ([vars (listof identifier?)]
                                            [method-table immutable-free-id-table?]
+                                           [default-methods immutable-free-id-table?]
                                            [superclasses (listof constr?)])]
-                       [struct class:instance ([class class:info?] [t τ?] [dict-expr syntax?])])
-         τ? τ:-> τ:->? τ:->* τ=? constr? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf!
-         generalize inst τ<:/full! τ<:/elaborate! τ<:! τ-inst-l! τ-inst-r!
+                       [struct class:instance ([class class:info?]
+                                               [vars (listof identifier?)]
+                                               [subgoals (listof constr?)]
+                                               [ts (listof (and/c τ? τ-mono?))]
+                                               [dict-expr syntax?])])
+         τ? τ=? constr? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf! τ:app* τ:-> τ:->? τ:->*
+         generalize inst insts τ<:/full! τ<:/elaborate! τ<:! τ-inst-l! τ-inst-r!
          ctx-elem? ctx? ctx-elem=? ctx-member? ctx-remove
          ctx-find-solution current-ctx-solution apply-subst apply-current-subst
          current-type-context modify-type-context
          register-global-class-instance! lookup-instance!
+         value-namespace-introduce type-namespace-introduce ~type
          type type-transforming? parse-type τ-stx-token local-expand-type
          make-type-variable-transformer attach-type attach-expected get-type get-expected
          make-typed-var-transformer
@@ -171,13 +177,25 @@
                           [t t])
        (match t
          [(τ:∀ x t) (flatten-forall (cons x xs) t)]
-         [other `(∀ ,(map syntax-e (reverse xs)) ,(τ->datum t))]))]
+         [other `(forall ,(map syntax-e (reverse xs)) ,(τ->datum t))]))]
     [(τ:qual constr t)
      (let flatten-qual ([constrs (list constr)]
                         [t t])
        (match t
          [(τ:qual constr t) (flatten-qual (cons constr constrs) t)]
          [other `(=> ,(map τ->datum (reverse constrs)) ,(τ->datum t))]))]))
+
+(define/contract (apply-τ t ts)
+  (-> τ? (listof τ?) τ?)
+  (foldl t #{τ:app %2 %1} ts))
+(define (unapply-τ t)
+  (-> τ? (non-empty-listof τ?))
+  (match t
+    [(τ:app a b) (snoc (unapply-τ a) b)]
+    [_ (list t)]))
+(define-match-expander τ:app*
+  (syntax-parser [(_ list-pats ...+) #'(app unapply-τ (list list-pats ...))])
+  (make-variable-like-transformer #'apply-τ))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; type contexts
@@ -258,6 +276,10 @@
     [(τ:∀ v t*) (τ:∀ v (inst t* x s))]
     [(τ:qual a b) (τ:qual (inst a x s) (inst b x s))]))
 
+(define/contract (insts t x+ss)
+  (-> τ? (listof (cons/c identifier? τ?)) τ?)
+  (foldl #{inst %2 (car %1) (cdr %1)} t x+ss))
+
 (define/contract current-type-context (parameter/c ctx?) (make-parameter '()))
 (define/contract (modify-type-context f)
   (-> (-> ctx? ctx?) void?)
@@ -266,7 +288,7 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; instance contexts
 
-(struct class:info (var method-table superclasses) #:transparent
+(struct class:info (vars method-table default-methods superclasses) #:transparent
   #:property prop:procedure
   (λ (info stx)
     ((make-type-variable-transformer
@@ -275,7 +297,7 @@
                [(id:id . _) #'id])
              #f))
      stx)))
-(struct class:instance (class t dict-expr) #:transparent)
+(struct class:instance (class vars subgoals ts dict-expr) #:transparent)
 
 (define global-class-instances (make-gvector))
 (define/contract (register-global-class-instance! instance)
@@ -444,41 +466,46 @@
 ;; ---------------------------------------------------------------------------------------------------
 
 ; Attempts to unify a type with an instance head with a type for the purposes of picking a typeclass.
-; If the match succeeds, it returns a list of constraints, which are the subgoals for the instance,
-; if any.
-(define/contract (unify-instance-head t head)
-  (-> τ? τ? (or/c (listof constr?) #f))
-  (match* [(apply-current-subst t) (apply-current-subst head)]
-    [[(τ:skolem x^) (τ:skolem y^)]
-     #:when (free-identifier=? x^ y^)
-     '()]
-    [[(? τ-mono? t) (τ:var^ x^)]
-     (modify-type-context #{snoc % (ctx:solution x^ t)})
-     '()]
-    [[(? τ:con? a) (? τ:con? b)]
-     #:when (τ=? a b)
-     '()]
-    [[(τ:app a b) (τ:app c d)]
-     (let ([x (unify-instance-head a c)])
-       (and x (let ([y (unify-instance-head b d)])
-                (and y (append x y)))))]
-    [[a (τ:∀ x b)]
-     (let ([x^ (generate-temporary x)])
-       (unify-instance-head a (inst b x (τ:var^ x^))))]
-    [[a (τ:qual constr b)]
-     (and~>> (unify-instance-head a b)
-             (cons constr))]
-    [[_ _]
-     #f]))
+; If the match succeeds, it returns a list of instantiated subgoals for the instance, otherwise it
+; returns #f.
+(define/contract (unify-instance-head ts vars subgoals head)
+  (-> (listof τ?) (listof identifier?) (listof constr?) (listof (and/c τ? τ-mono?))
+      (or/c (listof constr?) #f))
+  (let* ([vars^ (generate-temporaries vars)]
+         [var-subst (map #{cons %1 (τ:var^ %2)} vars vars^)]
+         [head-inst (map #{insts % var-subst} head)]
+         [subgoals-inst (map #{insts % var-subst} subgoals)])
+    (and (for/and ([t (in-list ts)]
+                   [head-t (in-list head-inst)])
+           (let loop ([t t]
+                      [head-t head-t])
+             (match* [(apply-current-subst t) (apply-current-subst head-t)]
+               [[(τ:skolem x^) (τ:skolem y^)]
+                #:when (free-identifier=? x^ y^)
+                #t]
+               [[(? τ-mono? t) (τ:var^ x^)]
+                (modify-type-context #{snoc % (ctx:solution x^ t)})
+                #t]
+               [[(? τ:con? a) (? τ:con? b)]
+                #:when (τ=? a b)
+                #t]
+               [[(τ:app a b) (τ:app c d)]
+                (and (loop a c) (loop b d))]
+               [[_ _]
+                #f])))
+         subgoals-inst)))
 
 (define/contract (lookup-instance! constr #:src src)
   (-> constr? #:src syntax? (values class:instance? (listof constr?)))
-  (match-define (τ:app (τ:con class-id _) (app apply-current-subst t)) constr)
+  (match-define (τ:app* (τ:con class-id _) (app apply-current-subst ts) ...) constr)
   (define class (syntax-local-value class-id)) ; FIXME: handle when this isn’t a class:info
   (apply values
          (or (for/or ([instance (in-list (current-instances-of-class class))])
                (let ([old-type-context (current-type-context)])
-                 (let ([constrs (unify-instance-head t (class:instance-t instance))])
+                 (let ([constrs (unify-instance-head ts
+                                                     (class:instance-vars instance)
+                                                     (class:instance-subgoals instance)
+                                                     (class:instance-ts instance))])
                    (if constrs (list instance constrs)
                        (begin (current-type-context old-type-context) #f)))))
              (raise-syntax-error 'typechecker
@@ -501,11 +528,11 @@
 (define type-transforming?-param (make-parameter #f))
 (define (type-transforming?) (type-transforming?-param))
 
-(define-syntax-class type
+(define-syntax-class (type [intdef-ctx #f])
   #:attributes [τ expansion]
   #:opaque
   [pattern t:expr
-           #:with expansion (local-expand-type #'t)
+           #:with expansion (local-expand-type #'t intdef-ctx)
            #:attr τ (syntax-property (attribute expansion) 'τ)
            #:when (τ? (attribute τ))])
 
@@ -514,10 +541,10 @@
     #:context 'parse-type
     [t:type (attribute t.τ)]))
 
-(define/contract (local-expand-type stx)
-  (-> syntax? syntax?)
+(define/contract (local-expand-type stx [intdef-ctx #f])
+  (->* [syntax?] [(or/c internal-definition-context? #f)] syntax?)
   (parameterize ([type-transforming?-param #t])
-    (local-expand stx 'expression '())))
+    (local-expand stx 'expression '() intdef-ctx)))
 
 (define/contract (make-type-variable-transformer t)
   (-> τ? any)
@@ -547,3 +574,39 @@
 (define/contract (make-typed-var-transformer x t)
   (-> identifier? τ? any)
   (make-variable-like-transformer (attach-type x t)))
+
+;; ---------------------------------------------------------------------------------------------------
+;; type and value namespaces
+
+; Hackett programs have two namespaces: types and values. These are represented by two syntax
+; introducers, each with a unique scope. However, in order to properly cooperate with
+; (module* _ #f ....) submodules, it’s important that the scopes are *global*; that is, they are
+; shared across module instantiations. If we simply define value-introducer and type-introducer by
+; directly invoking make-syntax-introducer, the introducers will be recreated on each module
+; instantiation, producing a fresh scope.
+;
+; To work around this, we can embed syntax objects with the appropriate scopes in the expansion of
+; this module, then use make-syntax-delta-introducer to produce a syntax introducer that will always
+; operate on the same scope, even across multiple module instantiations.
+
+(define-simple-macro (define-value/type-introducers value-introducer:id type-introducer:id)
+  #:with scopeless-id (datum->syntax #f 'introducer-id)
+  #:with value-id ((make-syntax-introducer #t) #'scopeless-id)
+  #:with type-id ((make-syntax-introducer #t) #'scopeless-id)
+  (begin
+    (define value-introducer (make-syntax-delta-introducer #'value-id #'scopeless-id))
+    (define type-introducer (make-syntax-delta-introducer #'type-id #'scopeless-id))))
+
+(define-value/type-introducers value-introducer type-introducer)
+
+(define value-namespace-introduce
+  (λ~> (value-introducer 'add) (type-introducer 'remove)))
+
+(define type-namespace-introduce
+  (λ~> (value-introducer 'remove) (type-introducer 'add)))
+
+(define-syntax ~type
+  (pattern-expander
+   (syntax-parser
+     [(_ pat)
+      #'{~and tmp {~parse pat (type-namespace-introduce #'tmp)}}])))

@@ -27,33 +27,33 @@
 ;; basic operations
 
 (defn not : {Bool -> Bool}
-  [[true ] false]
-  [[false] true])
+  [[True ] False]
+  [[False] True])
 
 (defn || : {Bool -> Bool -> Bool} #:fixity right
-  [[true  _] true]
-  [[false y] y])
+  [[True  _] True]
+  [[False y] y])
 
 (defn && : {Bool -> Bool -> Bool} #:fixity right
-  [[true  y] y]
-  [[false _] false])
+  [[True  y] y]
+  [[False _] False])
 
 (defn if : (∀ [a] {Bool -> a -> a -> a})
-  [[true  x _] x]
-  [[false _ y] y])
+  [[True  x _] x]
+  [[False _ y] y])
 
 (defn fst : (∀ [a b] {(Tuple a b) -> a})
-  [[(tuple x _)] x])
+  [[(Tuple x _)] x])
 
 (defn snd : (∀ [a b] {(Tuple a b) -> b})
-  [[(tuple _ x)] x])
+  [[(Tuple _ x)] x])
 
 (defn foldr : (∀ [a b] {{a -> b -> b} -> b -> (List a) -> b})
   [[f a {x :: xs}] (f x (foldr f a xs))]
-  [[_ a nil      ] a])
+  [[_ a Nil      ] a])
 
 (defn unsafe-run-io! : (∀ [a] {(IO a) -> a})
-  [[(io f)] (snd (f real-world))])
+  [[(IO f)] (snd (f Real-World))])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; function combinators
@@ -83,11 +83,11 @@
   [show : {a -> String}])
 
 (instance (Show Unit)
-  [show (λ [unit] "unit")])
+  [show (λ [Unit] "Unit")])
 
 (instance (Show Bool)
-  [show (λ* [[true ] "true"]
-            [[false] "false"])])
+  [show (λ* [[True ] "True"]
+            [[False] "False"])])
 
 (instance (Show Integer)
   [show show/Integer])
@@ -99,20 +99,20 @@
   [show (λ [str] {"\"" ++ str ++ "\""})])
 
 (instance (∀ [a] (Show a) => (Show (Maybe a)))
-  [show (λ* [[(just x)] {"(just " ++ (show x) ++ ")"}]
-            [[nothing ] "nothing"])])
+  [show (λ* [[(Just x)] {"(Just " ++ (show x) ++ ")"}]
+            [[Nothing ] "Nothing"])])
 
 (instance (∀ [a b] (Show a) (Show b) => (Show (Either a b)))
-  [show (λ* [[(left x)] {"(left " ++ (show x) ++ ")"}]
-            [[(right x)] {"(right " ++ (show x) ++ ")"}])])
+  [show (λ* [[(Left x)] {"(Left " ++ (show x) ++ ")"}]
+            [[(Right x)] {"(Right " ++ (show x) ++ ")"}])])
 
 (instance (∀ [a b] (Show a) (Show b) => (Show (Tuple a b)))
-  [show (λ [(tuple a b)] {"(tuple " ++ (show a) ++ " " ++ (show b) ++ ")"})])
+  [show (λ [(Tuple a b)] {"(Tuple " ++ (show a) ++ " " ++ (show b) ++ ")"})])
 
 (instance (∀ [a] (Show a) => (Show (List a)))
-  [show (λ* [[nil] "nil"]
+  [show (λ* [[Nil] "Nil"]
             [[xs] (let ([strs (map {(λ [x] {x ++ " :: "}) . show} xs)])
-                    {"{" ++ (concat strs) ++ "nil}"})])])
+                    {"{" ++ (concat strs) ++ "Nil}"})])])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Eq
@@ -121,11 +121,11 @@
   [== : {a -> a -> Bool}])
 
 (instance (Eq Unit)
-  [== (λ [unit unit] true)])
+  [== (λ [Unit Unit] True)])
 
 (instance (Eq Bool)
-  [== (λ* [[true  y] y]
-          [[false y] (not y)])])
+  [== (λ* [[True  y] y]
+          [[False y] (not y)])])
 
 (instance (Eq Integer)
   [== equal?/Integer])
@@ -137,22 +137,22 @@
   [== equal?/String])
 
 (instance (∀ [a] (Eq a) => (Eq (Maybe a)))
-  [== (λ* [[(just a) (just b)] {a == b}]
-          [[nothing  nothing ] true]
-          [[_        _       ] false])])
+  [== (λ* [[(Just a) (Just b)] {a == b}]
+          [[Nothing  Nothing ] True]
+          [[_        _       ] False])])
 
 (instance (∀ [a b] (Eq a) (Eq b) => (Eq (Either a b)))
-  [== (λ* [[(right a) (right b)] {a == b}]
-          [[(left  a) (left  b)] {a == b}]
-          [[_         _        ] false])])
+  [== (λ* [[(Right a) (Right b)] {a == b}]
+          [[(Left  a) (Left  b)] {a == b}]
+          [[_         _        ] False])])
 
 (instance (∀ [a b] (Eq a) (Eq b) => (Eq (Tuple a b)))
-  [== (λ [(tuple a b) (tuple c d)] {{a == c} && {b == d}})])
+  [== (λ [(Tuple a b) (Tuple c d)] {{a == c} && {b == d}})])
 
 (instance (∀ [a] (Eq a) => (Eq (List a)))
   [== (λ* [[{x :: xs} {y :: ys}] {{x == y} && {xs == ys}}]
-          [[nil       nil      ] true]
-          [[_         _        ] false])])
+          [[Nil       Nil      ] True]
+          [[_         _        ] False])])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Semigroup / Monoid
@@ -165,14 +165,14 @@
   [++ append/String])
 
 (instance (∀ [a] (Semigroup a) => (Semigroup (Maybe a)))
-  [++ (λ* [[(just x) (just y)] (just {x ++ y})]
-          [[(just x) nothing ] (just x)]
-          [[nothing  (just y)] (just y)]
-          [[nothing  nothing ] nothing])])
+  [++ (λ* [[(Just x) (Just y)] (Just {x ++ y})]
+          [[(Just x) Nothing ] (Just x)]
+          [[Nothing  (Just y)] (Just y)]
+          [[Nothing  Nothing ] Nothing])])
 
 (instance (∀ [a] (Semigroup (List a)))
   [++ (λ* [[{z :: zs} ys] {z :: {zs ++ ys}}]
-          [[nil       ys] ys])])
+          [[Nil       ys] ys])])
 
 (instance (∀ [a b] (Semigroup b) => (Semigroup {a -> b}))
   [++ (λ [f g x] {(f x) ++ (g x)})])
@@ -184,10 +184,10 @@
   [mempty ""])
 
 (instance (∀ [a] (Semigroup a) => (Monoid (Maybe a)))
-  [mempty nothing])
+  [mempty Nothing])
 
 (instance (∀ [a] (Monoid (List a)))
-  [mempty nil])
+  [mempty Nil])
 
 (instance (∀ [a b] (Monoid b) => (Monoid {a -> b}))
   [mempty (λ [_] mempty)])
@@ -211,25 +211,25 @@
   (flip <$))
 
 (def ignore : (∀ [f a] (Functor f) => {(f a) -> (f Unit)})
-  (map (const unit)))
+  (map (const Unit)))
 
 (instance (Functor Maybe)
-  [map (λ* [[f (just x)] (just (f x))]
-           [[_ nothing ] nothing])])
+  [map (λ* [[f (Just x)] (Just (f x))]
+           [[_ Nothing ] Nothing])])
 
 (instance (∀ [e] (Functor (Either e)))
-  [map (λ* [[f (right x)] (right (f x))]
-           [[_ (left  x)] (left  x)])])
+  [map (λ* [[f (Right x)] (Right (f x))]
+           [[_ (Left  x)] (Left  x)])])
 
 (instance (Functor List)
   [map (λ* [[f {y :: ys}] {(f y) :: (map f ys)}]
-           [[_ nil      ] nil])])
+           [[_ Nil      ] Nil])])
 
 (instance (Functor IO)
-  [map (λ [f (io mx)]
-         (io (λ [rw]
+  [map (λ [f (IO mx)]
+         (IO (λ [rw]
                (case (mx rw)
-                 [(tuple rw* a) (tuple rw* (f a))]))))])
+                 [(Tuple rw* a) (Tuple rw* (f a))]))))])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Applicative
@@ -240,37 +240,37 @@
 
 (defn sequence : (∀ [f a] (Applicative f) => {(List (f a)) -> (f (List a))})
   [[{y :: ys}] {:: map y <*> (sequence ys)}]
-  [[nil      ] (pure nil)])
+  [[Nil      ] (pure Nil)])
 
 (defn traverse : (∀ [f a b] (Applicative f) => {{a -> (f b)} -> (List a) -> (f (List b))})
   [[f xs] (sequence (map f xs))])
 
 (instance (Applicative Maybe)
-  [pure just]
-  [<*> (λ* [[(just f) x] (map f x)]
-           [[nothing  _] nothing])])
+  [pure Just]
+  [<*> (λ* [[(Just f) x] (map f x)]
+           [[Nothing  _] Nothing])])
 
 (instance (∀ [e] (Applicative (Either e)))
-  [pure right]
-  [<*> (λ* [[(right f) x] (map f x)]
-           [[(left  x) _] (left x)])])
+  [pure Right]
+  [<*> (λ* [[(Right f) x] (map f x)]
+           [[(Left  x) _] (Left x)])])
 
 (instance (Applicative List)
-  [pure (λ [x] {x :: nil})]
+  [pure (λ [x] {x :: Nil})]
   [<*> ap])
 
 (instance (Applicative IO)
-  [pure (λ [x] (io (λ [rw] (tuple rw x))))]
+  [pure (λ [x] (IO (λ [rw] (Tuple rw x))))]
   [<*> ap])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Monad
 
 (class (Applicative m) => (Monad m)
-  [join : (∀ [a] {(m (m a)) -> (m a)})])
-
-(defn =<< : (∀ [m a b] (Monad m) => {{a -> (m b)} -> (m a) -> (m b)})
-  [[f x] (join (map f x))])
+  [join : (∀ [a] {(m (m a)) -> (m a)})
+        (λ [x] {id =<< x})]
+  [=<< : (∀ [a b] {{a -> (m b)} -> (m a) -> (m b)})
+       (λ [f x] (join (map f x)))])
 
 (def >>= : (∀ [m a b] (Monad m) => {(m a) -> {a -> (m b)} -> (m b)})
   (flip =<<))
@@ -292,24 +292,24 @@
                (pure (f x)))])
 
 (instance (Monad Maybe)
-  [join (λ* [[(just (just x))] (just x)]
-            [[_              ] nothing])])
+  [join (λ* [[(Just (Just x))] (Just x)]
+            [[_              ] Nothing])])
 
 (instance (∀ [e] (Monad (Either e)))
-  [join (λ* [[(right (right x))] (right x)]
-            [[(right (left  x))] (left  x)]
-            [[(left  x)        ] (left  x)])])
+  [join (λ* [[(Right (Right x))] (Right x)]
+            [[(Right (Left  x))] (Left  x)]
+            [[(Left  x)        ] (Left  x)])])
 
 (instance (Monad List)
   [join (λ* [[{{z :: zs} :: yss}] {z :: (join {zs :: yss})}]
-            [[{nil       :: yss}] (join yss)]
-            [[nil               ] nil])])
+            [[{Nil       :: yss}] (join yss)]
+            [[Nil               ] Nil])])
 
 (instance (Monad IO)
-  [join (λ [(io outer)]
-          (io (λ [rw]
+  [join (λ [(IO outer)]
+          (IO (λ [rw]
                 (case (outer rw)
-                  [(tuple rw* m-inner)
+                  [(Tuple rw* m-inner)
                    (case m-inner
-                     [(io inner)
+                     [(IO inner)
                       (inner rw*)])]))))])

@@ -1,8 +1,9 @@
 #lang curly-fn racket/base
 
-(require racket/require hackett/private/util/require)
+(require racket/provide racket/require hackett/private/util/require)
 
-(require (for-syntax (multi-in racket [base contract list match syntax])
+(require (for-syntax (multi-in racket [base contract list match provide-transform require-transform
+                                       syntax])
                      syntax/parse/experimental/template
                      threading)
          (postfix-in - (combine-in racket/base
@@ -18,11 +19,9 @@
 
 (provide (for-syntax (all-from-out hackett/private/typecheck)
                      τs⇔/λ! τ⇔/λ! τ⇔! τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒!)
-         #%module-begin #%top
-         (rename-out [#%plain-module-begin @%module-begin]
-                     [#%top @%top]
+         (rename-out [#%top @%top]
                      [∀ forall])
-         @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary
+         @%module-begin @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary
          define-primop define-base-type
          -> ∀ => Integer Double String
          : λ1 def let letrec)
@@ -192,19 +191,21 @@
     ; simplify/elaborate from earlier. This will produce a fully-expanded expression and its type,
     ; which we can return.
     (define-values [es- ts_es]
-      (for/lists [es- ts_es]
+      ; In order to ensure Check Syntax can pick up uses of typed var transformers that have been
+      ; expanded, it’s important to attach the necessary 'disappeared-binding syntax property.
+      (let ([disappeared-bindings (map (λ~>> (internal-definition-context-introduce intdef-ctx)
+                                             syntax-local-introduce)
+                                       xs)])
+        (for/lists [es- ts_es]
                  ([k (in-list ks)]
                   [e (in-list (map car es+ts))]
                   [e/elab (in-list es/elab)])
         (let* ([e- (local-expand e/elab 'expression stop-ids intdef-ctx)]
                [t_e (get-type e-)])
           (unless t_e (raise-syntax-error #f "no inferred type" e))
-          ; propagate disappeared bindings to ensure binding arrows can pick up uses of
-          ; typed var transformers that have been expanded
           (k (syntax-property e- 'disappeared-binding
-                              (cons (syntax-property e 'disappeared-binding)
-                                    (syntax-property #'inner-let 'disappeared-binding)))
-             t_e))))
+                              (cons (syntax-property e 'disappeared-binding) disappeared-bindings))
+             t_e)))))
 
     ; With everything inferred and checked, all that’s left to do is return the results.
     (values xs-* es- ts_es))
@@ -281,13 +282,13 @@
   (define/contract constraint->instances
     (-> constr? syntax? (listof class:instance?))
     (match-lambda**
-     [[(τ:app (τ:con class-id _) t) dict-expr]
+     [[(τ:app* (τ:con class-id _) ts ...) dict-expr]
       (let* ([class-info (syntax-local-value class-id)]
-             [instance (class:instance class-info (apply-current-subst t) dict-expr)]
+             [instance (class:instance class-info '() '() (map apply-current-subst ts) dict-expr)]
              ; instantiate the superclass constraints, so for (Monad Unit), we get (Applicative Unit)
              ; instead of (Applicative m)
              [super-constrs (~>> (class:info-superclasses class-info)
-                                 (map #{inst % (class:info-var class-info) t}))]
+                                 (map #{insts % (map cons (class:info-vars class-info) ts)}))]
              [superclass-dict-expr #`(free-id-table-ref- #,dict-expr #'@%superclasses-key)]
              [super-instances (for/list ([(super-constr i) (in-indexed (in-list super-constrs))])
                                 (constraint->instances
@@ -330,6 +331,14 @@
                      constrs)))])
        dict-expr)])
 
+;; ---------------------------------------------------------------------------------------------------
+
+(define-syntax-parser @%module-begin
+  [(_ form ...)
+   (value-namespace-introduce
+    (syntax/loc this-syntax
+      (#%plain-module-begin- form ...)))])
+
 (define-syntax-parser @%datum
   [(_ . n:exact-integer)
    (attach-type #'(#%datum . n) (parse-type #'Integer))]
@@ -342,7 +351,7 @@
    (raise-syntax-error #f "literal not supported" #'x)])
 
 (define-syntax-parser :
-  [(_ e t-expr:type)
+  [(_ e {~type t-expr:type})
    (attach-type #`(let-values- ([() (begin- (λ- () t-expr.expansion) (values-))])
                     #,(τ⇐! #'e (attribute t-expr.τ)))
                 (apply-current-subst (attribute t-expr.τ)))])
@@ -379,7 +388,7 @@
 (define-syntax-parser def
   #:literals [:]
   [(_ id:id
-      {~or {~once {~seq : t:type}}
+      {~or {~once {~seq : {~type t:type}}}
            {~optional fixity:fixity-annotation}}
       ...
       e:expr)
@@ -409,7 +418,7 @@
 
 (define-syntax-parser let1
   #:literals [:]
-  [(_ [id:id {~optional {~seq colon:: t-ann:type}} val:expr] body:expr)
+  [(_ [id:id {~optional {~seq colon:: {~type t-ann:type}}} val:expr] body:expr)
    #:do [(define-values [val- t_val] (τ⇔! #'val (attribute t-ann.τ)))
          (match-define-values [(list id-) body- t_body]
            (τ⇔/λ! #'body (get-expected this-syntax) (list (cons #'id t_val))))]
@@ -422,7 +431,7 @@
 
 (define-syntax-parser let
   #:literals [:]
-  [(_ ([id:id {~optional {~seq colon:: t-ann:type}} val:expr] ...+) body:expr)
+  [(_ ([id:id {~optional {~seq colon:: {~type t-ann:type}}} val:expr] ...+) body:expr)
    (syntax-parse this-syntax
      [(_ (binding-pair) body)
       (syntax/loc this-syntax
@@ -435,7 +444,7 @@
 
 (define-syntax-parser letrec
   #:literals [:]
-  [(_ ([id:id {~optional {~seq colon:: t-ann:type}} val:expr] ...+) body:expr)
+  [(_ ([id:id {~optional {~seq colon:: {~type t-ann:type}}} val:expr] ...+) body:expr)
    ; First, infer or check the type of each binding. Use τ⇐!\λ to check the type if a type annotation
    ; is provided. Otherwise, use τ⇒!/λ to infer it, and synthesize a fresh type variable for id’s
    ; type during inference. If a type is successfully inferred, unify it with the fresh type variable

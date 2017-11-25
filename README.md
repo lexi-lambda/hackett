@@ -8,7 +8,7 @@ Here are some of the features that Hackett supports **right now**:
   - Algebraic datatypes (ADTs)
   - Pattern matching
   - Exhaustiveness checking
-  - Typeclasses
+  - Typeclasses (including multi-parameter typeclasses)
   - Higher-kinded types
   - Higher-rank polymorphism
   - Type-aware/type-directed macros
@@ -17,17 +17,15 @@ Here are some of the features that Hackett supports **right now**:
 
 Here are some of the features that still need to be implemented for a minimal release:
 
-  - Default class methods
   - Scoped type variables
   - Kindchecking
   - Type expanders (of which type aliases are a subset)
 
 And finally, here is a (non-exhaustive) collection of features I would like to eventually support:
 
-  - Multi-parameter typeclasses
   - Functional dependencies
-  - GADTs
   - Row types
+  - GADTs
   - Type families
 
 Due to the way Hackett is implemented, many things that are language features in Haskell can be derived concepts in Hackett. In fact, Hackett’s ADTs are not primitives, they are actually implemented as a library via the `data` and `case` macros in `hackett/private/adt`. Other things, like newtype deriving and generics, should be possible to implement as derived concepts as well.
@@ -38,8 +36,8 @@ Here’s some sample Hackett code that demonstrates some of Hackett’s features
 #lang hackett
 
 (data (Maybe a)
-  nothing
-  (just a))
+  Nothing
+  (Just a))
 
 (def x : Integer
   (let ([y 3]
@@ -50,8 +48,8 @@ Here’s some sample Hackett code that demonstrates some of Hackett’s features
   [show : {a -> String}])
 
 (instance (forall [a] (Show a) => (Show (Maybe a)))
-  [show (λ* [[(just x)] {"(just " ++ (show x) ++ ")"}]
-            [[nothing ] "nothing"])])
+  [show (λ* [[(Just x)] {"(Just " ++ (show x) ++ ")"}]
+            [[Nothing ] "Nothing"])])
 ```
 
 [**For a much more in-depth look at Hackett, see the documentation.**][hackett-docs]

@@ -68,8 +68,9 @@
          racket/promise
          syntax/parse/define
 
+         hackett/private/type-reqprov
          (only-in hackett/private/base τ⇒! τ⇐!)
-         (only-in hackett/private/kernel String [#%app @%app])
+         (only-in (unmangle-types-in #:no-introduce hackett/private/kernel) String [#%app @%app])
          (only-in hackett/private/prim/base show))
 
 (provide @%top-interaction)
@@ -93,7 +94,7 @@
    (syntax-parse (local-expand #'form 'top-level (kernel-form-identifier-list))
      #:context this-syntax
      #:literal-sets [kernel-literals]
-     [({~or begin-for-syntax define-syntaxes define-values} . _)
+     [({~or #%require begin-for-syntax define-syntaxes define-values} . _)
       this-syntax]
      [(begin)
       this-syntax]
