@@ -637,125 +637,125 @@ The @deftech{list} type, which describes lazy linked lists. Since a list is lazy
 as long as the entire list is never demanded. The @racket[::] constructor is pronounced “cons”, and it
 is generally intended to be used infix.}
 
-@defthing[head (t:forall [a] {(t:List a) t:-> (t:Maybe a)})]{
+@defproc[(head [xs (t:List a)]) (t:Maybe a)]{
 
-Returns @racket[Just] the first element of a list, or @racket[Nothing] if the list is @racket[Nil].
+Returns @racket[Just] the first element of @racket[xs], or @racket[Nothing] if @racket[xs] is @racket[Nil].
 
 @(hackett-examples
   (head {1 :: 2 :: 3 :: Nil})
   (head (: Nil (t:List t:Integer))))}
 
-@defthing[last (forall [a] {(List a) -> (Maybe a)})]{
+@defproc[(last [xs (t:List a)]) (t:Maybe a)]{
 
-Returns @racket[just] the last element of a list, or @racket[nothing] if the list is @racket[nil].
+Returns @racket[Just] the last element of @racket[xs], or @racket[Nothing] if @racket[xs] is @racket[Nil].
 This function is @tech[#:key "partial function"]{partial}, since it diverges on an infinitely long
 input, e.g. @racket[(letrec ([ones {1 :: ones}]) (last ones))].
 
 @(hackett-examples
-  (last {1 :: 2 :: 3 :: nil})
-  (last (: nil (List Integer))))}
+  (last {1 :: 2 :: 3 :: Nil})
+  (last (: Nil (t:List t:Integer))))}
 
-@defthing[tail (forall [a] {(List a) -> (Maybe (List a))})]{
+@defproc[(tail [xs (t:List a)]) (t:Maybe (t:List a))]{
 
-Returns @racket[Just] a list without its first element, or @racket[Nothing] if the list is
+Returns @racket[Just] @racket[xs] without its first element, or @racket[Nothing] if @racket[xs] is
 @racket[Nil].
 
 @(hackett-examples
   (tail {1 :: 2 :: 3 :: Nil})
   (tail (: Nil (t:List t:Integer))))}
 
-@defthing[init (forall [a] {(List a) -> (Maybe a)})]{
+@defproc[(init [xs (t:List a)]) (t:Maybe a)]{
 
-Returns @racket[just] a list without its the last element, or @racket[nothing] if the list is
-@racket[nil]. This function is @tech[#:key "partial function"]{partial}, since it diverges on an
-infinitely long input, e.g. @racket[(letrec ([ones {1 :: ones}]) (last ones))].
+Returns @racket[Just] @racket[xs] without its the last element, or @racket[Nothing] if @racket[xs] is
+@racket[Nil]. This function is @tech[#:key "partial function"]{partial}, since it diverges on an
+infinitely long input, e.g. @racket[(letrec ([ones {1 :: ones}]) (init ones))].
 
 @(hackett-examples
-  (init {1 :: 2 :: 3 :: nil})
-  (init (: nil (List Integer))))}
+  (init {1 :: 2 :: 3 :: Nil})
+  (init (: Nil (t:List t:Integer))))}
 
-@defthing[head! (forall [a] {(List a) -> a})]{
+@defproc[(head! [xs (List a)]) a]{
 
-A @tech[#:key "partial function"]{partial} version of @racket[head] that returns the first element of
-a list. If the list is empty, it raises an error.
+A @tech[#:key "partial function"]{partial} version of @racket[head] which returns the first element of
+@racket[xs]. If @racket[xs] is empty, @racket[head!] raises an error.
 
 @(hackett-examples
   (head! {1 :: 2 :: 3 :: Nil})
   (eval:error (head! (: Nil (t:List t:Integer)))))}
 
-@defthing[last! (forall [a] {(List a) -> a})]{
+@defproc[(last! [xs (t:List a)]) a]{
 
-A less-safe version of @racket[last] which tries to return the last element of any list. This function
-is @tech[#:key "partial function"]{partial}; if the given list is empty, @racket[last!] raises an
-error, and if the list is infinitely long, the function wil not return.
+A less-safe version of @racket[last] which returns the last element of @racket[xs]. This function
+is @tech[#:key "partial function"]{partial}, since when @racket[xs] is empty, @racket[last!] raises
+an error, and if @racket[xs] is infinitely long, @racket[last!] will never return.
 
 @(hackett-examples
-  (last! {1 :: 2 :: 3 :: nil})
-  (eval:error (last! (: nil (List Integer)))))}
+  (last! {1 :: 2 :: 3 :: Nil})
+  (eval:error (last! (: Nil (t:List t:Integer)))))}
 
-@defthing[tail! (forall [a] {(List a) -> (List a)})]{
+@defproc[(tail! [xs (t:List a)]) (t:List a)]{
 
-A @tech[#:key "partial function"]{partial} version of @racket[tail] that returns a list without its
-first element. If the list is empty, it raises an error.
+A @tech[#:key "partial function"]{partial} version of @racket[tail] that returns @racket[xs] without
+its first element. If @racket[xs] is empty, @racket[tail!] raises an error.
 
 @(hackett-examples
   (tail! {1 :: 2 :: 3 :: Nil})
   (eval:error (tail! (: Nil (t:List t:Integer)))))}
 
-@defthing[init! (forall [a] {(List a) -> a})]{
+@defproc[(init! [xs (t:List a)]) a]{
 
-A less-safe version of @racket[init] which tries to return the last element of any list. This function
-is @tech[#:key "partial function"]{partial}; if the given list is empty, @racket[init!] raises an
-error, and if the list is infinitely long, the function wil not return.
-
-@(hackett-examples
-  (init! {1 :: 2 :: 3 :: nil})
-  (eval:error (init! (: nil (List Integer)))))}
-
-@defthing[uncons (forall [a] {(List a) -> (Maybe (Tuple a (List a)))})]{
-
-Returns @racket[nothing] if the list is @racket[nil], and @racket[just] a pair of the list's first
-element and the rest of it otherwise.
+A less-safe version of @racket[init] which returns the last element of @racket[xs]. This function
+is @tech[#:key "partial function"]{partial}, since when @racket[xs] is empty, @racket[init!] raises an
+error, and if @racket[xs] is infinitely long, @racket[init!] will never return.
 
 @(hackett-examples
-  (uncons {1 :: 2 :: 3 :: nil})
-  (uncons (: nil (List Integer))))}
+  (init! {1 :: 2 :: 3 :: Nil})
+  (eval:error (init! (: Nil (t:List t:Integer)))))}
 
-@defthing[uncons! (forall [a] {(List a) -> (Tuple a (List a))})]{
+@defproc[(uncons [xs (t:List a)]) (t:Maybe (t:Tuple a (t:List a)))]{
 
-A @tech[#:key "partial function"]{partial} version of @racket[uncons] that returns a pair of the
-list's first element and the rest of it. If the list is empty, it raises an error.
-
-@(hackett-examples
-  (uncons! {1 :: 2 :: 3 :: nil})
-  (eval:error (uncons! (: nil (List Integer)))))}
-
-@defthing[null? (forall [a] {(List a) -> Bool})]{
-
-This predicate is @racket[true] when its argument is of the form @racket[nil], and is false otherwise.
+When @racket[xs] is @racket[Nil], @racket[uncons xs] is @racket[Nothing]. Otherwise, if @racket[xs]
+is @racket[{y :: ys}] then @racket[uncons xs] is @racket[Just (Tuple y ys)].
 
 @(hackett-examples
-  (null? {1 :: 2 :: 3 :: nil})
-  (null? (: nil (List Integer))))}
+  (uncons {1 :: 2 :: 3 :: Nil})
+  (uncons (: Nil (t:List t:Integer))))}
 
-@defthing[length (forall [a] {(List a) -> Integer})]
+@defproc[(uncons! [xs (t:List a)]) (t:Tuple a (t:List a))]{
 
-Returns the length of a finite list. Since the function will diverge on an infinitely long input,
-@racket[length] is @tech[#:key "partial function"]{partial}.
+A @tech[#:key "partial function"]{partial} version of @racket[uncons] that returns
+@racket[Tuple (head! xs) (tail! xs)]. If @racket[xs] is empty, it instead raises an error.
 
 @(hackett-examples
-  (length {1 :: 2 :: 3 :: nil})
-  (length (: nil (List Integer))))}
+  (uncons! {1 :: 2 :: 3 :: Nil})
+  (eval:error (uncons! (: Nil (t:List t:Integer)))))}
 
-@defproc[(take [n Integer] [xs (List a)]) (List a)]{
+@defproc[(nil? [xs (t:List a)]) (t:Bool)]{
+
+This predicate is @racket[True] when @racket[xs] is of the form @racket[Nil], and is false otherwise.
+
+@(hackett-examples
+  (nil? {1 :: 2 :: 3 :: Nil})
+  (nil? (: Nil (t:List t:Integer))))}
+
+@defproc[(length [xs (t:List a)]) t:Integer]{
+
+Returns the length of @racket[xs] when @racket[xs] is finite. Since the function diverges on an
+infinitely long input, @racket[length] is @tech[#:key "partial function"]{partial}.
+
+@(hackett-examples
+  (length {1 :: 2 :: 3 :: Nil})
+  (length (: Nil (t:List t:Integer))))}
+
+@defproc[(take [n t:Integer] [xs (t:List a)]) (t:List a)]{
 
 Produces a list with the first @racket[n] elements of @racket[xs]. If @racket[xs] contains fewer than
 @racket[n] elements, @racket[xs] is returned unmodified.
 
 @(hackett-examples
-  (take 2 {1 :: 2 :: 3 :: nil})
-  (take 2 {1 :: nil})
-  (take 2 (: nil (List Integer))))}
+  (take 2 {1 :: 2 :: 3 :: Nil})
+  (take 2 {1 :: Nil})
+  (take 2 (: Nil (t:List t:Integer))))}
 
 @defproc[(drop [n t:Integer] [xs (t:List a)]) (t:List a)]{
 
@@ -763,9 +763,9 @@ Produces a list like @racket[xs] without its first @racket[n] elements. If @rack
 then @racket[n] elements, the result is @racket[Nil].
 
 @(hackett-examples
-  (drop 2 {1 :: 2 :: 3 :: nil})
-  (drop 2 {1 :: nil})
-  (drop 2 (: nil (List Integer))))}
+  (drop 2 {1 :: 2 :: 3 :: Nil})
+  (drop 2 {1 :: Nil})
+  (drop 2 (: Nil (t:List t:Integer))))}
 
 @defproc[(filter [f {a t:-> t:Bool}] [xs (t:List a)]) (t:List a)]{
 
@@ -816,13 +816,161 @@ Adds the elements of @racket[xs] together and returns the sum. Equivalent to @ra
   (eval:check (sum {1 :: 2 :: 3 :: Nil}) 6)
   (eval:check (sum Nil) 0))}
 
-@defthing[intersperse (forall [a] {a -> (List a) -> (List a)})]{
+@defproc[(reverse (xs (t:List a))) (t:List a)]{
+
+Returns @racket[xs] in reversed order.
+
+@(hackett-examples
+ (reverse {1 :: 2 :: 3 :: Nil})
+ (reverse (: Nil (t:List t:Integer))))}
+
+@defproc[(zip-with [f {a t:-> b t:-> c}] [as (t:List a)] [bs (t:List b)]) (t:List c)]{
+
+This function will apply @racket[f] to each element in @racket[as] and @racket[bs] until it
+has reached the end of either, then it returns a list like
+@racket[{f _a0 _b0 :: f _a1 _b1 :: f _a2 _b2 :: ... :: Nil}] (where @racket[as] contains
+elements named @racket[_a0], @racket[_a1], @racket[_a2] etc., and @racket[bs] contains elements
+named @racket[_b0], @racket[_b1], @racket[_b2] etc.).
+
+@(hackett-examples
+ (zip-with + {1 :: 2 :: 3 :: Nil} {18 :: 42 :: 50 :: Nil})
+ (zip-with + {1 :: 2 :: 3 :: Nil} {18 :: 42 :: 50 :: 100 :: Nil})
+ (zip-with + {1 :: 2 :: 3 :: 4 :: Nil} {18 :: 42 :: 50 :: Nil})
+ (zip-with * {1 :: 2 :: 3 :: Nil} {18 :: 42 :: 50 :: Nil})
+ (zip-with + (: Nil (t:List t:Integer)) (: Nil (t:List t:Integer))))}
+
+@defproc[(zip [as (t:List a)] [bs (t:List b)]) (t:List (t:Tuple a b))]{
+
+Returns a list of componenetwise pairs from @racket[as] and @racket[bs]. The length of this list is
+the length of the shortest input list. Equivalent to @racket[(zip-with Tuple as bs)].
+
+@(hackett-examples
+ (zip {1 :: 2 :: 3 :: Nil} {18 :: 42 :: 50 :: Nil})
+ (zip {1 :: 2 :: 3 :: Nil} {18 :: 42 :: 50 :: 100 :: Nil})
+ (zip {1 :: 2 :: 3 :: 4 :: Nil} {18 :: 42 :: 50 :: Nil})
+ (zip (: Nil (t:List t:Integer)) (: Nil (t:List t:Integer))))}
+
+@defproc[(repeat [x a]) (t:List a)]{
+
+Returns an infinite list containing only @racket[x].
+
+@(hackett-examples
+ (take 5 (repeat 1)))}
+
+@defproc[(cycle! [xs (t:List a)]) (t:List a)]{
+
+Returns the infinite list @racket[{xs ++ xs ++ xs ++ ...}]. If @racket[xs] is infinite,
+@racket[cycle! xs == xs]. This function is @tech[#:key "partial function"]{partial},
+because it errors when given @racket[Nil].
+
+@(hackett-examples
+ (take 10 (cycle! {1 :: 2 :: 3 :: Nil}))
+ (eval:error (cycle! (: Nil (t:List t:Integer)))))}
+
+@defproc[(or [xs (t:List t:Bool)]) t:Bool]{
+
+Logically ors the elements of @racket[xs] together and returns the result. Equivalent to @racket[(foldr || False)].
+Because it uses a right fold, the only elements which will be evaluated are those before the first expression which
+evaluates to @racket[True]. Additionally, @racket[or infinite-list] can never return @racket[False], and
+@racket[or (repeat False)] will never terminate.
+
+@(hackett-examples
+  (or {True :: False :: Nil})
+  (or {False :: True :: Nil})
+  (or {True :: (error! "never happens") :: Nil})
+  (or Nil))}
+
+@defproc[(and [xs (t:List t:Bool)]) t:Bool]{
+
+Logically ands the elements of @racket[xs] together and returns the result. Equivalent to @racket[(foldr && True)].
+Because it uses a right fold, the only elements which will be evaluated are those before the first expression which
+evaluates to @racket[False]. Additionally, @racket[and infinite-list] can never return @racket[True], and
+@racket[and (repeat True)] will never terminate.
+
+@(hackett-examples
+  (and {True :: False :: Nil})
+  (and {False :: True :: Nil})
+  (and {False :: (error! "never happens") :: Nil})
+  (and Nil))}
+
+@defproc[(any? [p {a t:-> t:Bool}] [xs (t:List t:Bool)]) t:Bool]{
+
+Returns @racket[True] if @racket[xs] contains an element @racket[x] such that @racket[(p x)] is
+@racket[True]. Equivalent to @racket[(or (map p xs))].
+
+@(hackett-examples
+  (any? (<= 2) {1 :: 2 :: 3 :: Nil})
+  (any? (<= 4) {1 :: 2 :: 3 :: Nil})
+  (any? (<= 0) {1 :: (error! "never happens") :: Nil})
+  (any? (<= 0) Nil))}
+
+@defproc[(all? [p {a t:-> t:Bool}] [xs (t:List t:Bool)]) t:Bool]{
+
+Returns @racket[True] if for every element @racket[x] of @racket[xs] @racket[(p x)] is
+@racket[True]. Equivalent to @racket[(and (map p xs))].
+
+@(hackett-examples
+  (all? (<= 1) {1 :: 2 :: 3 :: Nil})
+  (all? (<= 2) {1 :: 2 :: 3 :: Nil})
+  (all? (<= 2) {1 :: (error! "never happens") :: Nil})
+  (all? (<= 1) Nil))}
+
+@defproc[(elem? [_ (t:Eq a)] [x a] [xs (t:List a)]) t:Bool]{
+
+Returns @racket[True] if @racket[xs] contains @racket[x]. Equivalent to @racket[(any? (== x) xs)].
+Only elements to the left of the first expression equal to @racket[x] in @racket[xs] will be checked
+for equality.
+
+@(hackett-examples
+  (elem? 2 {1 :: 2 :: 3 :: Nil})
+  (elem? 0 {1 :: 2 :: 3 :: Nil})
+  (elem? 1 {1 :: (error! "never happens") :: Nil})
+  (elem? 1 Nil))}
+
+@defproc[(not-elem? [_ (t:Eq a)] [x a] [xs (t:List a)]) t:Bool]{
+
+Returns @racket[False] if @racket[xs] contains @racket[x]. Equivalent to @racket[(not (elem? x xs))].
+Only elements to the left of the first expression equal to @racket[x] in @racket[xs] will be checked
+for equality.
+
+@(hackett-examples
+  (elem? 2 {1 :: 2 :: 3 :: Nil})
+  (elem? 0 {1 :: 2 :: 3 :: Nil})
+  (elem? 1 {1 :: (error! "never happens") :: Nil})
+  (elem? 1 Nil))}
+
+@defproc[(delete [_ (t:Eq a)] [x a] [xs (t:List a)]) (t:List a)]{
+
+Returns @racket[xs] with the first occurrence of @racket[x] removed. Equivalent to
+@racket[(delete-by == x xs)]. Only elements to the left of the first expression equal to @racket[x]
+in @racket[xs] will be checked for equality.
+
+@(hackett-examples
+  (delete 2 {1 :: 2 :: 3 :: Nil})
+  (delete 0 {1 :: 2 :: 3 :: Nil})
+  (head (delete 1 {1 :: 2 :: (error! "never happens") :: Nil}))
+  (delete 1 Nil))}
+
+@defproc[(delete-by [rel {a t:-> a t:-> t:Bool}] [x a] [xs (t:List a)]) (t:List a)]{
+
+Finds the first element @racket[y] such that @racket[{y rel x}] and returns @racket[xs] with
+@racket[y] removed. Generalizes @racket[delete]. Only elements to the left of the first expression
+such @racket[y] will be checked for equality.
+
+@(hackett-examples
+  (delete-by > 2 {1 :: 2 :: 3 :: Nil})
+  (delete-by > 0 {1 :: 2 :: 3 :: Nil})
+  (head (delete-by not= 1 {1 :: 2 :: (error! "never happens") :: Nil}))
+  (delete-by (λ [y x] {(remainder! y x) == 0}) 2 Nil)
+  (delete-by (error! "never happens") (error! "never happens") (: Nil (t:List t:Integer))))}
+
+@defproc[(intersperse [x a] [xs (t:List a)]) (t:List a)]{
 
 Given a separator and a list, intersperse intersperses the separator between each element of the list.
 
 @(hackett-examples
- (intersperse 42 {1 :: 2 :: 3 :: nil})
- (intersperse 42 nil))}
+ (intersperse 42 {1 :: 2 :: 3 :: Nil})
+ (intersperse 42 Nil))}
 
 @section[#:tag "reference-typeclasses"]{Typeclasses}
 
