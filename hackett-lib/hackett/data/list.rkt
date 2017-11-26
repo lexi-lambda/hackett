@@ -3,26 +3,26 @@
 (require hackett/data/maybe
          hackett/private/prim)
 
-(provide (data List) head last tail init head! last! tail! init! uncons uncons! null? length take drop
-         filter foldr foldl reverse zip-with sum repeat cycle! or and any? all? elem? not-elem? delete
-         delete-by intersperse)
+(provide (data List) head last tail init head! last! tail! init! uncons uncons! nil? length take drop
+         filter foldr foldl reverse zip-with zip sum repeat cycle! or and any? all? elem? not-elem?
+         delete delete-by intersperse)
 
 (defn head : (∀ [a] {(List a) -> (Maybe a)})
   [[{x :: _}] (Just x)]
   [[Nil     ] Nothing])
 
 (defn last : (forall [a] {(List a) -> (Maybe a)})
-  [[{x :: nil}] (just x)]
+  [[{x :: Nil}] (Just x)]
   [[{_ :: xs} ] (last xs)]
-  [[_         ] nothing])
+  [[_         ] Nothing])
 
 (defn tail : (∀ [a] {(List a) -> (Maybe (List a))})
   [[{_ :: xs}] (Just xs)]
   [[Nil      ] Nothing])
 
 (defn init : (forall [a] {(List a) -> (Maybe (List a))})
-  [[nil] nothing]
-  [[xs ] (just (init! xs))])
+  [[Nil] Nothing]
+  [[xs ] (Just (init! xs))])
 
 (defn head! : (∀ [a] {(List a) -> a})
   [[xs] (from-maybe (error! "head!: empty list") (head xs))])
@@ -34,20 +34,20 @@
   [[xs] (from-maybe (error! "tail!: empty list") (tail xs))])
 
 (defn init! : (forall [a] {(List a) -> (List a)})
-  [[{_ :: nil}] nil]
+  [[{_ :: Nil}] Nil]
   [[{x :: xs} ] {x :: (init! xs)}]
-  [[nil       ] (error! "tail!: empty list")])
+  [[Nil       ] (error! "tail!: empty list")])
 
 (defn uncons : (forall [a] {(List a) -> (Maybe (Tuple a (List a)))})
-  [[{x :: xs}] (just (tuple x xs))]
-  [[nil      ] nothing])
+  [[{x :: xs}] (Just (Tuple x xs))]
+  [[Nil      ] Nothing])
 
 (defn uncons! : (forall [a] {(List a) -> (Tuple a (List a))})
   [[xs] (from-maybe (error! "uncons!: empty list") (uncons xs))])
 
-(defn null? : (forall [a] {(List a) -> Bool})
-  [[nil] true]
-  [[_  ] false])
+(defn nil? : (forall [a] {(List a) -> Bool})
+  [[Nil] True]
+  [[_  ] False])
 
 (def length : (forall [a] {(List a) -> Integer})
   (foldr (λ [_ acc] {acc + 1}) 0))
@@ -83,6 +83,9 @@
   [[f {x :: xs} {y :: ys}] {(f x y) :: (zip-with f xs ys)}]
   [[_ _         _        ] Nil])
 
+(def zip : (∀ [a b] {(List a) -> (List b) -> (List (Tuple a b))})
+  (zip-with Tuple))
+
 (def sum : {(List Integer) -> Integer}
   (foldl + 0))
 
@@ -109,7 +112,7 @@
   [[x] (any? (== x))])
 
 (defn not-elem? : (∀ [a] (Eq a) => {a -> (List a) -> Bool})
-  [[x] (all? {not . (== x)})])
+  [[x] {not . (elem? x)}])
 
 (def delete : (∀ [a] (Eq a) => {a -> (List a) -> (List a)})
   (delete-by ==))
@@ -123,8 +126,8 @@
    Nil])
 
 (defn intersperse : (forall [a] {a -> (List a) -> (List a)})
-  [[_  nil      ] nil]
+  [[_  Nil      ] Nil]
   [[in {x :: xs}] (letrec ([helper
                             (λ* [[{y :: ys}] {in :: y :: (helper ys)}]
-                                [[nil      ] nil])])
+                                [[Nil      ] Nil])])
                           {x :: (helper xs)})])
