@@ -3,9 +3,10 @@
 (require hackett/data/maybe
          hackett/private/prim)
 
-(provide (data List) head last tail init head! last! tail! init! uncons uncons! nil? length take drop
-         filter foldr foldl reverse zip-with zip sum repeat cycle! or and any? all? elem? not-elem?
-         delete delete-by intersperse)
+(provide (data List) head last tail init head! last! tail! init! uncons uncons! unfoldr nil? length
+         nth nth! find-index index-of take take-while drop drop-while tails inits filter find
+         foldr foldl reverse zip-with zip sum product iterate repeat replicate cycle! concat
+         concat-map or and any? all? elem? not-elem? delete delete-by intersperse)
 
 (defn head : (∀ [a] {(List a) -> (Maybe a)})
   [[{x :: _}] (Just x)]
@@ -45,6 +46,11 @@
 (defn uncons! : (forall [a] {(List a) -> (Tuple a (List a))})
   [[xs] (from-maybe (error! "uncons!: empty list") (uncons xs))])
 
+(defn unfoldr : (forall [a b] {{b -> (Maybe (Tuple a b))} -> b -> (List a)})
+  [[step seed] (case (step seed)
+                 [Nothing            Nil]
+                 [(Just (Tuple a b)) {a :: (unfoldr step b)}])])
+
 (defn nil? : (forall [a] {(List a) -> Bool})
   [[Nil] True]
   [[_  ] False])
@@ -52,11 +58,35 @@
 (def length : (forall [a] {(List a) -> Integer})
   (foldr (λ [_ acc] {acc + 1}) 0))
 
+(defn nth : (forall [a] {(List a) -> Integer -> (Maybe a)})
+  [[{x :: xs} n] (if {n < 0} Nothing
+                     (if {n == 0} (Just x)
+                         (nth xs {n - 1})))]
+  [[Nil       _] Nothing])
+
+(defn nth! : (forall [a] {(List a) -> Integer -> a})
+  [[xs n] (from-maybe (error! "nth!: empty list") (nth xs n))])
+
+(defn find-index : (forall [a] {{a -> Bool} -> (List a) -> (Maybe Integer)})
+  [[p {x :: xs}] (if (p x) (Just 0) (map (+ 1) (find-index p xs)))]
+  [[_ Nil      ] Nothing])
+
+(def index-of : (forall [a] (Eq a) => {a -> (List a) -> (Maybe Integer)})
+  {find-index . ==})
+
 (defn take : (∀ [a] {Integer -> (List a) -> (List a)})
   [[n {x :: xs}]
    (if {n == 0}
        Nil
        {x :: (take {n - 1} xs)})]
+  [[_ Nil]
+   Nil])
+
+(defn take-while : (∀ [a] {{a -> Bool} -> (List a) -> (List a)})
+  [[p {x :: xs}]
+   (if (p x)
+       {x :: (take-while p xs)}
+       Nil)]
   [[_ Nil]
    Nil])
 
@@ -68,9 +98,29 @@
   [[_ Nil]
    Nil])
 
+(defn drop-while : (∀ [a] {{a -> Bool} -> (List a) -> (List a)})
+  [[p {x :: xs}]
+   (if (p x)
+       (drop-while p xs)
+       xs)]
+  [[_ Nil]
+   Nil])
+
+(defn tails : (forall [a] {(List a) -> (List (List a))})
+  [[{x :: xs}] {{x :: xs} :: (tails xs)}]
+  [[Nil      ] Nil])
+
+(defn inits : (forall [a] {(List a) -> (List (List a))})
+  [[{x :: xs}] {(init! {x :: xs}) :: (inits xs)}]
+  [[Nil      ] Nil])
+
 (defn filter : (∀ [a] {{a -> Bool} -> (List a) -> (List a)})
   [[f {x :: xs}] (let ([ys (filter f xs)]) (if (f x) {x :: ys} ys))]
   [[_ Nil      ] Nil])
+
+(defn find : (forall [a] {{a -> Bool} -> (List a) -> (Maybe a)})
+  [[p {x :: xs}] (if (p x) (Just x) (find p xs))]
+  [[p Nil      ] Nothing])
 
 (defn foldl : (∀ [a b] {{b -> a -> b} -> b -> (List a) -> b})
   [[f a {x :: xs}] (let ([b (f a x)]) {b seq (foldl f b xs)})]
@@ -89,12 +139,29 @@
 (def sum : {(List Integer) -> Integer}
   (foldl + 0))
 
+(def product : {(List Integer) -> Integer}
+  (foldl * 1))
+
+(defn iterate : (forall [a] {{a -> a} -> a -> (List a)})
+  [[f x] {(f x) :: (iterate f (f x))}])
+
 (defn repeat : (∀ [a] {a -> (List a)})
   [[x] (letrec ([xs {x :: xs}]) xs)])
+
+(defn replicate : (∀ [a] {Integer -> a -> (List a)})
+  [[n x] (if {n <= 0}
+             Nil
+             {x :: (replicate {n - 1} x)})])
 
 (defn cycle! : (∀ [a] {(List a) -> (List a)})
   [[Nil] (error! "cycle!: empty list")]
   [[xs ] (letrec ([ys {xs ++ ys}]) ys)])
+
+(def concat : (forall [a] {(List (List a)) -> (List a)})
+  (foldr ++ Nil))
+
+(def concat-map : (forall [a b] {{a -> (List b)} -> (List a) -> (List b)})
+  =<<)
 
 (def or : {(List Bool) -> Bool}
   (foldr || False))
