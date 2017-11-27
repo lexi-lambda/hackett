@@ -119,8 +119,8 @@
 
 (class (Eq a)
   [== : {a -> a -> Bool}
-      (λ [a b] (not {a not= b}))]
-  [not= : {a -> a -> Bool}
+      (λ [a b] (not {a /= b}))]
+  [/= : {a -> a -> Bool}
       (λ [a b] (not {a == b}))])
 
 (instance (Eq Unit)

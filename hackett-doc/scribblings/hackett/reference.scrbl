@@ -712,6 +712,22 @@ error, and if @racket[xs] is infinitely long, @racket[init!] will never return.
   (init! {1 :: 2 :: 3 :: Nil})
   (eval:error (init! (: Nil (t:List t:Integer)))))}
 
+@defproc[(inits [xs (t:List a)]) (t:List (t:List a))]{
+
+Returns a list of the inital segments of @racket[xs].
+
+@(hackett-examples
+  (inits {1 :: 2 :: 3 :: Nil})
+  (inits (: Nil (t:List t:Integer))))}
+
+@defproc[(tails [xs (t:List a)]) (t:List (t:List a))]{
+
+Returns a list of the terminal segments of @racket[xs].
+
+@(hackett-examples
+  (tails {1 :: 2 :: 3 :: Nil})
+  (tails (: Nil (t:List t:Integer))))}
+
 @defproc[(uncons [xs (t:List a)]) (t:Maybe (t:Tuple a (t:List a)))]{
 
 When @racket[xs] is @racket[Nil], @racket[uncons xs] is @racket[Nothing]. Otherwise, if @racket[xs]
@@ -757,6 +773,16 @@ Produces a list with the first @racket[n] elements of @racket[xs]. If @racket[xs
   (take 2 {1 :: Nil})
   (take 2 (: Nil (t:List t:Integer))))}
 
+@defproc[(take-while [p {a t:-> t:Bool}] [xs (t:List a)]) (t:List a)]{
+
+Returns the longest initial segment of @racket[xs] such that every element satisfies @racket[p].
+
+@(hackett-examples
+  (take-while (λ [x] {(remainder! x 2) == 1}) {1 :: 3 :: 6 :: 9 :: Nil})
+  (let ([is-just (maybe False (const True))])
+    (take-while is-just {(Just 1) :: (Just 2) :: Nothing :: (Just 3) :: Nil}))
+  (take-while (λ [x] {(remainder! x 2) == 0}) (: Nil (t:List t:Integer))))}
+
 @defproc[(drop [n t:Integer] [xs (t:List a)]) (t:List a)]{
 
 Produces a list like @racket[xs] without its first @racket[n] elements. If @racket[xs] contains fewer
@@ -766,6 +792,69 @@ then @racket[n] elements, the result is @racket[Nil].
   (drop 2 {1 :: 2 :: 3 :: Nil})
   (drop 2 {1 :: Nil})
   (drop 2 (: Nil (t:List t:Integer))))}
+
+@defproc[(drop-while [p {a t:-> t:Bool}] [xs (t:List a)]) (t:List a)]{
+
+Returns the longest terminal segment of @racket[xs] which is either @racket[Nil] or starts with an
+element @racket[x] such that @racket[(not (p x))].
+
+@(hackett-examples
+  (drop-while (λ [x] {(remainder! x 2) == 1}) {1 :: 3 :: 6 :: 9 :: Nil})
+  (let ([is-just (maybe False (const True))])
+    (drop-while is-just {(Just 1) :: (Just 2) :: Nothing :: (Just 3) :: Nil}))
+  (drop-while (λ [x] {(remainder! x 2) == 0}) (: Nil (t:List t:Integer))))}
+
+@defproc[(nth [xs (t:List a)] [n t:Integer]) (t:Maybe a)]{
+
+Returns @racket[Just] the nth element of @racket[xs] if it exists, starting at 0, and
+@racket[Nothing] if it doesn't.
+
+@(hackett-examples
+  (nth {1 :: 2 :: 3 :: Nil} 2)
+  (nth {1 :: 2 :: 3 :: Nil} -1)
+  (nth {1 :: Nil} 2)
+  (nth (: Nil (t:List t:Integer)) 2))}
+
+@defproc[(nth! [xs (t:List a)] [n t:Integer]) a]{
+
+Returns the nth element of @racket[xs], starting at 0. This function is
+@tech[#:key "partial function"]{partial}, because it errors when @racket[{n >= (length xs)}].
+
+@(hackett-examples
+  (nth! {1 :: 2 :: 3 :: Nil} 2)
+  (eval:error (nth! {1 :: 2 :: 3 :: Nil} -1))
+  (eval:error (nth! {1 :: Nil} 2))
+  (eval:error (nth! (: Nil (t:List t:Integer)) 2)))}
+
+@defproc[(find-index [p {a t:-> Bool}] [xs (t:List a)]) (t:Maybe t:Integer)]{
+
+Finds the first element of @racket[xs] which satisfies @racket[p], and returns @racket[Just] its
+index. If there is no such element, the function returns @racket[Nothing].
+
+@(hackett-examples
+  (find-index (λ [x] {(remainder! x 2) == 0}) {1 :: 2 :: 3 :: Nil})
+  (find-index (λ [x] {x < 0}) {1 :: 2 :: 3 :: Nil})
+  (find-index (const True) (: Nil (t:List t:Integer))))}
+
+@defproc[(index-of [_ (Eq a)] [x a] [xs (t:List a)]) (t:Maybe t:Integer)]{
+
+Finds the first occurrence of @racket[x] in @racket[xs] and returns @racket[Just] its index. If
+@racket[x] is not contained in @racket[xs], the function returns @racket[Nothing]. This is
+equivalent to @racket[(find-index (== x) xs)].
+
+@(hackett-examples
+  (index-of 2 {1 :: 2 :: 3 :: Nil})
+  (index-of -1 {1 :: 2 :: 3 :: Nil})
+  (index-of 2 Nil))}
+
+@defproc[(find [p {a t:-> t:Bool}] [xs (t:List a)]) (t:Maybe a)]{
+
+Returns @racket[Just] the first element @racket[_x] of @racket[xs] such that @racket[(p _x)] is
+@racket[True]. If no element in @racket[xs] satisfies @racket[p], @racket[Nothing] is returned.
+
+@(hackett-examples
+  (find (λ [x] {x > 5}) {3 :: 7 :: 2 :: 9 :: 12 :: 4 :: Nil})
+  (find (λ [x] {x > 5}) {1 :: 2 :: 3 :: Nil}))}
 
 @defproc[(filter [f {a t:-> t:Bool}] [xs (t:List a)]) (t:List a)]{
 
@@ -808,6 +897,37 @@ the following expression:
   (foldl * 1 {1 :: 2 :: 3 :: 4 :: 5 :: Nil})
   (foldl - 0 {1 :: 2 :: 3 :: 4 :: 5 :: Nil}))}
 
+@defproc[(unfoldr [step {b t:-> (t:Maybe (t:Tuple a b))}] [seed b]) (t:List a)]{
+
+@racket[unfoldr] constructs a list from an initial value, stopping when @racket[(step seed)] is
+@racket[Nothing]. In a certain way, @racket[unfoldr] acts as a dual to @racket[foldr]. More
+specifically, @racket[{(unfoldr g (foldr f z xs)) == xs}] when @racket[{(g z) == Nothing}] and
+@racket[{(g (f x y)) == (Just (tuple x y))}] for any @racket[x] in @racket[xs].
+
+@(hackett-examples
+  (unfoldr (λ [x] (if {x == 1} Nothing
+                      (Just (Tuple (show x) (quotient! x 2)))))
+           128)
+  (take 5 (unfoldr (λ [x] (Just (Tuple x {x + 2}))) 0)))}
+
+@defproc[(concat [_ (Monoid m)] [ms (t:List m)]) m]{
+Returns the result of appending each element of @racket[ms] together. Equivalent to
+@racket[(foldr ++ mempty)].
+
+@(hackett-examples
+  (eval:check (concat {"a" :: "b" :: "c" :: Nil}) "abc")
+  (eval:check (concat {{1 :: Nil} :: {2 :: 3 :: Nil} :: {4 :: 5 :: 6 :: Nil} :: Nil})
+              (:: 1 (:: 2 (:: 3 (:: 4 (:: 5 (:: 6 Nil))))))))}
+
+@defproc[(fold-map [_ (Monoid m)] [f {a t:-> m}] [xs (List a)]) m]{
+
+Applies @racket[f] to each element of @racket[xs] and concatenates each resulting list. Equivalent
+to @racket[=<<] when @racket[m] is @racket[(List b)] for some @racket[b].
+
+@(hackett-examples
+  (fold-map show {1 :: 2 :: 3 :: Nil})
+  (fold-map tail {{1 :: Nil} :: Nil :: {2 :: 3 :: Nil} :: {4 :: 5 :: 6 :: Nil} :: Nil}))}
+
 @defproc[(sum [xs (t:List t:Integer)]) t:Integer]{
 
 Adds the elements of @racket[xs] together and returns the sum. Equivalent to @racket[(foldl + 0)].
@@ -815,6 +935,23 @@ Adds the elements of @racket[xs] together and returns the sum. Equivalent to @ra
 @(hackett-examples
   (eval:check (sum {1 :: 2 :: 3 :: Nil}) 6)
   (eval:check (sum Nil) 0))}
+
+@defproc[(product [xs (t:List t:Integer)]) t:Integer]{
+
+Multiplies the elements of @racket[xs] together and returns the product. Equivalent to
+@racket[(foldl * 1)].
+
+@(hackett-examples
+  (eval:check (product {1 :: 2 :: 3 :: 4 :: Nil}) 24)
+  (eval:check (product Nil) 1))}
+
+@defproc[(iterate [step {a t:-> a}] [seed a]) (List a)]{
+
+Returns the infinite list @racket[{seed :: (step seed) :: (step (step seed)) :: ...}].
+
+@(hackett-examples
+  (take 5 (iterate (+ 1) 0))
+  (take 5 (iterate (λ [x] {x ++ "a"}) "")))}
 
 @defproc[(reverse (xs (t:List a))) (t:List a)]{
 
@@ -828,7 +965,7 @@ Returns @racket[xs] in reversed order.
 
 This function will apply @racket[f] to each element in @racket[as] and @racket[bs] until it
 has reached the end of either, then it returns a list like
-@racket[{f _a0 _b0 :: f _a1 _b1 :: f _a2 _b2 :: ... :: Nil}] (where @racket[as] contains
+@racket[{(f _a0 _b0) :: (f _a1 _b1) :: (f _a2 _b2) :: ... :: Nil}] (where @racket[as] contains
 elements named @racket[_a0], @racket[_a1], @racket[_a2] etc., and @racket[bs] contains elements
 named @racket[_b0], @racket[_b1], @racket[_b2] etc.).
 
@@ -857,11 +994,18 @@ Returns an infinite list containing only @racket[x].
 @(hackett-examples
  (take 5 (repeat 1)))}
 
+@defproc[(replicate [n Integer] [x a]) (t:List a)]{
+
+Returns a list of @racket[n] copies of @racket[x].
+
+@(hackett-examples
+ (replicate 3 1))}
+
 @defproc[(cycle! [xs (t:List a)]) (t:List a)]{
 
 Returns the infinite list @racket[{xs ++ xs ++ xs ++ ...}]. If @racket[xs] is infinite,
-@racket[cycle! xs == xs]. This function is @tech[#:key "partial function"]{partial},
-because it errors when given @racket[Nil].
+@racket[{(cycle! xs)or == xs}]. This function is @tech[#:key "partial function"]{partial}, because it
+errors when given @racket[Nil].
 
 @(hackett-examples
  (take 10 (cycle! {1 :: 2 :: 3 :: Nil}))
@@ -871,8 +1015,8 @@ because it errors when given @racket[Nil].
 
 Logically ors the elements of @racket[xs] together and returns the result. Equivalent to @racket[(foldr || False)].
 Because it uses a right fold, the only elements which will be evaluated are those before the first expression which
-evaluates to @racket[True]. Additionally, @racket[or infinite-list] can never return @racket[False], and
-@racket[or (repeat False)] will never terminate.
+evaluates to @racket[True]. Additionally, @racket[(or infinite-list)] can never return @racket[False], and
+@racket[(or (repeat False))] will never terminate.
 
 @(hackett-examples
   (or {True :: False :: Nil})
@@ -884,8 +1028,8 @@ evaluates to @racket[True]. Additionally, @racket[or infinite-list] can never re
 
 Logically ands the elements of @racket[xs] together and returns the result. Equivalent to @racket[(foldr && True)].
 Because it uses a right fold, the only elements which will be evaluated are those before the first expression which
-evaluates to @racket[False]. Additionally, @racket[and infinite-list] can never return @racket[True], and
-@racket[and (repeat True)] will never terminate.
+evaluates to @racket[False]. Additionally, @racket[(and infinite-list)] can never return @racket[True], and
+@racket[(and (repeat True))] will never terminate.
 
 @(hackett-examples
   (and {True :: False :: Nil})
@@ -947,6 +1091,7 @@ in @racket[xs] will be checked for equality.
 
 @(hackett-examples
   (delete 2 {1 :: 2 :: 3 :: Nil})
+  (delete 2 {1 :: 2 :: 3 :: 2 :: Nil})
   (delete 0 {1 :: 2 :: 3 :: Nil})
   (head (delete 1 {1 :: 2 :: (error! "never happens") :: Nil}))
   (delete 1 Nil))}
@@ -960,13 +1105,14 @@ such @racket[y] will be checked for equality.
 @(hackett-examples
   (delete-by > 2 {1 :: 2 :: 3 :: Nil})
   (delete-by > 0 {1 :: 2 :: 3 :: Nil})
-  (head (delete-by not= 1 {1 :: 2 :: (error! "never happens") :: Nil}))
+  (head (delete-by /= 1 {1 :: 2 :: (error! "never happens") :: Nil}))
   (delete-by (λ [y x] {(remainder! y x) == 0}) 2 Nil)
   (delete-by (error! "never happens") (error! "never happens") (: Nil (t:List t:Integer))))}
 
 @defproc[(intersperse [x a] [xs (t:List a)]) (t:List a)]{
 
-Given a separator and a list, intersperse intersperses the separator between each element of the list.
+Given a separator and a list, intersperse returns a new list with the separator placed between each
+element of the list.
 
 @(hackett-examples
  (intersperse 42 {1 :: 2 :: 3 :: Nil})
@@ -1035,9 +1181,14 @@ evaluated, produces the value.
 @subsection[#:tag "reference-equality"]{Equality}
 
 @defclass[(t:Eq a)
-          [== {a t:-> a t:-> t:Bool}]]{
+          [== {a t:-> a t:-> t:Bool}]
+          [/= {a t:-> a t:-> t:Bool}]]{
 The class of types with a notion of equality. The @racket[==] method should produce @racket[True] if
-both of its arguments are equal, otherwise it should produce @racket[False].
+both of its arguments are equal, otherwise it should produce @racket[False]. The @racket[/=]
+method should produce @racket[True] if its arguments are unequal, otherwise it should produce
+@racket[False]. Default implementations of @racket[==] and @racket[/=] are given in terms of the
+negation of the other, in case inequality is easier to define than equality, or if it is more
+efficient to implement independent definitions for each.
 
 @defmethod[== {a t:-> a t:-> t:Bool}]{
 
@@ -1046,7 +1197,16 @@ both of its arguments are equal, otherwise it should produce @racket[False].
   (eval:check {10 == 11} False)
   (eval:check {{1 :: 2 :: Nil} == {1 :: 2 :: Nil}} True)
   (eval:check {{1 :: 2 :: Nil} == {1 :: Nil}} False)
-  (eval:check {{1 :: 2 :: Nil} == {1 :: 3 :: Nil}} False))}}
+  (eval:check {{1 :: 2 :: Nil} == {1 :: 3 :: Nil}} False))}
+
+@defmethod[/= {a t:-> a t:-> t:Bool}]{
+
+@(hackett-examples
+  (eval:check {10 /= 10} False)
+  (eval:check {10 /= 11} True)
+  (eval:check {{1 :: 2 :: Nil} /= {1 :: 2 :: Nil}} False)
+  (eval:check {{1 :: 2 :: Nil} /= {1 :: Nil}} True)
+  (eval:check {{1 :: 2 :: Nil} /= {1 :: 3 :: Nil}} True))}}
 
 @subsection[#:tag "reference-semigroup-monoid"]{Semigroups and monoids}
 
