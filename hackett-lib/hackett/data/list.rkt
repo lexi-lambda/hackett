@@ -5,8 +5,8 @@
 
 (provide (data List) head last tail init head! last! tail! init! uncons uncons! unfoldr nil? length
          nth nth! find-index index-of take take-while drop drop-while tails inits filter find
-         foldr foldl reverse zip-with zip sum product iterate repeat replicate cycle! concat
-         concat-map or and any? all? elem? not-elem? delete delete-by intersperse)
+         foldr foldl reverse zip-with zip sum product iterate repeat replicate cycle! concat-map
+         or and any? all? elem? not-elem? delete delete-by intersperse)
 
 (defn head : (∀ [a] {(List a) -> (Maybe a)})
   [[{x :: _}] (Just x)]
@@ -156,9 +156,6 @@
 (defn cycle! : (∀ [a] {(List a) -> (List a)})
   [[Nil] (error! "cycle!: empty list")]
   [[xs ] (letrec ([ys {xs ++ ys}]) ys)])
-
-(def concat : (forall [a] {(List (List a)) -> (List a)})
-  (foldr ++ Nil))
 
 (def concat-map : (forall [a b] {{a -> (List b)} -> (List a) -> (List b)})
   =<<)
