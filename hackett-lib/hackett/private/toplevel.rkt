@@ -86,7 +86,11 @@
   [(define (write-proc result port mode)
      (fprintf port ": ~a" (type-result-type result)))])
 
-(define-syntax-parser @%top-interaction
+(define-simple-macro (@%top-interaction . form)
+  #:with form* (value-namespace-introduce #'form)
+  (@%top-interaction* . form*))
+
+(define-syntax-parser @%top-interaction*
   [(_ . (#:type ~! expr:expr))
    (match-let-values ([(_ τ_e) (τ⇒! #'expr)])
      #`(type-result '#,(τ->string (apply-current-subst τ_e))))]
@@ -100,7 +104,7 @@
       this-syntax]
      [(begin form ... form*)
       (syntax/loc this-syntax
-        (begin form ... (@%top-interaction . form*)))]
+        (begin form ... (@%top-interaction* . form*)))]
      [expr
       (match-let*-values ([(e- τ_e) (τ⇒! #'expr)]
                           [(e-/show) (τ⇐! (quasisyntax/loc this-syntax
