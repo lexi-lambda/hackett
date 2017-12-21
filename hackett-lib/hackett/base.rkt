@@ -9,7 +9,6 @@
          (all-from-out hackett/private/class)
          (all-from-out hackett/private/kernel)
          (all-from-out hackett/private/provide)
-
          (rename-out [@%top-interaction #%top-interaction]))
 
 (module reader syntax/module-reader hackett/base

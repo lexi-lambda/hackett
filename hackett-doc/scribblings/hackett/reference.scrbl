@@ -1258,6 +1258,27 @@ will also be evaluated to weak head normal form. This can be used to reduce lazi
 
 A simple @tech{partial function} that crashes the program with a message when evaluated.}
 
+@subsection[#:tag "reference-incomplete-programs"]{Incomplete Programs}
+
 @defthing[undefined! (t:forall [a] a)]{
 
 A @tech[#:key "partial function"]{partial} value that crashes the program when evaluated.}
+
+@defform[(todo! form ...)]{
+
+A form that expands to a @tech[#:key "partial function"]{partial} value of type
+@racket[(t:forall [_a] _a)] that crashes the program with a message containing its expected type when
+evaluated. Uses of this form serve as an indicator that a part of the program is not yet written. The
+@racket[form]s provided to @racket[todo!] are ignored, allowing the contents to contain
+not-yet-working sketches and notes.
+
+@(hackett-examples
+  #:no-preserve-source-locations
+  (eval:error (not (todo!)))
+  (eval:error (+ 42 (todo!)))
+  (eval:error (+ 42 ((todo!) "hello"))))
+
+Additionally, @racket[todo!] attaches a syntax property containing its expected type to its expansion
+to cooperate with editors that know how to display that information. See
+@other-doc['(lib "todo-list/scribblings/todo-list.scrbl") #:indirect "Todo List for DrRacket"] for
+more details.}

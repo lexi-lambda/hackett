@@ -20,7 +20,7 @@
                      [λ lambda])
          #%require/only-types combine-in except-in only-in prefix-in rename-in
          provide combine-out except-out prefix-out rename-out type-out module+
-         : def λ let letrec
+         : def λ let letrec todo!
          (type-out #:no-introduce ∀ -> => Integer Double String
                    (rename-out [@%top #%top]
                                [@%app #%app]

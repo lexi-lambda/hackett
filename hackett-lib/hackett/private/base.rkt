@@ -5,6 +5,7 @@
 (require (for-syntax (multi-in racket [base contract list match provide-transform require-transform
                                        syntax])
                      syntax/parse/experimental/template
+                     syntax/srcloc
                      threading)
          (postfix-in - (combine-in racket/base
                                    racket/promise
@@ -21,10 +22,11 @@
                      τs⇔/λ! τ⇔/λ! τ⇔! τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒!)
          (rename-out [#%top @%top]
                      [∀ forall])
-         @%module-begin @%datum @%app @%superclasses-key @%dictionary-placeholder @%with-dictionary
+         @%module-begin @%datum @%app
+         @%superclasses-key @%dictionary-placeholder @%with-dictionary #%defer-expansion
          define-primop define-base-type
          -> ∀ => Integer Double String
-         : λ1 def let letrec)
+         : λ1 def let letrec todo!)
 
 (define-simple-macro (define-base-type name:id)
   (define-syntax name (make-type-variable-transformer (τ:con #'name #f))))
@@ -70,7 +72,9 @@
   ;; -------------------------------------------------------------------------------------------------
   ;; inference/checking + erasure/expansion
 
-  (define stop-ids (list #'@%dictionary-placeholder #'@%with-dictionary))
+  (define stop-ids (list #'@%dictionary-placeholder
+                         #'@%with-dictionary
+                         #'#%defer-expansion))
 
   ; The following functions perform type inference and typechecking. This process is performed by
   ; expanding expressions, which can also be seen as a type erasure pass. These functions follow a
@@ -331,6 +335,9 @@
                      constrs)))])
        dict-expr)])
 
+(define-syntax-parser #%defer-expansion
+  [(_ e) #'e])
+
 ;; ---------------------------------------------------------------------------------------------------
 
 (define-syntax-parser @%module-begin
@@ -415,6 +422,26 @@
           #'(define-syntax- id
               (make-typed-var-transformer #'id- t-expr))
           (attribute fixity.fixity)))])
+
+(begin-for-syntax
+  (struct todo-item (full summary) #:prefab))
+
+(define-syntax-parser todo!*
+  [(_ v e ...)
+   #:do [(define type (apply-current-subst (τ:var^ #'v)))
+         (define type-str (τ->string type))]
+   #:with message (string-append (source-location->prefix this-syntax)
+                                 "todo! with type "
+                                 type-str)
+   (syntax-property (syntax/loc this-syntax (error 'message))
+                    'todo (todo-item type-str type-str))])
+
+(define-syntax-parser todo!
+  [(_ e ...)
+   #:with var (generate-temporary #'t_todo!)
+   #:with contents (syntax/loc this-syntax (todo!* var e ...))
+   (attach-type (syntax/loc this-syntax (#%defer-expansion contents))
+                (τ:var^ #'var))])
 
 (define-syntax-parser let1
   #:literals [:]
