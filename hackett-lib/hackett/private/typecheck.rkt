@@ -312,8 +312,8 @@
 
 (define/contract (current-class-instances)
   (-> (listof class:instance?))
-  (append (gvector->list global-class-instances)
-          (syntax-parameter-value #'local-class-instances)))
+  (append (syntax-parameter-value #'local-class-instances)
+          (gvector->list global-class-instances)))
 
 (define (current-instances-of-class class)
   (-> class:info? (listof class:instance?))
