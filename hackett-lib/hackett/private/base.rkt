@@ -29,7 +29,7 @@
          : λ1 def let letrec todo!)
 
 (define-simple-macro (define-base-type name:id)
-  (define-syntax name (make-type-variable-transformer (τ:con #'name #f))))
+  (define-syntax name (make-type-variable-transformer (τ:con #'name))))
 
 (define-base-type Integer)
 (define-base-type Double)
@@ -286,7 +286,7 @@
   (define/contract constraint->instances
     (-> constr? syntax? (listof class:instance?))
     (match-lambda**
-     [[(τ:app* (τ:con class-id _) ts ...) dict-expr]
+     [[(τ:app* (τ:con class-id) ts ...) dict-expr]
       (let* ([class-info (syntax-local-value class-id)]
              [instance (class:instance class-info '() '() (map apply-current-subst ts) dict-expr)]
              ; instantiate the superclass constraints, so for (Monad Unit), we get (Applicative Unit)

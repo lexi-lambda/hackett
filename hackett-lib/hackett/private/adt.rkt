@@ -22,6 +22,15 @@
          data case* case λ λ* defn _)
 
 (begin-for-syntax
+  (provide (contract-out [struct type-constructor ([type τ?]
+                                                   [data-constructors (listof identifier?)]
+                                                   [fixity operator-fixity?])]
+                         [struct data-constructor ([macro procedure?]
+                                                   [type τ?]
+                                                   [make-match-pat procedure?]
+                                                   [fixity operator-fixity?])])))
+
+(begin-for-syntax
   (define-splicing-syntax-class type-constructor-spec
     #:attributes [tag [arg 1] len nullary? fixity]
     #:commit
@@ -67,6 +76,11 @@
              #:attr len #f
              #:attr nullary? #f
              #:attr fixity #f])
+
+  (struct type-constructor (type data-constructors fixity)
+    #:property prop:procedure
+    (λ (ctor stx) ((make-type-variable-transformer (type-constructor-type ctor)) stx))
+    #:property prop:infix-operator (λ (ctor) (type-constructor-fixity ctor)))
 
   (struct data-constructor (macro type make-match-pat fixity)
     #:property prop:procedure (struct-field-index macro)
@@ -120,10 +134,10 @@
     (-> data-constructor? (listof identifier?))
     (let find-tcon ([t (data-constructor-type ctor)])
       (match t
-        [(τ:∀ _ u)          (find-tcon u)]
-        [(τ:->* _ u)        (find-tcon u)]
-        [(τ:app u _)        (find-tcon u)]
-        [(τ:con _ ctor-ids) ctor-ids])))
+        [(τ:∀ _ u)       (find-tcon u)]
+        [(τ:->* _ u)     (find-tcon u)]
+        [(τ:app u _)     (find-tcon u)]
+        [(τ:con type-id) (type-constructor-data-constructors (syntax-local-value type-id))])))
 
   (struct pat-base (stx) #:transparent)
   (struct pat-var pat-base (id) #:transparent)
@@ -218,7 +232,7 @@
        (let ([a^ (generate-temporary)])
          (values (τ:var^ a^) '() #{values #'_ %}))]
       [(pat-str _ str)
-       (values (τ:con #'String #f) '() #{values str %})]
+       (values (τ:con #'String) '() #{values str %})]
       [(pat-con _ con pats)
        (let*-values ([(τs_args τ_result) (data-constructor-args/result! con)]
                      [(assumps mk-pats) (pats⇐! pats τs_args)])
@@ -436,11 +450,12 @@
 (define-syntax-parser data
   [(_ τ:type-constructor-spec constructor:data-constructor-spec ...)
    #:with [τ*:type-constructor-spec] (type-namespace-introduce #'τ)
+   #:with fixity-expr (preservable-property->expression (or (attribute τ.fixity) 'left))
    #`(begin-
-       #,(indirect-infix-definition
-          #'(define-syntax- τ*.tag (make-type-variable-transformer
-                                    (τ:con #'τ*.tag (list #'constructor.tag ...))))
-          (attribute τ.fixity))
+       (define-syntax- τ*.tag (type-constructor
+                               (τ:con #'τ*.tag)
+                               (list #'constructor.tag ...)
+                               fixity-expr))
        (define-data-constructor τ* constructor) ...)])
 
 (begin-for-syntax

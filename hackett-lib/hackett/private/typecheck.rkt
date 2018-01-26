@@ -32,7 +32,7 @@
 (provide (contract-out [struct τ:var ([x identifier?])]
                        [struct τ:var^ ([x^ identifier?])]
                        [struct τ:skolem ([x^ identifier?])]
-                       [struct τ:con ([name identifier?] [constructors (or/c (listof syntax?) #f)])]
+                       [struct τ:con ([name identifier?])]
                        [struct τ:app ([a τ?] [b τ?])]
                        [struct τ:∀ ([x identifier?] [t τ?])]
                        [struct τ:qual ([constr constr?] [t τ?])]
@@ -89,10 +89,7 @@
 ; Type constructors, the primary building block that all concrete types are built out of. Type
 ; constructors may actually be types themselves (such as Unit, Integer, or String), or they may be
 ; “type functions” that accept other types to produce a concrete type (such as Tuple, Maybe, or List).
-;
-; Type constructors also store the names of their associated constructors, if they are ADTs. If not,
-; the constructors field is #f.
-(struct τ:con (name constructors) #:prefab)
+(struct τ:con (name) #:prefab)
 
 ; Type application, which represents the application of some type constructor to type arguments. For
 ; example, (Maybe Integer) is the application of the Maybe constructor to the Integer constructor.
@@ -124,7 +121,7 @@
    [[(τ:var x) (τ:var y)] (free-identifier=? x y)]
    [[(τ:var^ x^) (τ:var^ y^)] (free-identifier=? x^ y^)]
    [[(τ:skolem x^) (τ:skolem y^)] (free-identifier=? x^ y^)]
-   [[(τ:con a _) (τ:con b _)] (free-identifier=? a b)]
+   [[(τ:con a) (τ:con b)] (free-identifier=? a b)]
    [[(τ:app a b) (τ:app c d)] (and (τ=? a c) (τ=? b d))]
    [[(τ:∀ x a) (τ:∀ y b)] (and (free-identifier=? x y) (τ=? a b))]
    [[_ _] #f]))
@@ -138,7 +135,7 @@
     [(τ:var _) #t]
     [(τ:var^ _) #t]
     [(τ:skolem _) #t]
-    [(τ:con _ _) #t]
+    [(τ:con _) #t]
     [(τ:app a b) (and (τ-mono? a) (τ-mono? b))]
     [(τ:∀ _ _) #f]
     [(τ:qual a b) (and (τ-mono? a) (τ-mono? b))]))
@@ -150,7 +147,7 @@
     [(τ:var _) '()]
     [(τ:var^ x^) (list x^)]
     [(τ:skolem _) '()]
-    [(τ:con _ _) '()]
+    [(τ:con _) '()]
     [(τ:app a b) (remove-duplicates (append (τ-vars^ a) (τ-vars^ b)) free-identifier=?)]
     [(τ:∀ _ t) (τ-vars^ t)]
     [(τ:qual a b)
@@ -166,7 +163,7 @@
     [(τ:var x) (syntax-e x)]
     [(τ:var^ x^) (string->symbol (format "~a^" (syntax-e x^)))]
     [(τ:skolem x^) (syntax-e x^)]
-    [(τ:con name _) (syntax-e name)]
+    [(τ:con name) (syntax-e name)]
     [(? τ:app?)
      (let flatten-app ([t t])
        (match t
@@ -236,7 +233,7 @@
     [(τ:var^ _) (void)]
     [(τ:skolem x^) (unless (ctx-member? ctx (ctx:skolem x^))
                     (raise-syntax-error #f "skolem escaped its scope" x^))]
-    [(τ:con _ _) (void)]
+    [(τ:con _) (void)]
     [(τ:app a b) (τ-wf! ctx a) (τ-wf! ctx b)]
     [(τ:∀ x t) (τ-wf! (snoc ctx (ctx:var x)) t)]
     [(τ:qual a b) (τ-wf! ctx a) (τ-wf! ctx b)]))
@@ -251,7 +248,7 @@
     [(τ:var^ x^) (let ([s (ctx-find-solution ctx x^)])
                    (if s (apply-subst ctx s) t))]
     [(τ:skolem _) t]
-    [(τ:con _ _) t]
+    [(τ:con _) t]
     [(τ:app a b) (τ:app (apply-subst ctx a) (apply-subst ctx b))]
     [(τ:∀ x t) (τ:∀ x (apply-subst ctx t))]
     [(τ:qual a b) (τ:qual (apply-subst ctx a) (apply-subst ctx b))]))
@@ -271,7 +268,7 @@
     [(τ:var y) (if (free-identifier=? x y) s t)]
     [(τ:var^ _) t]
     [(τ:skolem _) t]
-    [(τ:con _ _) t]
+    [(τ:con _) t]
     [(τ:app a b) (τ:app (inst a x s) (inst b x s))]
     [(τ:∀ v t*) (τ:∀ v (inst t* x s))]
     [(τ:qual a b) (τ:qual (inst a x s) (inst b x s))]))
@@ -294,8 +291,7 @@
     ((make-type-variable-transformer
       (τ:con (syntax-parse stx
                [id:id #'id]
-               [(id:id . _) #'id])
-             #f))
+               [(id:id . _) #'id])))
      stx)))
 (struct class:instance (class vars subgoals ts dict-expr) #:transparent)
 
@@ -325,7 +321,7 @@
 ; Functions are the only truly “baked-in” types. They are handled specially by the typechecker in
 ; order to implement higher-rank polymorphism, so they are defined here.
 
-(define τ:-> (τ:con #'-> #f))
+(define τ:-> (τ:con #'->))
 
 (define (mk-τ:-> a b) (τ:app (τ:app τ:-> a) b))
 (define-match-expander τ:->*
@@ -497,7 +493,7 @@
 
 (define/contract (lookup-instance! constr #:src src)
   (-> constr? #:src syntax? (values class:instance? (listof constr?)))
-  (match-define (τ:app* (τ:con class-id _) (app apply-current-subst ts) ...) constr)
+  (match-define (τ:app* (τ:con class-id) (app apply-current-subst ts) ...) constr)
   (define class (syntax-local-value class-id)) ; FIXME: handle when this isn’t a class:info
   (apply values
          (or (for/or ([instance (in-list (current-instances-of-class class))])

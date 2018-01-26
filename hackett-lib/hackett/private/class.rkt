@@ -70,7 +70,7 @@
    ; Now that we’ve expanded the types above for the purpose of inclusion in the class’s method table,
    ; we want to reexpand the type with the proper quantifier and constraint, since uses of the method
    ; should actually see that type.
-   #:with name-t (τ-stx-token (τ:con #'name #f))
+   #:with name-t (τ-stx-token (τ:con #'name))
    #:with [quantified-t:type ...] #'[(∀ [var-id ...] (=> [(@%app name-t var-id ...)] bare-t)) ...]
    #:with [quantified-t-expr ...] (map preservable-property->expression (attribute quantified-t.τ))
 

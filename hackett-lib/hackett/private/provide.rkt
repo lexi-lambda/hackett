@@ -2,7 +2,8 @@
 
 (require (for-syntax racket/base
                      racket/provide-transform
-                     syntax/id-table)
+                     syntax/id-table
+                     syntax/parse/class/local-value)
          syntax/parse/define
 
          hackett/private/base
@@ -35,13 +36,11 @@
     (λ (s)
       (λ (stx modes)
         (syntax-parse stx
-          [(_ type-out-spec {~and _:id type-id:type})
-           #:do [(define t (attribute type-id.τ))]
-           #:fail-when (and (not (τ:con? t)) #'type-id)
-                       "not defined as a datatype"
-           #:fail-when (and (not (τ:con-constructors t)) #'type-id)
-                       "type does not have visible constructors"
-           #:with [ctor-tag ...] (τ:con-constructors t)
+          [(_ type-out-spec {~and _:id type-constructor})
+           #:declare type-constructor (local-value type-constructor?
+                                                   #:failure-message "not defined as a datatype")
+           #:with [ctor-tag ...] (type-constructor-data-constructors
+                                  (attribute type-constructor.local-value))
            (expand-export #'(combine-out type-out-spec ctor-tag ...) modes)]))))
 
   (struct class-transformer ()
