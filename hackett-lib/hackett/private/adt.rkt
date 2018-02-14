@@ -541,7 +541,7 @@
    #:with [match-pat- ...] match-pats-
    #:with [body- ...] bodies-
    (~> (syntax/loc this-syntax
-         (match*- [val- ...] [match-pat- body-] ...))
+         (lazy- (match*- [val- ...] [match-pat- body-] ...)))
        (attach-type t_result)
        (syntax-property 'disappeared-use (attribute clause.pat.disappeared-uses)))])
 
