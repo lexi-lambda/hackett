@@ -200,6 +200,7 @@
   (struct pat-hole pat-base () #:transparent)
   (struct pat-con pat-base (constructor pats) #:transparent)
   (struct pat-str pat-base (str) #:transparent)
+  (struct pat-int pat-base (int) #:transparent)
   (define pat? pat-base?)
 
   (define-syntax-class pat
@@ -266,6 +267,9 @@
              #:attr disappeared-uses '()]
     [pattern str:str
              #:attr pat (pat-str this-syntax #'str)
+             #:attr disappeared-uses '()]
+    [pattern int:integer
+             #:attr pat (pat-int this-syntax #'int)
              #:attr disappeared-uses '()])
 
   (define/contract (pat⇒! pat)
@@ -284,7 +288,9 @@
        (let ([a^ (generate-temporary)])
          (values #`(#%type:wobbly-var #,a^) '() #{values #'_ %}))]
       [(pat-str _ str)
-       (values (expand-type #'String) '() #{values str %})]
+       (values (expand-type #'String) '() #{values #`(app force- #,str) %})]
+      [(pat-int _ int)
+       (values (expand-type #'Integer) '() #{values #`(app force- #,int) %})]
       [(pat-con _ con pats)
        (let*-values ([(τs_args τ_result) (data-constructor-args/result! con)]
                      [(assumps mk-pats) (pats⇐! pats τs_args)])
@@ -431,7 +437,8 @@
 
         ; TODO: better exhaustiveness checking on strings. OCaml checks for the strings "*", "**",
         ; "***" etc. It would be fairly easy to do the same using splitting.
-        [(pat-str _ s) #f])))
+        [(pat-str _ s) #f]
+        [(pat-int _ i) #f])))
 
 
   ; Checks if patterns are exhaustive or not. Given a list of pattern-lists, returns #f if no
