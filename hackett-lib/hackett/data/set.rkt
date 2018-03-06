@@ -9,8 +9,8 @@
          size
          member
          not-member
-         lookup-lt
-         lookup-gt
+         lookupLT
+         lookupGT
          lookupLE
          lookupGE
          ;; construction
@@ -40,7 +40,7 @@
          ;; intersection
          intersection
          ;; filter
-         filter
+         set-filter
          partition
          ;; map
          set-map
@@ -206,7 +206,7 @@
 ;;
 ;; > lookupLT 3 (fromList [3, 5]) == Nothing
 ;; > lookupLT 5 (fromList [3, 5]) == Just 3
-(def lookup-lt : (∀ [A] (Ord A) => {A -> (Set A) -> (Maybe A)})
+(def lookupLT : (∀ [A] (Ord A) => {A -> (Set A) -> (Maybe A)})
   (letrec ([go-nothing
             (λ* [[_ Tip] Nothing]
                 [[x (Bin _ y l r)]
@@ -225,7 +225,7 @@
 ;;
 ;; > lookupGT 4 (fromList [3, 5]) == Just 5
 ;; > lookupGT 5 (fromList [3, 5]) == Nothing
-(def lookup-gt : (∀ [A] (Ord A) => {A -> (Set A) -> (Maybe A)})
+(def lookupGT : (∀ [A] (Ord A) => {A -> (Set A) -> (Maybe A)})
   (letrec ([go-nothing
             (λ* [[_ Tip] Nothing]
                 [[x (Bin _ y l r)]
@@ -535,11 +535,11 @@
 ;;  Filter and partition
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; /O(n)/. Filter all elements that satisfy the predicate.
-(defn filter : (∀ [A] (Eq A) => {{A -> Bool} -> (Set A) -> (Set A)})
+(defn set-filter : (∀ [A] (Eq A) => {{A -> Bool} -> (Set A) -> (Set A)})
   [[_ Tip] Tip]
   [[p (Bin s x l r)] ;; @ pattern used
-   (let ([l2 (filter p l)]
-         [r2 (filter p r)])
+   (let ([l2 (set-filter p l)]
+         [r2 (set-filter p r)])
      (if (p x)
          (if {(ptr-eq? l l2) && (ptr-eq? r r2)}
              (Bin s x l r)
@@ -961,7 +961,7 @@
 ;;
 ;; @
 ;; takeWhileAntitone p = 'fromDistinctAscList' . 'Data.List.takeWhile' p . 'toList'
-;; takeWhileAntitone p = 'filter' p
+;; takeWhileAntitone p = 'set-filter' p
 ;; @
 (defn takeWhileAntitone : (∀ [A] {{A -> Bool} -> (Set A) -> (Set A)})
   [[_ Tip] Tip]
@@ -976,7 +976,7 @@
 ;;
 ;; @
 ;; dropWhileAntitone p = 'fromDistinctAscList' . 'Data.List.dropWhile' p . 'toList'
-;; dropWhileAntitone p = 'filter' (not . p)
+;; dropWhileAntitone p = 'set-filter' (not . p)
 ;; @
 (defn dropWhileAntitone : (∀ [A] {{A -> Bool} -> (Set A) -> (Set A)})
   [[_ Tip] Tip]

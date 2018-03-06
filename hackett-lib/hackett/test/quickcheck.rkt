@@ -5,7 +5,7 @@
 
 (require hackett/system/random)
 
-(provide Gen
+(provide (for-type Gen)
          (class Arbitrary)
          (class Coarbitrary)
          (class Testable)
@@ -17,7 +17,7 @@
          vector
          oneof
          frequency
-         Result
+         (for-type Result)
          ok
          stamp
          arguments

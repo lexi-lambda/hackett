@@ -2,7 +2,7 @@
 
 (require hackett/monad/trans)
 
-(provide (type-out StateT)
+(provide (for-type StateT)
          runStateT
          state
          evalStateT
