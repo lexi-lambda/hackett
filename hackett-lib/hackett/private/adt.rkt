@@ -22,11 +22,11 @@
          data case* case λ λ* defn _)
 
 (begin-for-syntax
-  (provide (contract-out [struct type-constructor ([type τ?]
+  (provide (contract-out [struct type-constructor ([type type?]
                                                    [data-constructors (listof identifier?)]
                                                    [fixity operator-fixity?])]
                          [struct data-constructor ([macro procedure?]
-                                                   [type τ?]
+                                                   [type type?]
                                                    [make-match-pat procedure?]
                                                    [fixity operator-fixity?])])))
 
@@ -97,11 +97,11 @@
   ;   (list a^ B)
   ;   (C a^)
   (define/contract (function-type-args/result! t)
-    (-> τ? (values (listof τ?) τ?))
+    (-> type? (values (listof type?) type?))
     (define instantiate-quantifiers
       (match-lambda
-        [(τ:∀ x t) (let* ([x^ (generate-temporary x)]
-                          [t* (inst t x (τ:var^ x^))])
+        [(type:forall x t) (let* ([x^ (generate-temporary x)]
+                          [t* (inst t x (type:wobbly-var x^))])
                      (instantiate-quantifiers t*))]
         [t t]))
     (let flatten-fn ([t (instantiate-quantifiers t)])
@@ -111,10 +111,10 @@
         [_ (values '() t)])))
 
   (define/contract (function-type-arity t)
-    (-> τ? exact-integer?)
+    (-> type? exact-integer?)
     (define strip-quantifiers
       (match-lambda
-        [(τ:∀ _ t) (strip-quantifiers t)]
+        [(type:forall _ t) (strip-quantifiers t)]
         [t t]))
     (define fn-depth
       (match-lambda
@@ -123,7 +123,7 @@
     (fn-depth (strip-quantifiers t)))
 
   (define/contract (data-constructor-args/result! ctor)
-    (-> data-constructor? (values (listof τ?) τ?))
+    (-> data-constructor? (values (listof type?) type?))
     (function-type-args/result! (data-constructor-type ctor)))
 
   (define/contract (data-constructor-arity ctor)
@@ -134,10 +134,10 @@
     (-> data-constructor? (listof identifier?))
     (let find-tcon ([t (data-constructor-type ctor)])
       (match t
-        [(τ:∀ _ u)       (find-tcon u)]
+        [(type:forall _ u)       (find-tcon u)]
         [(τ:->* _ u)     (find-tcon u)]
-        [(τ:app u _)     (find-tcon u)]
-        [(τ:con type-id) (type-constructor-data-constructors (syntax-local-value type-id))])))
+        [(type:app u _)     (find-tcon u)]
+        [(type:con type-id) (type-constructor-data-constructors (syntax-local-value type-id))])))
 
   (struct pat-base (stx) #:transparent)
   (struct pat-var pat-base (id) #:transparent)
@@ -219,20 +219,20 @@
   (define/contract (pat⇒! pat)
     (-> pat?
         (values
-         τ?                                           ; the inferred type the pattern matches against;
-         (listof (cons/c identifier? τ?))             ; the types of bindings produced by the pattern;
+         type?                                        ; the inferred type the pattern matches against;
+         (listof (cons/c identifier? type?))          ; the types of bindings produced by the pattern;
          (-> (listof identifier?)                     ; a function that produces a Racket `match`
              (values syntax? (listof identifier?))))) ; pattern given a set of binding ids
     (match pat
       [(pat-var _ id)
        (let ([a^ (generate-temporary)])
-         (values (τ:var^ a^) (list (cons id (τ:var^ a^)))
+         (values (type:wobbly-var a^) (list (cons id (type:wobbly-var a^)))
                  (match-lambda [(cons id rest) (values id rest)])))]
       [(pat-hole _)
        (let ([a^ (generate-temporary)])
-         (values (τ:var^ a^) '() #{values #'_ %}))]
+         (values (type:wobbly-var a^) '() #{values #'_ %}))]
       [(pat-str _ str)
-       (values (τ:con #'String) '() #{values str %})]
+       (values (type:con #'String) '() #{values str %})]
       [(pat-con _ con pats)
        (let*-values ([(τs_args τ_result) (data-constructor-args/result! con)]
                      [(assumps mk-pats) (pats⇐! pats τs_args)])
@@ -241,8 +241,8 @@
                             (values ((data-constructor-make-match-pat con) match-pats) rest)))))]))
 
   (define/contract (pat⇐! pat t)
-    (-> pat? τ?
-        (values (listof (cons/c identifier? τ?))
+    (-> pat? type?
+        (values (listof (cons/c identifier? type?))
                 (-> (listof identifier?) (values syntax? (listof identifier?)))))
     (let-values ([(t_⇒ assumps mk-pat) (pat⇒! pat)])
       (τ<:! t_⇒ t #:src (pat-base-stx pat))
@@ -261,7 +261,7 @@
 
   (define/contract (pats⇒! pats)
     (-> (listof pat?)
-        (values (listof τ?) (listof (cons/c identifier? τ?))
+        (values (listof type?) (listof (cons/c identifier? type?))
                 (-> (listof identifier?) (values (listof syntax?) (listof identifier?)))))
     (define-values [ts assumps mk-pats]
       (for/lists [ts assumps mk-pats]
@@ -270,8 +270,8 @@
     (values ts (append* assumps) (combine-pattern-constructors mk-pats)))
 
   (define/contract (pats⇐! pats ts)
-    (-> (listof pat?) (listof τ?)
-        (values (listof (cons/c identifier? τ?))
+    (-> (listof pat?) (listof type?)
+        (values (listof (cons/c identifier? type?))
                 (-> (listof identifier?) (values (listof syntax?) (listof identifier?)))))
     (define-values [assumps mk-pats]
       (for/lists [assumps mk-pats]
@@ -453,7 +453,7 @@
    #:with fixity-expr (preservable-property->expression (or (attribute τ.fixity) 'left))
    #`(begin-
        (define-syntax- τ*.tag (type-constructor
-                               (τ:con #'τ*.tag)
+                               (type:con #'τ*.tag)
                                (list #'constructor.tag ...)
                                fixity-expr))
        (define-data-constructor τ* constructor) ...)])
@@ -517,8 +517,8 @@
                                 [ts_pats (in-list tss_pats-transposed)]
                                 [pats (in-list patss-transposed)])
                        (let ([val^ (generate-temporary)])
-                         (for-each #{τ<:! %1 (τ:var^ val^) #:src %2} ts_pats pats)
-                         (τ⇐! val (apply-current-subst (τ:var^ val^)))))
+                         (for-each #{τ<:! %1 (type:wobbly-var val^) #:src %2} ts_pats pats)
+                         (τ⇐! val (apply-current-subst (type:wobbly-var val^)))))
 
    #:do [; Perform exhaustiveness checking.
          (define non-exhaust (check-exhaustiveness (attribute clause.pat.pat)
@@ -534,8 +534,9 @@
          ; whole expression.
          (define t_result
            (let ([result^ (generate-temporary)])
-             (for-each #{τ<:! %1 (τ:var^ result^) #:src %2} ts_bodies (attribute clause.body))
-             (apply-current-subst (τ:var^ result^))))]
+             (for-each #{τ<:! %1 (type:wobbly-var result^) #:src %2}
+                       ts_bodies (attribute clause.body))
+             (apply-current-subst (type:wobbly-var result^))))]
 
    ; Finally, we can actually emit the result syntax, using racket/match.
    #:with [match-pat- ...] match-pats-

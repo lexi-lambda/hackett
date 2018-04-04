@@ -53,7 +53,7 @@
    #:do [(syntax-local-bind-syntaxes (attribute var-id-) #f t-intdef-ctx)
          (syntax-local-bind-syntaxes
           (attribute var-id)
-          #'(values (make-type-variable-transformer (τ:var (quote-syntax var-id-*))) ...)
+          #'(values (make-type-variable-transformer (type:bound-var (quote-syntax var-id-*))) ...)
           t-intdef-ctx)]
 
    #:with [(~var method-t (type t-intdef-ctx)) ...] (attribute bare-t)
@@ -70,7 +70,7 @@
    ; Now that we’ve expanded the types above for the purpose of inclusion in the class’s method table,
    ; we want to reexpand the type with the proper quantifier and constraint, since uses of the method
    ; should actually see that type.
-   #:with name-t (τ-stx-token (τ:con #'name))
+   #:with name-t (τ-stx-token (type:con #'name))
    #:with [quantified-t:type ...] #'[(∀ [var-id ...] (=> [(@%app name-t var-id ...)] bare-t)) ...]
    #:with [quantified-t-expr ...] (map preservable-property->expression (attribute quantified-t.τ))
 
@@ -173,7 +173,7 @@
    #:do [(syntax-local-bind-syntaxes (attribute var-id-) #f t-intdef-ctx)
          (syntax-local-bind-syntaxes
           (attribute var-id)
-          #`(values (make-type-variable-transformer (τ:var (quote-syntax var-id-*))) ...)
+          #`(values (make-type-variable-transformer (type:bound-var (quote-syntax var-id-*))) ...)
           t-intdef-ctx)]
    #:with [(~var constr- (type t-intdef-ctx)) ...] (attribute constr)
    #:with [(~var bare-t- (type t-intdef-ctx)) ...] (attribute bare-t)
@@ -191,8 +191,8 @@
    ; unless we explicitly call syntax-local-introduce.
    #:with [var-id-** ...] (map syntax-local-introduce (attribute var-id-*))
    #:do [(define skolem-ids (generate-temporaries (attribute var-id)))
-         (modify-type-context #{append % (map ctx:skolem skolem-ids)})
-         (define var+skolem-ids (map #{cons %1 (τ:skolem %2)} (attribute var-id-**) skolem-ids))
+         (modify-type-context #{append % (map ctx:rigid skolem-ids)})
+         (define var+skolem-ids (map #{cons %1 (type:rigid-var %2)} (attribute var-id-**) skolem-ids))
          (define constrs/skolemized (map #{insts % var+skolem-ids} (attribute constr-.τ)))
          (define bare-ts/skolemized (map #{insts % var+skolem-ids} (attribute bare-t-.τ)))]
 
