@@ -70,7 +70,8 @@
 
          hackett/private/type-reqprov
          (only-in hackett/private/base τ⇒! τ⇐!)
-         (only-in (unmangle-types-in #:no-introduce hackett/private/kernel) String [#%app @%app])
+         (only-in (unmangle-types-in #:no-introduce hackett/private/kernel) String)
+         (only-in hackett/private/kernel [#%app @%app])
          (only-in hackett/private/prim/base show))
 
 (provide @%top-interaction)
@@ -109,5 +110,5 @@
       (match-let*-values ([(e- τ_e) (τ⇒! #'expr)]
                           [(e-/show) (τ⇐! (quasisyntax/loc this-syntax
                                             (@%app show #,e-))
-                                          (parse-type #'String))])
+                                          (expand-type #'String))])
         #`(repl-result (force #,e-/show) '#,(τ->string (apply-current-subst τ_e))))])])

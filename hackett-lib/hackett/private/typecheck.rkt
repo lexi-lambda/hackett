@@ -10,7 +10,8 @@
 ; defined in hackett/private/base, and they provide the primary interface to the various typechecker
 ; functions in this module.
 
-(require (for-template racket/base)
+(require (for-template racket/base
+                       hackett/private/type-language)
          (for-syntax racket/base
                      syntax/transformer)
          data/gvector
@@ -24,19 +25,13 @@
          syntax/id-table
          syntax/parse
          syntax/parse/define
+         syntax/parse/experimental/template
          threading
 
          hackett/private/util/list
          hackett/private/util/stx)
 
-(provide (contract-out [struct type:bound-var ([x identifier?])]
-                       [struct type:wobbly-var ([x identifier?])]
-                       [struct type:rigid-var ([x identifier?])]
-                       [struct type:con ([name identifier?])]
-                       [struct type:app ([a type?] [b type?])]
-                       [struct type:forall ([x identifier?] [t type?])]
-                       [struct type:qual ([constr constr?] [t type?])]
-                       [struct ctx:var ([x identifier?])]
+(provide (contract-out [struct ctx:var ([x identifier?])]
                        [struct ctx:rigid ([x^ identifier?])]
                        [struct ctx:solution ([x^ identifier?] [t type?])]
                        [struct class:info ([vars (listof identifier?)]
@@ -48,156 +43,91 @@
                                                [subgoals (listof constr?)]
                                                [ts (listof (and/c type? τ-mono?))]
                                                [dict-expr syntax?])])
-         type? τ=? constr? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf! type:app* τ:-> τ:->? τ:->*
+         type? τ=? constr? τ-mono? τ-vars^ τ->string τ-wf! current-τ-wf!
          generalize inst insts τ<:/full! τ<:/elaborate! τ<:! τ-inst-l! τ-inst-r!
          ctx-elem? ctx? ctx-elem=? ctx-member? ctx-remove
          ctx-find-solution current-ctx-solution apply-subst apply-current-subst
          current-type-context modify-type-context
          register-global-class-instance! lookup-instance!
          value-namespace-introduce type-namespace-introduce ~type
-         type type-transforming? parse-type τ-stx-token local-expand-type
-         make-type-variable-transformer attach-type attach-expected get-type get-expected
-         make-typed-var-transformer
+         expand-type attach-type attach-expected get-type get-expected make-typed-var-transformer
 
-         (for-template local-class-instances))
-
-;; ---------------------------------------------------------------------------------------------------
-;; type representation
-
-; Bound type variables. In the type (forall [a] a), a is a bound-var until the forall is instantiated.
-; These usually do not appear in typechecking (since they will be instantiated to wobbly-var,
-; rigid-var, or a concrete type).
-(struct type:bound-var (x) #:prefab)
-
-; Solver, aka “wobbly” variables, which represent some yet-unknown type. The typechecker will *solve*
-; these variables as necessary as part of *unification*.
-(struct type:wobbly-var (x) #:prefab)
-
-; Rigid, aka “skolem”, type variables, which represent a *specific* unknown type. While solver
-; variables unify with *anything*, rigid type variables unify with *nothing* (except themselves).
-; These are introduced by user-provided type annotations — for example, an identity function annotated
-; with (forall [a] {a -> a}) will check the implementation against a fresh rigid variable for a.
-;
-; Since rigid type variables are completely unique, this process ensures an implementation is suitably
-; polymorphic. If a function typechecks with a rigid type variable, it must work for *all* types,
-; since the function cannot know anything about the type. This is in contrast to an ordinary solver
-; variable: if we used a solver variable to check the identity function instead of a rigid variable,
-; then the user could write code that would get the solver variable to unify with a single, concrete
-; type (such as (λ [x] {x + 1})), which would defeat the whole point of the quantified type
-; annotation.
-(struct type:rigid-var (x) #:prefab)
-
-; Type constructors, the primary building block that all concrete types are built out of. Type
-; constructors may actually be types themselves (such as Unit, Integer, or String), or they may be
-; “type functions” that accept other types to produce a concrete type (such as Tuple, Maybe, or List).
-(struct type:con (name) #:prefab)
-
-; Type application, which represents the application of some type constructor to type arguments. For
-; example, (Maybe Integer) is the application of the Maybe constructor to the Integer constructor.
-; Type constructors are curried in the same way that value-level functions are, so type applications
-; can be nested in a left-associative manner to represent applying a type to multiple arguments.
-(struct type:app (a b) #:prefab)
-
-; Universal quantification over types. The primitive quantifier abstracts a single type variable
-; within its type. Within t, (type:bound-var x) may appear.
-(struct type:forall (x t) #:prefab)
-
-; Qualified types, aka types with constraints. Currently, the only sort of constraint Hackett supports
-; is typeclass constraints. Constraints themselves are represented as types, though they do not
-; (directly) describe any terms. Typeclass names may serve as type constructors that can be applied
-; to other types just like any others.
-(struct type:qual (constr t) #:prefab)
+         (for-template (all-from-out hackett/private/type-language)
+                       local-class-instances))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; type operations
 
-(define (type? x)
-  ((disjoin type:bound-var? type:wobbly-var? type:rigid-var?
-            type:con? type:app? type:forall? type:qual?)
-   x))
+(define (type? x) (syntax? x))
+(define (constr? x) (type? x))
 
 ; Compares two types for literal equality. This is a much more primitive notion than type
 ; “equivalence”, since it does not check alpha-equivalence. This means that (forall [a] a) and
 ; (forall [b] b) will be considered different types.
-(define/contract τ=?
+(define/contract (τ=? a b)
   (-> type? type? boolean?)
-  (match-lambda**
-   [[(type:bound-var x) (type:bound-var y)] (free-identifier=? x y)]
-   [[(type:wobbly-var x^) (type:wobbly-var y^)] (free-identifier=? x^ y^)]
-   [[(type:rigid-var x^) (type:rigid-var y^)] (free-identifier=? x^ y^)]
-   [[(type:con a) (type:con b)] (free-identifier=? a b)]
-   [[(type:app a b) (type:app c d)] (and (τ=? a c) (τ=? b d))]
-   [[(type:forall x a) (type:forall y b)] (and (free-identifier=? x y) (τ=? a b))]
-   [[_ _] #f]))
-
-; TODO: change this when we add kinds to check that x has kind Constraint
-(define (constr? x) (type? x))
+  (syntax-parse (list a b)
+    #:context 'τ=?
+    #:literal-sets [type-literals]
+    [[(#%type:bound-var x) (#%type:bound-var y)] (free-identifier=? #'x #'y)]
+    [[(#%type:wobbly-var x) (#%type:wobbly-var y)] (free-identifier=? #'x #'y)]
+    [[(#%type:rigid-var x) (#%type:rigid-var y)] (free-identifier=? #'x #'y)]
+    [[(#%type:con a) (#%type:con b)] (free-identifier=? #'a #'b)]
+    [[(#%type:app a b) (#%type:app c d)] (and (τ=? #'a #'c) (τ=? #'b #'d))]
+    [[(#%type:forall x a) (#%type:forall y b)] (and (free-identifier=? #'x #'y) (τ=? #'a #'b))]
+    [[_ _] #f]))
 
 ; Determines if a type is monomorphic, which simply checks if the type contains any quantifiers.
 (define/contract τ-mono?
   (-> type? boolean?)
-  (match-lambda
-    [(type:bound-var _) #t]
-    [(type:wobbly-var _) #t]
-    [(type:rigid-var _) #t]
-    [(type:con _) #t]
-    [(type:app a b) (and (τ-mono? a) (τ-mono? b))]
-    [(type:forall _ _) #f]
-    [(type:qual a b) (and (τ-mono? a) (τ-mono? b))]))
+  (syntax-parser
+    #:context 'τ-mono?
+    #:literal-sets [type-literals]
+    [(#%type:bound-var _) #t]
+    [(#%type:wobbly-var _) #t]
+    [(#%type:rigid-var _) #t]
+    [(#%type:con _) #t]
+    [(#%type:app a b) (and (τ-mono? #'a) (τ-mono? #'b))]
+    [(#%type:forall _ _) #f]
+    [(#%type:qual a b) (and (τ-mono? #'a) (τ-mono? #'b))]))
 
 ; Returns all solver variables present in a type.
 (define/contract τ-vars^
   (-> type? (listof identifier?))
-  (match-lambda
-    [(type:bound-var _) '()]
-    [(type:wobbly-var x^) (list x^)]
-    [(type:rigid-var _) '()]
-    [(type:con _) '()]
-    [(type:app a b) (remove-duplicates (append (τ-vars^ a) (τ-vars^ b)) free-identifier=?)]
-    [(type:forall _ t) (τ-vars^ t)]
-    [(type:qual a b)
-     (remove-duplicates (append (τ-vars^ a) (τ-vars^ b)) free-identifier=?)]))
+  (syntax-parser
+    #:context 'τ-vars^
+    #:literal-sets [type-literals]
+    [(#%type:bound-var _) '()]
+    [(#%type:wobbly-var x) (list #'x)]
+    [(#%type:rigid-var _) '()]
+    [(#%type:con _) '()]
+    [(#%type:app a b) (remove-duplicates (append (τ-vars^ #'a) (τ-vars^ #'b)) free-identifier=?)]
+    [(#%type:forall _ t) (τ-vars^ #'t)]
+    [(#%type:qual a b)
+     (remove-duplicates (append (τ-vars^ #'a) (τ-vars^ #'b)) free-identifier=?)]))
 
 (define/contract (τ->string t)
   (-> type? string?)
   (format "~a" (τ->datum t)))
 
-(define/contract (τ->datum t)
+(define/contract τ->datum
   (-> type? any/c)
-  (match t
-    [(type:bound-var x) (syntax-e x)]
-    [(type:wobbly-var x^) (string->symbol (format "~a^" (syntax-e x^)))]
-    [(type:rigid-var x^) (syntax-e x^)]
-    [(type:con name) (syntax-e name)]
-    [(? type:app?)
-     (let flatten-app ([t t])
-       (match t
-         [(type:app a b) (append (flatten-app a) (list (τ->datum b)))]
-         [other (list (τ->datum other))]))]
-    [(type:forall x t)
-     (let flatten-forall ([xs (list x)]
-                          [t t])
-       (match t
-         [(type:forall x t) (flatten-forall (cons x xs) t)]
-         [other `(forall ,(map syntax-e (reverse xs)) ,(τ->datum t))]))]
-    [(type:qual constr t)
-     (let flatten-qual ([constrs (list constr)]
-                        [t t])
-       (match t
-         [(type:qual constr t) (flatten-qual (cons constr constrs) t)]
-         [other `(=> ,(map τ->datum (reverse constrs)) ,(τ->datum t))]))]))
-
-(define/contract (apply-τ t ts)
-  (-> type? (listof type?) type?)
-  (foldl t #{type:app %2 %1} ts))
-(define (unapply-τ t)
-  (-> type? (non-empty-listof type?))
-  (match t
-    [(type:app a b) (snoc (unapply-τ a) b)]
-    [_ (list t)]))
-(define-match-expander type:app*
-  (syntax-parser [(_ list-pats ...+) #'(app unapply-τ (list list-pats ...))])
-  (make-variable-like-transformer #'apply-τ))
+  (syntax-parser
+    #:context 'τ->datum
+    #:literal-sets [type-literals]
+    [(#%type:bound-var x) (syntax-e #'x)]
+    [(#%type:wobbly-var x^) (string->symbol (format "~a^" (syntax-e #'x^)))]
+    [(#%type:rigid-var x^) (syntax-e #'x^)]
+    [(#%type:con name) (syntax-e #'name)]
+    [{~#%type:app+ t ...} (map τ->datum (attribute t))]
+    [{~#%type:forall* [x ...+] {~#%type:qual* [constr ...+] t}}
+     `(forall ,(map syntax-e (attribute x))
+              ,@(map τ->datum (attribute constr))
+              => ,(τ->datum #'t))]
+    [{~#%type:forall* [x ...+] t}
+     `(forall ,(map syntax-e (attribute x)) ,(τ->datum #'t))]
+    [{~#%type:qual* [constr ...+] t}
+     `(=> ,(map τ->datum (attribute constr)) ,(τ->datum #'t))]))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; type contexts
@@ -232,31 +162,38 @@
 
 (define/contract (τ-wf! ctx t)
   (-> ctx? type? void?)
-  (match t
-    [(type:bound-var x) (unless (ctx-member? ctx (ctx:var x))
-                 (raise-syntax-error #f "unbound type variable" x))]
-    [(type:wobbly-var _) (void)]
-    [(type:rigid-var x^) (unless (ctx-member? ctx (ctx:rigid x^))
-                    (raise-syntax-error #f "skolem escaped its scope" x^))]
-    [(type:con _) (void)]
-    [(type:app a b) (τ-wf! ctx a) (τ-wf! ctx b)]
-    [(type:forall x t) (τ-wf! (snoc ctx (ctx:var x)) t)]
-    [(type:qual a b) (τ-wf! ctx a) (τ-wf! ctx b)]))
+  (syntax-parse t
+    #:context 'τ-wf!
+    #:literal-sets [type-literals]
+    [(#%type:bound-var ~! x:id) (unless (ctx-member? ctx (ctx:var #'x))
+                                  (raise-syntax-error #f "unbound type variable" #'x))]
+    [(#%type:wobbly-var ~! _:id) (void)]
+    [(#%type:rigid-var ~! x^:id) (unless (ctx-member? ctx (ctx:rigid #'x^))
+                                   (raise-syntax-error #f "skolem escaped its scope" #'x^))]
+    [(#%type:con ~! _:id) (void)]
+    [(#%type:app ~! a b) (τ-wf! ctx #'a) (τ-wf! ctx #'b)]
+    [(#%type:forall ~! x:id t) (τ-wf! (snoc ctx (ctx:var #'x)) #'t)]
+    [(#%type:qual ~! a b) (τ-wf! ctx #'a) (τ-wf! ctx #'b)]))
 (define/contract (current-τ-wf! t)
   (-> type? void?)
   (τ-wf! (current-type-context) t))
 
 (define/contract (apply-subst ctx t)
   (-> ctx? type? type?)
-  (match t
-    [(type:bound-var _) t]
-    [(type:wobbly-var x^) (let ([s (ctx-find-solution ctx x^)])
-                   (if s (apply-subst ctx s) t))]
-    [(type:rigid-var _) t]
-    [(type:con _) t]
-    [(type:app a b) (type:app (apply-subst ctx a) (apply-subst ctx b))]
-    [(type:forall x t) (type:forall x (apply-subst ctx t))]
-    [(type:qual a b) (type:qual (apply-subst ctx a) (apply-subst ctx b))]))
+  (syntax-parse t
+    #:context 'apply-subst
+    #:literal-sets [type-literals]
+    [(#%type:bound-var _) t]
+    [(#%type:wobbly-var x) (let ([s (ctx-find-solution ctx #'x)])
+                             (if s (apply-subst ctx s) t))]
+    [(#%type:rigid-var _) t]
+    [(#%type:con _) t]
+    [(head:#%type:app a b) (quasisyntax/loc/props this-syntax
+                             (#%type:app #,(apply-subst ctx #'a) #,(apply-subst ctx #'b)))]
+    [(head:#%type:forall x t) (quasisyntax/loc/props this-syntax
+                                (head x #,(apply-subst ctx #'t)))]
+    [(head:#%type:qual a b) (quasisyntax/loc/props this-syntax
+                              (head #,(apply-subst ctx #'a) #,(apply-subst ctx #'b)))]))
 (define (apply-current-subst t)
   (apply-subst (current-type-context) t))
 
@@ -264,19 +201,27 @@
   (-> type? type?)
   (let* ([xs^ (τ-vars^ t)]
          [xs (generate-temporaries xs^)]
-         [subst (map #{ctx:solution %1 (type:bound-var %2)} xs^ xs)])
-    (foldr type:forall (apply-subst subst t) xs)))
+         [subst (map #{ctx:solution %1 #`(#%type:bound-var #,%2)} xs^ xs)])
+    (quasitemplate (?#%type:forall* #,xs #,(apply-subst subst t)))))
 
 (define/contract (inst t x s)
   (-> type? identifier? type? type?)
-  (match t
-    [(type:bound-var y) (if (free-identifier=? x y) s t)]
-    [(type:wobbly-var _) t]
-    [(type:rigid-var _) t]
-    [(type:con _) t]
-    [(type:app a b) (type:app (inst a x s) (inst b x s))]
-    [(type:forall v t*) (type:forall v (inst t* x s))]
-    [(type:qual a b) (type:qual (inst a x s) (inst b x s))]))
+  (syntax-parse t
+    #:context 'inst
+    #:literal-sets [type-literals]
+    [(#%type:bound-var y) (if (free-identifier=? x #'y) s t)]
+    [(#%type:wobbly-var _) t]
+    [(#%type:rigid-var _) t]
+    [(#%type:con _) t]
+    [(head:#%type:app a b)
+     (quasisyntax/loc/props this-syntax
+       (head #,(inst #'a x s) #,(inst #'b x s)))]
+    [(head:#%type:forall v t*)
+     (quasisyntax/loc/props this-syntax
+       (head v #,(inst #'t* x s)))]
+    [(head:#%type:qual a b)
+     (quasisyntax/loc/props this-syntax
+       (head #,(inst #'a x s) #,(inst #'b x s)))]))
 
 (define/contract (insts t x+ss)
   (-> type? (listof (cons/c identifier? type?)) type?)
@@ -293,10 +238,10 @@
 (struct class:info (vars method-table default-methods superclasses) #:transparent
   #:property prop:procedure
   (λ (info stx)
-    ((make-type-variable-transformer
-      (type:con (syntax-parse stx
-               [id:id #'id]
-               [(id:id . _) #'id])))
+    ((make-variable-like-transformer
+      #`(#%type:con #,(syntax-parse stx
+                        [id:id #'id]
+                        [(id:id . _) #'id])))
      stx)))
 (struct class:instance (class vars subgoals ts dict-expr) #:transparent)
 
@@ -321,26 +266,6 @@
   (filter #{eq? class (class:instance-class %)} (current-class-instances)))
 
 ;; ---------------------------------------------------------------------------------------------------
-;; function types
-
-; Functions are the only truly “baked-in” types. They are handled specially by the typechecker in
-; order to implement higher-rank polymorphism, so they are defined here.
-
-(define τ:-> (type:con #'->))
-
-(define (mk-τ:-> a b) (type:app (type:app τ:-> a) b))
-(define-match-expander τ:->*
-  (syntax-parser
-    [(_ a b)
-     #'(type:app (type:app (== τ:-> τ=?) a) b)])
-  (make-variable-like-transformer #'mk-τ:->))
-
-(define τ:->?
-  (match-lambda
-    [(τ:->* _ _) #t]
-    [_ #f]))
-
-;; ---------------------------------------------------------------------------------------------------
 ;; subsumption, instantiation, and elaboration
 
 (define/contract (τ<:/full! a b #:src src #:elaborate? elaborate?)
@@ -350,69 +275,70 @@
         #:elaborate? [elaborate? boolean?])
        [result (elaborate?) (if elaborate? (listof constr?) void?)])
   (define no-op (if elaborate? '() (void)))
-  (match* [(apply-current-subst a) (apply-current-subst b)]
+  (syntax-parse (list (apply-current-subst a) (apply-current-subst b))
+    #:context 'τ<:/full!
+    #:literal-sets [type-literals]
     ; <:Con
-    [[(? type:con? a) (? type:con? b)]
-     #:when (τ=? a b)
+    [[(#%type:con a) (#%type:con b)]
+     #:when (free-identifier=? #'a #'b)
      no-op]
     ; <:Var
-    [[(type:bound-var x) (type:bound-var y)]
-     #:when (free-identifier=? x y)
+    [[(#%type:bound-var x) (#%type:bound-var y)]
+     #:when (free-identifier=? #'x #'y)
      no-op]
     ; <:Exvar
-    [[(type:wobbly-var x^) (type:wobbly-var y^)]
-     #:when (free-identifier=? x^ y^)
+    [[(#%type:wobbly-var x^) (#%type:wobbly-var y^)]
+     #:when (free-identifier=? #'x^ #'y^)
      no-op]
-    [[(type:rigid-var x^) (type:rigid-var y^)]
-     #:when (free-identifier=? x^ y^)
+    [[(#%type:rigid-var x^) (#%type:rigid-var y^)]
+     #:when (free-identifier=? #'x^ #'y^)
      no-op]
     ; <:→
     ; we need to handle → specially since it is allowed to be applied to polytypes
-    [[(τ:->* a b) (τ:->* c d)]
-     (τ<:! c a #:src src)
-     (τ<:! b d #:src src)
+    [[(~-> a b) (~-> c d)]
+     (τ<:! #'c #'a #:src src)
+     (τ<:! #'b #'d #:src src)
      no-op]
     ; <:App
-    [[(type:app a b) (type:app c d)]
-     (for ([t (in-list (list a b c d))])
+    [[(#%type:app a b) (#%type:app c d)]
+     (for ([t (in-list (list #'a #'b #'c #'d))])
        (unless (τ-mono? t)
          (raise-syntax-error #f (~a "illegal polymorphic type " (τ->string t)
                                     ", impredicative polymorphism is not supported") src)))
-     (τ<:! a c #:src src)
-     (τ<:! b d #:src src)
+     (τ<:! #'a #'c #:src src)
+     (τ<:! #'b #'d #:src src)
      no-op]
     ; <:∀L
-    [[(type:forall x a) b]
-     (let* ([x^ (generate-temporary x)]
-            [a* (inst a x (type:wobbly-var x^))])
-       (τ<:/full! a* b #:src src #:elaborate? elaborate?))]
+    [[(#%type:forall x a) b]
+     (let ([a* (inst #'a #'x #`(#%type:wobbly-var #,(generate-temporary #'x)))])
+       (τ<:/full! a* #'b #:src src #:elaborate? elaborate?))]
     ; <:∀R
-    [[a (type:forall x b)]
-     (let* ([x^ (generate-temporary x)]
-            [b* (inst b x (type:rigid-var x^))])
+    [[a (#%type:forall x b)]
+     (let* ([x^ (generate-temporary #'x)]
+            [b* (inst #'b #'x #`(#%type:rigid-var #,x^))])
        (modify-type-context #{snoc % (ctx:rigid x^)})
        (begin0
-         (τ<:/full! a b* #:src src #:elaborate? elaborate?)
+         (τ<:/full! #'a b* #:src src #:elaborate? elaborate?)
          (modify-type-context #{ctx-remove % (ctx:rigid x^)})))]
     ; <:Qual
-    [[(type:qual constr a) b]
+    [[(#%type:qual constr a) b]
      #:when elaborate?
-     (snoc (τ<:/elaborate! a b #:src src) constr)]
+     (snoc (τ<:/elaborate! #'a #'b #:src src) #'constr)]
     ; <:InstantiateL
-    [[(type:wobbly-var x^) a]
-     #:when (not (member x^ (τ-vars^ a) free-identifier=?))
-     (τ-inst-l! x^ a)
+    [[(#%type:wobbly-var x^) a]
+     #:when (not (member #'x^ (τ-vars^ #'a) free-identifier=?))
+     (τ-inst-l! #'x^ #'a)
      no-op]
     ; <:InstantiateR
-    [[a (type:wobbly-var x^)]
-     #:when (not (member x^ (τ-vars^ a) free-identifier=?))
-     (τ-inst-r! a x^)
+    [[a (#%type:wobbly-var x^)]
+     #:when (not (member #'x^ (τ-vars^ #'a) free-identifier=?))
+     (τ-inst-r! #'a #'x^)
      no-op]
     [[a b]
      (raise-syntax-error 'typechecker
                          (~a "type mismatch\n"
-                             "  between: " (τ->string a) "\n"
-                             "      and: " (τ->string b))
+                             "  between: " (τ->string #'a) "\n"
+                             "      and: " (τ->string #'b))
                          src)]))
 
 (define/contract (τ<:/elaborate! a b #:src src)
@@ -425,46 +351,50 @@
 
 (define/contract (τ-inst-l! x^ t)
   (-> identifier? type? void?)
-  (match t
+  (syntax-parse t
+    #:context 'τ-inst-l!
+    #:literal-sets [type-literals]
     ; InstLSolve
-    [(? τ-mono?)
+    [_
+     #:when (τ-mono? t)
      (modify-type-context #{snoc % (ctx:solution x^ t)})]
     ; InstLArr
-    [(τ:->* a b)
-     (let ([x1^ (generate-temporary x^)]
-           [x2^ (generate-temporary x^)])
-       (modify-type-context
-        #{snoc % (ctx:solution x^ (τ:->* (type:wobbly-var x1^) (type:wobbly-var x2^)))})
-       (τ-inst-r! a x1^)
-       (τ-inst-l! x2^ (apply-current-subst b)))]
+    [(~-> a b)
+     #:with [x1^ x2^] (generate-temporaries (list x^ x^))
+     (modify-type-context
+      #{snoc % (ctx:solution x^ (template (?->* (#%type:wobbly-var x1^) (#%type:wobbly-var x2^))))})
+     (τ-inst-r! #'a #'x1^)
+     (τ-inst-l! #'x2^ (apply-current-subst #'b))]
     ; InstLAllR
-    [(type:forall x t*)
-     (modify-type-context #{snoc % (ctx:var x)})
-     (τ-inst-l! x^ t*)
-     (modify-type-context #{ctx-remove % (ctx:var x)})]
+    [(#%type:forall x t*)
+     (modify-type-context #{snoc % (ctx:var #'x)})
+     (τ-inst-l! x^ #'t*)
+     (modify-type-context #{ctx-remove % (ctx:var #'x)})]
     [_ (error 'τ-inst-l! (format "internal error: failed to instantiate ~a to a subtype of ~a"
-                                 (τ->string (type:wobbly-var x^)) (τ->string t)))]))
+                                 (τ->string #`(#%type:wobbly-var #,x^)) (τ->string t)))]))
 
 (define/contract (τ-inst-r! t x^)
   (-> type? identifier? void?)
-  (match t
+  (syntax-parse t
+    #:context 'τ-inst-r!
+    #:literal-sets [type-literals]
     ; InstRSolve
-    [(? τ-mono?)
+    [_
+     #:when (τ-mono? t)
      (modify-type-context #{snoc % (ctx:solution x^ t)})]
     ; InstRArr
-    [(τ:->* a b)
-     (let ([x1^ (generate-temporary x^)]
-           [x2^ (generate-temporary x^)])
-       (modify-type-context
-        #{snoc % (ctx:solution x^ (τ:->* (type:wobbly-var x1^) (type:wobbly-var x2^)))})
-       (τ-inst-l! x1^ a)
-       (τ-inst-r! (apply-current-subst b) x2^))]
+    [(~-> a b)
+     #:with [x1^ x2^] (generate-temporaries (list x^ x^))
+     (modify-type-context
+      #{snoc % (ctx:solution x^ (template (?->* (#%type:wobbly-var x1^) (#%type:wobbly-var x2^))))})
+     (τ-inst-l! #'x1^ #'a)
+     (τ-inst-r! (apply-current-subst #'b) #'x2^)]
     ; InstRAllL
-    [(type:forall x t*)
-     (let ([y^ (generate-temporary x)])
-       (τ-inst-r! (inst t* x (type:wobbly-var y^)) x^))]
+    [(#%type:forall x t*)
+     #:with y^ (generate-temporary #'x)
+     (τ-inst-r! (inst #'t* #'x #'(#%type:wobbly-var y^)) x^)]
     [_ (error 'τ-inst-r! (format "internal error: failed to instantiate ~a to a supertype of ~a"
-                                 (τ->string (type:wobbly-var x^)) (τ->string t)))]))
+                                 (τ->string #`(#%type:wobbly-var #,x^)) (τ->string t)))]))
 
 ;; ---------------------------------------------------------------------------------------------------
 
@@ -475,37 +405,41 @@
   (-> (listof type?) (listof identifier?) (listof constr?) (listof (and/c type? τ-mono?))
       (or/c (listof constr?) #f))
   (let* ([vars^ (generate-temporaries vars)]
-         [var-subst (map #{cons %1 (type:wobbly-var %2)} vars vars^)]
+         [var-subst (map #{cons %1 #`(#%type:wobbly-var #,%2)} vars vars^)]
          [head-inst (map #{insts % var-subst} head)]
          [subgoals-inst (map #{insts % var-subst} subgoals)])
     (and (for/and ([t (in-list ts)]
                    [head-t (in-list head-inst)])
            (let loop ([t t]
                       [head-t head-t])
-             (match* [(apply-current-subst t) (apply-current-subst head-t)]
-               [[(type:rigid-var x^) (type:rigid-var y^)]
-                #:when (free-identifier=? x^ y^)
+             (syntax-parse (list (apply-current-subst t) (apply-current-subst head-t))
+               #:context 'unify-instance-head
+               #:literal-sets [type-literals]
+               [[(#%type:rigid-var x^) (#%type:rigid-var y^)]
+                #:when (free-identifier=? #'x^ #'y^)
                 #t]
-               [[(? τ-mono? t) (type:wobbly-var x^)]
-                (modify-type-context #{snoc % (ctx:solution x^ t)})
+               [[t (#%type:wobbly-var x^)]
+                #:when (τ-mono? #'t)
+                (modify-type-context #{snoc % (ctx:solution #'x^ #'t)})
                 #t]
-               [[(? type:con? a) (? type:con? b)]
-                #:when (τ=? a b)
+               [[(#%type:con a) (#%type:con b)]
+                #:when (free-identifier=? #'a #'b)
                 #t]
-               [[(type:app a b) (type:app c d)]
-                (and (loop a c) (loop b d))]
+               [[(#%type:app a b) (#%type:app c d)]
+                (and (loop #'a #'c) (loop #'b #'d))]
                [[_ _]
                 #f])))
          subgoals-inst)))
 
 (define/contract (lookup-instance! constr #:src src)
   (-> constr? #:src syntax? (values class:instance? (listof constr?)))
-  (match-define (type:app* (type:con class-id) (app apply-current-subst ts) ...) constr)
-  (define class (syntax-local-value class-id)) ; FIXME: handle when this isn’t a class:info
+  (define/syntax-parse (~#%type:app* ({~literal #%type:con} class-id) ts ...) constr)
+  (define ts* (map apply-current-subst (attribute ts)))
+  (define class (syntax-local-value #'class-id)) ; FIXME: handle when this isn’t a class:info
   (apply values
          (or (for/or ([instance (in-list (current-instances-of-class class))])
                (let ([old-type-context (current-type-context)])
-                 (let ([constrs (unify-instance-head ts
+                 (let ([constrs (unify-instance-head ts*
                                                      (class:instance-vars instance)
                                                      (class:instance-subgoals instance)
                                                      (class:instance-ts instance))])
@@ -515,49 +449,8 @@
                                  (~a "could not deduce " (τ->string (apply-current-subst constr)))
                                  src))))
 
-;; ---------------------------------------------------------------------------------------------------
-;; parsing types
-
-; Types are represented using the data structures defined at the top of this module. However, users
-; use a different source language for writing types that does not use the raw type data structures
-; directly. This code handles “parsing” such type syntax, though types are not really parsed: they are
-; *expanded*.
-;
-; Type syntax in Hackett actually uses arbitrary Racket expressions that are expanded as part of the
-; typechecking process. They are expected to attach a syntax property to their expansion that
-; represents the resulting type. When types are being expanded, (type-transforming?) will be #t, which
-; Hackett uses to invoke a custom #%app that converts application expressions to uses of type:app.
-
-(define type-transforming?-param (make-parameter #f))
-(define (type-transforming?) (type-transforming?-param))
-
-(define-syntax-class (type [intdef-ctx #f])
-  #:attributes [τ expansion]
-  #:opaque
-  [pattern t:expr
-           #:with expansion (local-expand-type #'t intdef-ctx)
-           #:attr τ (syntax-property (attribute expansion) 'τ)
-           #:when (type? (attribute τ))])
-
-(define (parse-type stx)
-  (syntax-parse stx
-    #:context 'parse-type
-    [t:type (attribute t.τ)]))
-
-(define/contract (local-expand-type stx [intdef-ctx #f])
-  (->* [syntax?] [(or/c internal-definition-context? #f)] syntax?)
-  (parameterize ([type-transforming?-param #t])
-    (local-expand stx 'expression '() intdef-ctx)))
-
-(define/contract (make-type-variable-transformer t)
-  (-> type? any)
-  (make-variable-like-transformer (τ-stx-token t)))
-
 ;; -------------------------------------------------------------------------------------------------
 
-(define/contract (τ-stx-token t #:expansion [stx #'(void)])
-  (->* [type?] [#:expansion syntax?] syntax?)
-  (syntax-property stx 'τ t))
 (define/contract (attach-type stx t)
   (-> syntax? type? syntax?)
   (syntax-property stx ': t))

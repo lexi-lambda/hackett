@@ -1,6 +1,6 @@
 #lang curly-fn racket/base
 
-(require racket/require hackett/private/util/require)
+(require racket/require hackett/private/util/require hackett/private/type-reqprov)
 
 (require (for-syntax (multi-in racket [base contract string format list match syntax])
                      (multi-in syntax/parse [class/local-value class/paren-shape
@@ -15,7 +15,9 @@
          syntax/parse/define
 
          (except-in hackett/private/base @%app)
-         (only-in hackett/private/kernel [λ plain-λ] [#%app @%app]))
+         (only-in hackett/private/kernel [λ plain-λ])
+         (only-in (unmangle-types-in #:no-introduce (only-types-in hackett/private/kernel))
+                  forall [#%app @%app]))
 
 (provide (for-syntax type-constructor-spec data-constructor-spec)
          (rename-out [λ lambda] [λ* lambda*])
@@ -79,7 +81,7 @@
 
   (struct type-constructor (type data-constructors fixity)
     #:property prop:procedure
-    (λ (ctor stx) ((make-type-variable-transformer (type-constructor-type ctor)) stx))
+    (λ (ctor stx) ((make-variable-like-transformer (type-constructor-type ctor)) stx))
     #:property prop:infix-operator (λ (ctor) (type-constructor-fixity ctor)))
 
   (struct data-constructor (macro type make-match-pat fixity)
@@ -90,37 +92,30 @@
     (local-value data-constructor? #:failure-message "not bound as a data constructor"))
 
   ; Given a curried function type, produce a list of uncurried arguments and the result type. If the
-  ; function is quantified, the type will be instantiated with fresh existentials.
+  ; function is quantified, the type will be instantiated with fresh solver variables.
   ;
   ; Example:
   ;   > (function-type-args/result (∀ a (-> a (-> B (C a)))))
   ;   (list a^ B)
   ;   (C a^)
-  (define/contract (function-type-args/result! t)
+  (define/contract function-type-args/result!
     (-> type? (values (listof type?) type?))
-    (define instantiate-quantifiers
-      (match-lambda
-        [(type:forall x t) (let* ([x^ (generate-temporary x)]
-                          [t* (inst t x (type:wobbly-var x^))])
-                     (instantiate-quantifiers t*))]
-        [t t]))
-    (let flatten-fn ([t (instantiate-quantifiers t)])
-      (match t
-        [(τ:->* a b) (let-values ([(args result) (flatten-fn b)])
-                       (values (cons a args) result))]
-        [_ (values '() t)])))
+    (syntax-parser
+      #:context 'function-type-args/result!
+      #:literal-sets [type-literals]
+      [(~#%type:forall* [x ...] (~->* t ... r))
+       #:with [x^ ...] (generate-temporaries (attribute x))
+       #:do [(define inst-map (map cons (attribute x) (syntax->list #'[(#%type:wobbly-var x^) ...])))]
+       (values (map #{insts % inst-map} (attribute t))
+               (insts #'r inst-map))]))
 
-  (define/contract (function-type-arity t)
+  (define/contract function-type-arity
     (-> type? exact-integer?)
-    (define strip-quantifiers
-      (match-lambda
-        [(type:forall _ t) (strip-quantifiers t)]
-        [t t]))
-    (define fn-depth
-      (match-lambda
-        [(τ:->* _ t) (add1 (fn-depth t))]
-        [_ 0]))
-    (fn-depth (strip-quantifiers t)))
+    (syntax-parser
+      #:context 'function-type-arity
+      #:literal-sets [type-literals]
+      [(~#%type:forall* _ (~->* t ...))
+       (sub1 (length (attribute t)))]))
 
   (define/contract (data-constructor-args/result! ctor)
     (-> data-constructor? (values (listof type?) type?))
@@ -132,12 +127,12 @@
 
   (define/contract (data-constructor-all-tags ctor)
     (-> data-constructor? (listof identifier?))
-    (let find-tcon ([t (data-constructor-type ctor)])
-      (match t
-        [(type:forall _ u)       (find-tcon u)]
-        [(τ:->* _ u)     (find-tcon u)]
-        [(type:app u _)     (find-tcon u)]
-        [(type:con type-id) (type-constructor-data-constructors (syntax-local-value type-id))])))
+    (let ([t (data-constructor-type ctor)])
+      (syntax-parse (data-constructor-type ctor)
+        #:context 'data-constructor-all-tags
+        #:literal-sets [type-literals]
+        [(~#%type:forall* _ (~->* _ ... (~#%type:app* (#%type:con type-id) _ ...)))
+         (type-constructor-data-constructors (syntax-local-value #'type-id))])))
 
   (struct pat-base (stx) #:transparent)
   (struct pat-var pat-base (id) #:transparent)
@@ -226,13 +221,13 @@
     (match pat
       [(pat-var _ id)
        (let ([a^ (generate-temporary)])
-         (values (type:wobbly-var a^) (list (cons id (type:wobbly-var a^)))
+         (values #`(#%type:wobbly-var #,a^) (list (cons id #`(#%type:wobbly-var #,a^)))
                  (match-lambda [(cons id rest) (values id rest)])))]
       [(pat-hole _)
        (let ([a^ (generate-temporary)])
-         (values (type:wobbly-var a^) '() #{values #'_ %}))]
+         (values #`(#%type:wobbly-var #,a^) '() #{values #'_ %}))]
       [(pat-str _ str)
-       (values (type:con #'String) '() #{values str %})]
+       (values (expand-type #'String) '() #{values str %})]
       [(pat-con _ con pats)
        (let*-values ([(τs_args τ_result) (data-constructor-args/result! con)]
                      [(assumps mk-pats) (pats⇐! pats τs_args)])
@@ -418,34 +413,35 @@
                                     #'τ_result
                                     (map type-namespace-introduce (attribute constructor.arg)))
    ; quantify the type using the type variables in τ, then evaluate the type
-   #:with τ_con:type (foldr #{begin #`(∀ #,%1 #,%2)} #'τ_con_unquantified (attribute τ.arg))
-   #:with τ_con-expr (preservable-property->expression (attribute τ_con.τ))
+   #:with τ_con:type #'(forall [τ.arg ...] τ_con_unquantified)
    #:with [field ...] (generate-temporaries (attribute constructor.arg))
    #:with fixity-expr (preservable-property->expression (or (attribute constructor.fixity) 'left))
-   #`(begin-
-       (define-values- [] (begin- (λ- () τ_con.expansion) (values-)))
-       ; check if the constructor is nullary or not
-       #,(if (attribute constructor.nullary?)
-             ; if it is, just define a value
-             #'(begin-
-                 (define- tag-
-                   (let- ()
-                     (struct- constructor.tag ())
-                     (constructor.tag)))
-                 (define-syntax- constructor.tag
-                   (data-constructor (make-typed-var-transformer #'tag- τ_con-expr) τ_con-expr
-                                     (match-lambda [(list) #'(app force- (==- tag-))])
-                                     fixity-expr)))
-             ; if it isn’t, define a constructor function
-             #`(splicing-local- [(struct- tag- (field ...) #:transparent
-                                          #:reflection-name 'constructor.tag)
-                 (define- #,(foldl #{begin #`(#,%2 #,%1)} #'tag-/curried (attribute field))
-                   (tag- field ...))]
-                 (define-syntax- constructor.tag
-                   (data-constructor (make-typed-var-transformer #'tag-/curried τ_con-expr) τ_con-expr
-                                     (match-lambda [(list field ...)
-                                                    #`(app force- (tag- #,field ...))])
-                                     fixity-expr)))))])
+   ; check if the constructor is nullary or not
+   (if (attribute constructor.nullary?)
+       ; if it is, just define a value
+       #'(begin-
+           (define- tag-
+             (let- ()
+               (struct- constructor.tag ())
+               (constructor.tag)))
+           (define-syntax- constructor.tag
+             (data-constructor
+              (make-typed-var-transformer #'tag- (quote-syntax τ_con.expansion))
+              (quote-syntax τ_con.expansion)
+              (match-lambda [(list) #'(app force- (==- tag-))])
+              fixity-expr)))
+       ; if it isn’t, define a constructor function
+       #`(splicing-local- [(struct- tag- (field ...) #:transparent
+                                    #:reflection-name 'constructor.tag)
+                           (define- #,(foldl #{begin #`(#,%2 #,%1)} #'tag-/curried (attribute field))
+                             (tag- field ...))]
+           (define-syntax- constructor.tag
+             (data-constructor (make-typed-var-transformer #'tag-/curried
+                                                           (quote-syntax τ_con.expansion))
+                               (quote-syntax τ_con.expansion)
+                               (match-lambda [(list field ...)
+                                              #`(app force- (tag- #,field ...))])
+                               fixity-expr))))])
 
 (define-syntax-parser data
   [(_ τ:type-constructor-spec constructor:data-constructor-spec ...)
@@ -453,7 +449,7 @@
    #:with fixity-expr (preservable-property->expression (or (attribute τ.fixity) 'left))
    #`(begin-
        (define-syntax- τ*.tag (type-constructor
-                               (type:con #'τ*.tag)
+                               #'(#%type:con τ*.tag)
                                (list #'constructor.tag ...)
                                fixity-expr))
        (define-data-constructor τ* constructor) ...)])
@@ -517,8 +513,8 @@
                                 [ts_pats (in-list tss_pats-transposed)]
                                 [pats (in-list patss-transposed)])
                        (let ([val^ (generate-temporary)])
-                         (for-each #{τ<:! %1 (type:wobbly-var val^) #:src %2} ts_pats pats)
-                         (τ⇐! val (apply-current-subst (type:wobbly-var val^)))))
+                         (for-each #{τ<:! %1 #`(#%type:wobbly-var #,val^) #:src %2} ts_pats pats)
+                         (τ⇐! val (apply-current-subst #`(#%type:wobbly-var #,val^)))))
 
    #:do [; Perform exhaustiveness checking.
          (define non-exhaust (check-exhaustiveness (attribute clause.pat.pat)
@@ -534,9 +530,9 @@
          ; whole expression.
          (define t_result
            (let ([result^ (generate-temporary)])
-             (for-each #{τ<:! %1 (type:wobbly-var result^) #:src %2}
+             (for-each #{τ<:! %1 #`(#%type:wobbly-var #,result^) #:src %2}
                        ts_bodies (attribute clause.body))
-             (apply-current-subst (type:wobbly-var result^))))]
+             (apply-current-subst #`(#%type:wobbly-var #,result^))))]
 
    ; Finally, we can actually emit the result syntax, using racket/match.
    #:with [match-pat- ...] match-pats-
@@ -582,11 +578,11 @@
 (define-syntax-parser defn
   #:literals [:]
   [(_ id:id
-      {~or {~optional {~seq : {~type t:type}}}
+      {~or {~optional {~seq {~and : {~var :/use}} {~type t:type}}}
            {~optional fixity:fixity-annotation}}
       ...
       clauses:λ*-clauses)
    (quasitemplate
-    (def id {?? {?@ : t}} {?? {?@ . fixity}}
+    (def id {?? {?@ :/use t}} {?? {?@ . fixity}}
       #,(syntax/loc this-syntax
           (λ* clauses.clause ...))))])

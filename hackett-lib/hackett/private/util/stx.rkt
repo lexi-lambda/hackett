@@ -1,27 +1,56 @@
 #lang racket/base
 
-(require (for-template racket/base)
+(require (for-syntax racket/base)
+         (for-template racket/base
+                       syntax/parse)
          racket/contract
-         racket/match)
+         racket/list
+         racket/match
+         syntax/parse
+         syntax/parse/define
+         syntax/parse/experimental/template)
 
-(provide (contract-out [make-variable-like-transformer (-> syntax? any)]
-                       [preservable-property->expression (-> any/c syntax?)]))
+(provide (contract-out [replace-stx-loc (-> syntax? syntax? syntax?)]
+                       [make-variable-like-transformer (-> (or/c syntax? (-> identifier? syntax?))
+                                                           (-> syntax? syntax?))]
+                       [make-pattern-like-pattern-expander (-> (or/c syntax? (-> identifier? syntax?))
+                                                                pattern-expander?)]
+                       [preservable-property->expression (-> any/c syntax?)]
+                       [internal-definition-context-extend
+                        (-> (or/c internal-definition-context?
+                                  (listof internal-definition-context?)
+                                  #f)
+                            internal-definition-context?)]
+                       [internal-definition-context-cons
+                        (-> internal-definition-context?
+                            (or/c internal-definition-context?
+                                  (listof internal-definition-context?)
+                                  #f)
+                            (or/c internal-definition-context?
+                                  (listof internal-definition-context?)))])
+         syntax/loc/props quasisyntax/loc/props template/loc/props quasitemplate/loc/props)
 
-; These two functions are taken from macrotypes/stx-utils, which implement a version of
-; make-variable-like-transformer from syntax/transformer that cooperates better with typechecking.
+; These two functions are taken with modifications from macrotypes/stx-utils, which implement a
+; version of make-variable-like-transformer from syntax/transformer that cooperates better with
+; typechecking.
 (define (replace-stx-loc old new)
-  (datum->syntax (syntax-disarm old #f) (syntax-e (syntax-disarm old #f)) new old))
+  (let ([old* (syntax-disarm old #f)])
+    (syntax-rearm (datum->syntax old* (syntax-e old*) new old) old)))
+
 (define (make-variable-like-transformer ref-stx)
-  (unless (syntax? ref-stx)
-    (raise-type-error 'make-variable-like-transformer "syntax?" ref-stx))
-  (lambda (stx)
-    (syntax-case stx ()
-      [id
-       (identifier? #'id)
-       (replace-stx-loc ref-stx stx)]
-      [(id . args)
-       (let ([stx* (list* '#%app #'id (cdr (syntax-e stx)))])
-         (datum->syntax stx stx* stx stx))])))
+  (syntax-parser
+    [_:id
+     (replace-stx-loc (if (procedure? ref-stx) (ref-stx this-syntax) ref-stx) this-syntax)]
+    [(head:id . args)
+     (datum->syntax this-syntax (list* '#%app #'head #'args) this-syntax this-syntax)]))
+
+(define (make-pattern-like-pattern-expander ref-stx)
+  (pattern-expander
+   (syntax-parser
+     [_:id
+      (replace-stx-loc (if (procedure? ref-stx) (ref-stx this-syntax) ref-stx) this-syntax)]
+     [(head:id . args)
+      (syntax/loc this-syntax ({~and head} . args))])))
 
 ; Sometimes, it is useful to embed a value in a piece of syntax. Normally, this is easily achievable
 ; using quasisyntax/unsyntax, but in the case of embedding prefab structs, the macroexpander will
@@ -50,3 +79,33 @@
      (error 'preservable-property->expression
             "disallowed value within preserved syntax property\n  value: ~e"
             other)]))
+
+; Like syntax/loc and friends, but copy properties from the source syntax object in addition to source
+; location.
+(define-syntaxes [syntax/loc/props quasisyntax/loc/props template/loc/props quasitemplate/loc/props]
+  (let ()
+    (define (make-syntax/loc/props name syntax-id)
+      (syntax-parser
+        [(_ from-stx-expr:expr {~describe "template" template})
+         #`(let ([from-stx from-stx-expr])
+             (unless (syntax? from-stx)
+               (raise-argument-error '#,name "syntax?" from-stx))
+             (let* ([stx (#,syntax-id template)]
+                    [stx* (syntax-disarm stx #f)])
+               (syntax-rearm (datum->syntax stx* (syntax-e stx*) from-stx from-stx) stx)))]))
+    (values (make-syntax/loc/props 'syntax/loc/props #'syntax)
+            (make-syntax/loc/props 'quasisyntax/loc/props #'quasisyntax)
+            (make-syntax/loc/props 'template/loc/props #'template)
+            (make-syntax/loc/props 'quasitemplate/loc/props #'quasitemplate))))
+
+; Creates a new internal definition context that extends a context in the shape local-expand expects.
+(define (internal-definition-context-extend old-ctx)
+  (if (list? old-ctx)
+      (syntax-local-make-definition-context (first old-ctx))
+      (syntax-local-make-definition-context old-ctx)))
+
+; Adds to a list of internal definition contexts in the shape that local-expand expects.
+(define (internal-definition-context-cons new-ctx old-ctx)
+  (cond [(not old-ctx) new-ctx]
+        [(list? old-ctx) (cons new-ctx old-ctx)]
+        [else (list new-ctx old-ctx)]))

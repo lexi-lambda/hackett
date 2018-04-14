@@ -10,6 +10,7 @@
                                    racket/string))
 
          hackett/private/base
+         (only-in (unmangle-types-in #:no-introduce (only-types-in hackett/private/kernel)) forall)
          (unmangle-types-in #:no-introduce (only-types-in hackett/private/prim/type))
          (only-in hackett/private/prim/type
                   True False :: Nil
@@ -45,9 +46,9 @@
           [append/String : {String -> String -> String}]
           [string-length : {String -> Integer}]
           [string-split : {String -> String -> (List String)}]
-          [seq : (∀ a (∀ b b))]
+          [seq : (forall [a b] b)]
           [print : {String -> (IO Unit)}]
-          [error! : (∀ a {String -> a})]))
+          [error! : (forall [a] {String -> a})]))
 
 (define (boolean->Bool x)
   (if- x True False))

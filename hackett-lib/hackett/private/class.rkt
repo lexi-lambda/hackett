@@ -1,6 +1,8 @@
 #lang curly-fn racket/base
 
-(require racket/require hackett/private/util/require)
+(require racket/require
+         hackett/private/type-reqprov
+         hackett/private/util/require)
 
 (require (for-syntax (multi-in racket [base format list match syntax])
                      (multi-in syntax/parse [class/local-value experimental/specialize
@@ -13,11 +15,9 @@
 
          (for-syntax hackett/private/infix
                      hackett/private/util/stx)
-         (except-in hackett/private/base ∀ => @%app)
-         (only-in hackett/private/kernel
-                  [#%hackett-type:∀ ∀]
-                  [#%hackett-type:=> =>]
-                  [#%app @%app]))
+         (except-in hackett/private/base @%app)
+         (only-in (unmangle-types-in #:no-introduce (only-types-in hackett/private/kernel))
+                  ∀ => [#%app @%app]))
 
 (provide (for-syntax class-id)
          class instance)
@@ -53,7 +53,7 @@
    #:do [(syntax-local-bind-syntaxes (attribute var-id-) #f t-intdef-ctx)
          (syntax-local-bind-syntaxes
           (attribute var-id)
-          #'(values (make-type-variable-transformer (type:bound-var (quote-syntax var-id-*))) ...)
+          #'(values (make-variable-like-transformer (quote-syntax (#%type:bound-var var-id-))) ...)
           t-intdef-ctx)]
 
    #:with [(~var method-t (type t-intdef-ctx)) ...] (attribute bare-t)
@@ -63,51 +63,41 @@
    #:attr [method-default-id- 1] (map #{and %1 %2}
                                       (attribute method-default-impl)
                                       (generate-temporaries #'[method-id ...]))
-   #:with [method-t-expr ...] (map preservable-property->expression (attribute method-t.τ))
-   #:with [super-constr-expr ...] (map preservable-property->expression
-                                       (attribute super-constr.τ))
 
    ; Now that we’ve expanded the types above for the purpose of inclusion in the class’s method table,
    ; we want to reexpand the type with the proper quantifier and constraint, since uses of the method
    ; should actually see that type.
-   #:with name-t (τ-stx-token (type:con #'name))
-   #:with [quantified-t:type ...] #'[(∀ [var-id ...] (=> [(@%app name-t var-id ...)] bare-t)) ...]
-   #:with [quantified-t-expr ...] (map preservable-property->expression (attribute quantified-t.τ))
-
-   ; This use of syntax-local-introduce is necessary due to how local-expand and
-   ; syntax-local-bind-syntaxes implicitly call syntax-local-introduce, and how types store syntax in
-   ; syntax properties. For more details, see the comment above the corresponding definition in the
-   ; ‘instance’ form.
-   #:with [var-id-** ...] (map syntax-local-introduce (attribute var-id-*))
+   #:with [quantified-t:type ...]
+          #'[(∀ [var-id ...] (=> [(@%app (#%type:con name) var-id ...)] bare-t)) ...]
 
    (~> (quasitemplate
         (begin-
-          (define-values- []
-            (begin- (λ- () method-t.expansion) ...
-                    (λ- () super-constr.expansion) ...
-                    (values-)))
+          (define-values [] method-t.residual) ...
+          (define-values [] super-constr.residual) ...
           (define- (method-id- dict) (free-id-table-ref- dict #'method-id)) ...
           #,@(for/list ([method-id (in-list (attribute method-id))]
                         [method-id- (in-list (attribute method-id-))]
                         [fixity (in-list (attribute fixity.fixity))]
-                        [quantified-t-expr (in-list (attribute quantified-t-expr))])
+                        [quantified-t (in-list (attribute quantified-t.expansion))])
                (indirect-infix-definition
                 #`(define-syntax- #,method-id
-                    (make-typed-var-transformer #'#,method-id- #,quantified-t-expr))
+                    (make-typed-var-transformer #'#,method-id- (quote-syntax #,quantified-t)))
                 fixity))
           {?? (def method-default-id- : quantified-t method-default-impl)} ...
           (define-syntax- name
-            (class:info (list #'var-id-** ...)
+            (class:info (list #'var-id-* ...)
                         (make-immutable-free-id-table
-                         (list (cons #'method-id method-t-expr) ...))
+                         (list (cons #'method-id (quote-syntax method-t.expansion)) ...))
                         (make-immutable-free-id-table
                          (list {?? (cons #'method-id #'method-default-id-)} ...))
-                        (list super-constr-expr ...)))))
+                        (list (quote-syntax super-constr.expansion) ...)))))
        (syntax-property 'disappeared-binding
                         (~>> (attribute var-id)
                              (map (λ~>> (internal-definition-context-introduce t-intdef-ctx)
                                         syntax-local-introduce))))
-       (syntax-property 'disappeared-use (map syntax-local-introduce (attribute :/use))))])
+       (syntax-property 'disappeared-use (map syntax-local-introduce
+                                              (filter values (cons (attribute =>/use)
+                                                                   (attribute :/use))))))])
 
 (begin-for-syntax
   (define-syntax-class instance-head
@@ -173,37 +163,28 @@
    #:do [(syntax-local-bind-syntaxes (attribute var-id-) #f t-intdef-ctx)
          (syntax-local-bind-syntaxes
           (attribute var-id)
-          #`(values (make-type-variable-transformer (type:bound-var (quote-syntax var-id-*))) ...)
+          #`(values (make-variable-like-transformer (quote-syntax (#%type:bound-var var-id-*))) ...)
           t-intdef-ctx)]
    #:with [(~var constr- (type t-intdef-ctx)) ...] (attribute constr)
    #:with [(~var bare-t- (type t-intdef-ctx)) ...] (attribute bare-t)
 
    ; With the types actually expanded, we need to skolemize them for the pupose of typechecking
    ; method implementations.
-   ;
-   ; This extra syntax-local-introduce on var-id-* is necessary because local-expand and
-   ; syntax-local-bind-syntaxes implicitly call syntax-local-introduce (because they implicitly switch
-   ; to “macro result view”, according to mflatt). Normally, this wouldn’t be a problem, since
-   ; local-expand also calls syntax-local-introduce again on its *result*, flipping the scopes back.
-   ; However, types are placed in syntax properties, and syntax properties are not adjusted by the
-   ; expander. This means the use-site and macro-introduction scopes are still in the
-   ; “macro result view”, and they won’t be free-identifier=? to the var-id-* we have a reference to
-   ; unless we explicitly call syntax-local-introduce.
-   #:with [var-id-** ...] (map syntax-local-introduce (attribute var-id-*))
    #:do [(define skolem-ids (generate-temporaries (attribute var-id)))
          (modify-type-context #{append % (map ctx:rigid skolem-ids)})
-         (define var+skolem-ids (map #{cons %1 (type:rigid-var %2)} (attribute var-id-**) skolem-ids))
-         (define constrs/skolemized (map #{insts % var+skolem-ids} (attribute constr-.τ)))
-         (define bare-ts/skolemized (map #{insts % var+skolem-ids} (attribute bare-t-.τ)))]
+         (define var+skolem-ids
+           (map #{cons %1 #`(#%type:rigid-var #,%2)} (attribute var-id-*) skolem-ids))
+         (define bare-ts/skolemized (map #{insts % var+skolem-ids} (attribute bare-t-.expansion)))]
+   #:with [constr/skolemized ...] (map #{insts % var+skolem-ids} (attribute constr-.expansion))
 
    ; With the skolemized constraints and instance head, we need to synthesize expected types for each
    ; typeclass method by replacing each variable in the class signatures with the corresponding type
    ; from the instance head.
-   #:do [(define expected-ts
-           (let* ([class-vars (class:info-vars class-info)]
-                  [class-vars->bare-ts-subst (map cons class-vars bare-ts/skolemized)])
-             (for/list ([method-id (in-list all-method-ids)])
-               (insts (free-id-table-ref method-table method-id) class-vars->bare-ts-subst))))]
+   #:with [expected-t ...]
+          (let* ([class-vars (class:info-vars class-info)]
+                 [class-vars->bare-ts-subst (map cons class-vars bare-ts/skolemized)])
+            (for/list ([method-id (in-list all-method-ids)])
+              (insts (free-id-table-ref method-table method-id) class-vars->bare-ts-subst)))
 
    ; Now we need to align user-provided method implementations with their types, substituting in the
    ; default implementation whenever an explicit implementation is not provided.
@@ -216,26 +197,21 @@
 
    ; Finally, generate some temporaries and expressions needed in the output.
    #:with dict-id- (generate-temporary #'class)
-   #:with [expected-t-expr ...] (map preservable-property->expression expected-ts)
-   #:with [bare-t-expr ...] (map preservable-property->expression (attribute bare-t-.τ))
-   #:with [constr-expr ...] (map preservable-property->expression (attribute constr-.τ))
-   #:with [constr/skolemized-expr ...] (map preservable-property->expression constrs/skolemized)
-   #:with [superclass-constr-expr ...]
-          (map (λ~> (insts (map cons (class:info-vars class-info) bare-ts/skolemized))
-                    preservable-property->expression)
-               (class:info-superclasses class-info))
+   #:with [superclass-constr ...]
+          (let ([insts-map (map cons (class:info-vars class-info) bare-ts/skolemized)])
+            (for/list ([constr (in-list (class:info-superclasses class-info))])
+              (insts constr insts-map)))
 
    (~> #`(begin-
+           (define-values [] constr-.residual) ...
+           (define-values [] bare-t-.residual) ...
            (begin-for-syntax-
              (register-global-class-instance!
               (class:instance (syntax-local-value #'class)
-                              (list (quote-syntax var-id-**) ...)
-                              (list constr-expr ...)
-                              (list bare-t-expr ...)
+                              (list (quote-syntax var-id-*) ...)
+                              (list (quote-syntax constr-.expansion) ...)
+                              (list (quote-syntax bare-t-.expansion) ...)
                               #'dict-id-)))
-           (define-values- [] (begin- (λ- () constr-.expansion) ...
-                                      (λ- () bare-t-.expansion) ...
-                                      (values-)))
            ; The defined dict-id- might appear in the expansion of :/instance-dictionary, since it
            ; performs dictionary elaboration. At the top level, this can cause problems, since
            ; recursive/self-referential definitions are complicated. We can perform a sort of “forward
@@ -248,9 +224,9 @@
            (define- dict-id-
              #,(syntax/loc this-syntax
                  (:/instance-dictionary
-                  #:methods ([every-method-id : expected-t-expr every-impl] ...)
-                  #:instance-constrs [constr/skolemized-expr ...]
-                  #:superclass-constrs [superclass-constr-expr ...]))))
+                  #:methods ([every-method-id : expected-t every-impl] ...)
+                  #:instance-constrs [constr/skolemized ...]
+                  #:superclass-constrs [superclass-constr ...]))))
        (syntax-property 'disappeared-binding
                         (~>> (attribute var-id)
                              (map (λ~>> (internal-definition-context-introduce t-intdef-ctx)
@@ -263,20 +239,18 @@
 
 (define-syntax-parser :/instance-dictionary
   #:literals [:]
-  [(_ #:methods ([method-id : method-t-expr method-impl] ...)
+  [(_ #:methods ([method-id : method-t method-impl] ...)
       #:instance-constrs [instance-constr-expr ...]
       #:superclass-constrs [superclass-constr-expr ...])
 
-   #:with [method-t ...] (generate-temporaries (attribute method-t-expr))
    #:with [superclass-dict-placeholder ...]
           (for/list ([constr-expr (in-list (attribute superclass-constr-expr))])
             (quasisyntax/loc this-syntax
               (@%dictionary-placeholder #,constr-expr #,this-syntax)))
 
-   (~> #'(let-syntax- ([method-t (make-type-variable-transformer method-t-expr)] ...)
-           (make-immutable-free-id-table-
-            (list- (cons- (quote-syntax @%superclasses-key)
-                          (vector-immutable- superclass-dict-placeholder ...))
-                   (cons- (quote-syntax method-id) (: method-impl method-t)) ...)))
+   (~> #'(make-immutable-free-id-table-
+          (list- (cons- (quote-syntax @%superclasses-key)
+                        (vector-immutable- superclass-dict-placeholder ...))
+                 (cons- (quote-syntax method-id) (: method-impl method-t)) ...))
        ; Wrap the entire expression with lambdas for the appropriate subgoal dictionaries
        (foldl #{begin #`(@%with-dictionary #,%1 #,%2)} _ (attribute instance-constr-expr)))])

@@ -18,7 +18,7 @@
     [(_ e:expr)
      (parameterize ([current-type-context '()])
        (define-values [e- t] (τ⇒! #'e))
-       (preservable-property->expression (apply-current-subst t)))])
+       #`(quote-syntax #,(apply-current-subst t)))])
 
   (define-simple-macro (typecheck-succeed e:expr)
     (with-handlers ([exn:fail? (λ (exn)
