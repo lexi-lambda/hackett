@@ -416,32 +416,36 @@
    #:with τ_con:type #'(forall [τ.arg ...] τ_con_unquantified)
    #:with [field ...] (generate-temporaries (attribute constructor.arg))
    #:with fixity-expr (preservable-property->expression (or (attribute constructor.fixity) 'left))
-   ; check if the constructor is nullary or not
-   (if (attribute constructor.nullary?)
-       ; if it is, just define a value
-       #'(begin-
-           (define- tag-
-             (let- ()
-               (struct- constructor.tag ())
-               (constructor.tag)))
-           (define-syntax- constructor.tag
-             (data-constructor
-              (make-typed-var-transformer #'tag- (quote-syntax τ_con.expansion))
-              (quote-syntax τ_con.expansion)
-              (match-lambda [(list) #'(app force- (==- tag-))])
-              fixity-expr)))
-       ; if it isn’t, define a constructor function
-       #`(splicing-local- [(struct- tag- (field ...) #:transparent
-                                    #:reflection-name 'constructor.tag)
-                           (define- #,(foldl #{begin #`(#,%2 #,%1)} #'tag-/curried (attribute field))
-                             (tag- field ...))]
-           (define-syntax- constructor.tag
-             (data-constructor (make-typed-var-transformer #'tag-/curried
-                                                           (quote-syntax τ_con.expansion))
-                               (quote-syntax τ_con.expansion)
-                               (match-lambda [(list field ...)
-                                              #`(app force- (tag- #,field ...))])
-                               fixity-expr))))])
+   #`(begin-
+       (define-values- [] τ_con.residual)
+       ; check if the constructor is nullary or not
+       #,(if (attribute constructor.nullary?)
+             ; if it is, just define a value
+             #'(begin-
+                 (define- tag-
+                   (let- ()
+                     (struct- constructor.tag ())
+                     (constructor.tag)))
+                 (define-syntax- constructor.tag
+                   (data-constructor
+                    (make-typed-var-transformer #'tag- (quote-syntax τ_con.expansion))
+                    (quote-syntax τ_con.expansion)
+                    (match-lambda [(list) #'(app force- (==- tag-))])
+                    fixity-expr)))
+             ; if it isn’t, define a constructor function
+             #`(splicing-local- [(struct- tag- (field ...) #:transparent
+                                          #:reflection-name 'constructor.tag)
+                                 (define- #,(foldl #{begin #`(#,%2 #,%1)}
+                                                   #'tag-/curried
+                                                   (attribute field))
+                                   (tag- field ...))]
+                 (define-syntax- constructor.tag
+                   (data-constructor (make-typed-var-transformer #'tag-/curried
+                                                                 (quote-syntax τ_con.expansion))
+                                     (quote-syntax τ_con.expansion)
+                                     (match-lambda [(list field ...)
+                                                    #`(app force- (tag- #,field ...))])
+                                     fixity-expr)))))])
 
 (define-syntax-parser data
   [(_ τ:type-constructor-spec constructor:data-constructor-spec ...)
