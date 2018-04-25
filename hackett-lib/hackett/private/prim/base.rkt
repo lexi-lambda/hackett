@@ -118,7 +118,10 @@
 ;; Eq
 
 (class (Eq a)
-  [== : {a -> a -> Bool}])
+  [== : {a -> a -> Bool}
+      (λ [a b] (not {a /= b}))]
+  [/= : {a -> a -> Bool}
+      (λ [a b] (not {a == b}))])
 
 (instance (Eq Unit)
   [== (λ [Unit Unit] True)])
