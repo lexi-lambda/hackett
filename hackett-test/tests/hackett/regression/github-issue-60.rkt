@@ -9,8 +9,8 @@
 (class (Top a)
   [top : {a -> a}])
 
-(instance (∀ [a] (Middle a) => (Base a))
+(instance (forall [a] (Middle a) => (Base a))
   [base (λ [_] middle)])
 
-(instance (∀ [a] (Top a) => (Middle a))
+(instance (forall [a] (Top a) => (Middle a))
   [middle (λ [_] top)])

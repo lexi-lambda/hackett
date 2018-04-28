@@ -42,42 +42,42 @@
   [[True  y] y]
   [[False _] False])
 
-(defn if : (∀ [a] {Bool -> a -> a -> a})
+(defn if : (forall [a] {Bool -> a -> a -> a})
   [[True  x _] x]
   [[False _ y] y])
 
-(defn fst : (∀ [a b] {(Tuple a b) -> a})
+(defn fst : (forall [a b] {(Tuple a b) -> a})
   [[(Tuple x _)] x])
 
-(defn snd : (∀ [a b] {(Tuple a b) -> b})
+(defn snd : (forall [a b] {(Tuple a b) -> b})
   [[(Tuple _ x)] x])
 
-(defn foldr : (∀ [a b] {{a -> b -> b} -> b -> (List a) -> b})
+(defn foldr : (forall [a b] {{a -> b -> b} -> b -> (List a) -> b})
   [[f a {x :: xs}] (f x (foldr f a xs))]
   [[_ a Nil      ] a])
 
-(defn unsafe-run-io! : (∀ [a] {(IO a) -> a})
+(defn unsafe-run-io! : (forall [a] {(IO a) -> a})
   [[(IO f)] (snd (f Real-World))])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; function combinators
 
-(defn id : (∀ [a] {a -> a})
+(defn id : (forall [a] {a -> a})
   [[x] x])
 
-(defn . : (∀ [a b c] {{b -> c} -> {a -> b} -> a -> c})
+(defn . : (forall [a b c] {{b -> c} -> {a -> b} -> a -> c})
   [[f g x] (f (g x))])
 
-(defn $ : (∀ [a b] {{a -> b} -> a -> b})
+(defn $ : (forall [a b] {{a -> b} -> a -> b})
   [[f x] (f x)])
 
-(defn & : (∀ [a b] {a -> {a -> b} -> b})
+(defn & : (forall [a b] {a -> {a -> b} -> b})
   [[x f] (f x)])
 
-(defn const : (∀ [a b] {a -> b -> a})
+(defn const : (forall [a b] {a -> b -> a})
   [[x _] x])
 
-(defn flip : (∀ [a b c] {{a -> b -> c} -> b -> a -> c})
+(defn flip : (forall [a b c] {{a -> b -> c} -> b -> a -> c})
   [[f x y] (f y x)])
 
 ;; ---------------------------------------------------------------------------------------------------
@@ -124,7 +124,7 @@
 (derive-instance Show Either)
 (derive-instance Show Tuple)
 
-(instance (∀ [a] (Show a) => (Show (List a)))
+(instance (forall [a] (Show a) => (Show (List a)))
   [show (λ* [[Nil] "Nil"]
             [[xs] (let ([strs (map {(λ [x] {x ++ " :: "}) . show} xs)])
                     {"{" ++ (concat strs) ++ "Nil}"})])])
@@ -179,17 +179,17 @@
 (instance (Semigroup String)
   [++ append/String])
 
-(instance (∀ [a] (Semigroup a) => (Semigroup (Maybe a)))
+(instance (forall [a] (Semigroup a) => (Semigroup (Maybe a)))
   [++ (λ* [[(Just x) (Just y)] (Just {x ++ y})]
           [[(Just x) Nothing ] (Just x)]
           [[Nothing  (Just y)] (Just y)]
           [[Nothing  Nothing ] Nothing])])
 
-(instance (∀ [a] (Semigroup (List a)))
+(instance (forall [a] (Semigroup (List a)))
   [++ (λ* [[{z :: zs} ys] {z :: {zs ++ ys}}]
           [[Nil       ys] ys])])
 
-(instance (∀ [a b] (Semigroup b) => (Semigroup {a -> b}))
+(instance (forall [a b] (Semigroup b) => (Semigroup {a -> b}))
   [++ (λ [f g x] {(f x) ++ (g x)})])
 
 (class (Semigroup a) => (Monoid a)
@@ -198,41 +198,41 @@
 (instance (Monoid String)
   [mempty ""])
 
-(instance (∀ [a] (Semigroup a) => (Monoid (Maybe a)))
+(instance (forall [a] (Semigroup a) => (Monoid (Maybe a)))
   [mempty Nothing])
 
-(instance (∀ [a] (Monoid (List a)))
+(instance (forall [a] (Monoid (List a)))
   [mempty Nil])
 
-(instance (∀ [a b] (Monoid b) => (Monoid {a -> b}))
+(instance (forall [a b] (Monoid b) => (Monoid {a -> b}))
   [mempty (λ [_] mempty)])
 
-(def concat : (∀ [a] (Monoid a) => {(List a) -> a})
+(def concat : (forall [a] (Monoid a) => {(List a) -> a})
   (foldr ++ mempty))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Functor
 
 (class (Functor f)
-  [map : (∀ [a b] {{a -> b} -> (f a) -> (f b)})])
+  [map : (forall [a b] {{a -> b} -> (f a) -> (f b)})])
 
-(def <&> : (∀ [f a b] (Functor f) => {(f a) -> {a -> b} -> (f b)})
+(def <&> : (forall [f a b] (Functor f) => {(f a) -> {a -> b} -> (f b)})
   (flip map))
 
-(def <$ : (∀ [f a b] (Functor f) => {a -> (f b) -> (f a)})
+(def <$ : (forall [f a b] (Functor f) => {a -> (f b) -> (f a)})
   {map . const})
 
-(def $> : (∀ [f a b] (Functor f) => {(f b) -> a -> (f a)})
+(def $> : (forall [f a b] (Functor f) => {(f b) -> a -> (f a)})
   (flip <$))
 
-(def ignore : (∀ [f a] (Functor f) => {(f a) -> (f Unit)})
+(def ignore : (forall [f a] (Functor f) => {(f a) -> (f Unit)})
   (map (const Unit)))
 
 (instance (Functor Maybe)
   [map (λ* [[f (Just x)] (Just (f x))]
            [[_ Nothing ] Nothing])])
 
-(instance (∀ [e] (Functor (Either e)))
+(instance (forall [e] (Functor (Either e)))
   [map (λ* [[f (Right x)] (Right (f x))]
            [[_ (Left  x)] (Left  x)])])
 
@@ -250,14 +250,14 @@
 ;; Applicative
 
 (class (Functor f) => (Applicative f)
-  [pure : (∀ [a] {a -> (f a)})]
-  [<*> : (∀ [a b] {(f {a -> b}) -> (f a) -> (f b)})])
+  [pure : (forall [a] {a -> (f a)})]
+  [<*> : (forall [a b] {(f {a -> b}) -> (f a) -> (f b)})])
 
-(defn sequence : (∀ [f a] (Applicative f) => {(List (f a)) -> (f (List a))})
+(defn sequence : (forall [f a] (Applicative f) => {(List (f a)) -> (f (List a))})
   [[{y :: ys}] {:: map y <*> (sequence ys)}]
   [[Nil      ] (pure Nil)])
 
-(defn traverse : (∀ [f a b] (Applicative f) => {{a -> (f b)} -> (List a) -> (f (List b))})
+(defn traverse : (forall [f a b] (Applicative f) => {{a -> (f b)} -> (List a) -> (f (List b))})
   [[f xs] (sequence (map f xs))])
 
 (instance (Applicative Maybe)
@@ -265,7 +265,7 @@
   [<*> (λ* [[(Just f) x] (map f x)]
            [[Nothing  _] Nothing])])
 
-(instance (∀ [e] (Applicative (Either e)))
+(instance (forall [e] (Applicative (Either e)))
   [pure Right]
   [<*> (λ* [[(Right f) x] (map f x)]
            [[(Left  x) _] (Left x)])])
@@ -282,12 +282,12 @@
 ;; Monad
 
 (class (Applicative m) => (Monad m)
-  [join : (∀ [a] {(m (m a)) -> (m a)})
+  [join : (forall [a] {(m (m a)) -> (m a)})
         (λ [x] {id =<< x})]
-  [=<< : (∀ [a b] {{a -> (m b)} -> (m a) -> (m b)})
+  [=<< : (forall [a b] {{a -> (m b)} -> (m a) -> (m b)})
        (λ [f x] (join (map f x)))])
 
-(def >>= : (∀ [m a b] (Monad m) => {(m a) -> {a -> (m b)} -> (m b)})
+(def >>= : (forall [m a b] (Monad m) => {(m a) -> {a -> (m b)} -> (m b)})
   (flip =<<))
 
 (define-syntax-parser do
@@ -301,7 +301,7 @@
    (syntax/loc #'e
      (>>= e (λ [x] (do rest ...))))])
 
-(defn ap : (∀ [m a b] (Monad m) => {(m {a -> b}) -> (m a) -> (m b)})
+(defn ap : (forall [m a b] (Monad m) => {(m {a -> b}) -> (m a) -> (m b)})
   [[mf mx] (do [f <- mf]
                [x <- mx]
                (pure (f x)))])
@@ -310,7 +310,7 @@
   [join (λ* [[(Just (Just x))] (Just x)]
             [[_              ] Nothing])])
 
-(instance (∀ [e] (Monad (Either e)))
+(instance (forall [e] (Monad (Either e)))
   [join (λ* [[(Right (Right x))] (Right x)]
             [[(Right (Left  x))] (Left  x)]
             [[(Left  x)        ] (Left  x)])])

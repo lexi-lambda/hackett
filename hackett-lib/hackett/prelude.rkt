@@ -38,7 +38,7 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
-(def undefined! : (∀ [a] a)
+(def undefined! : (forall [a] a)
   (error! "undefined!"))
 
 (defn println : {String -> (IO Unit)}

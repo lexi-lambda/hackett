@@ -89,10 +89,10 @@
 (typecheck-fail (: (Tuple Unit Unit) (Tuple Unit Integer)))
 (typecheck-fail (: (Tuple Unit Unit) (Tuple Integer Unit)))
 
-(typecheck-succeed (: (λ [x] x) (∀ [a] {a -> a})))
-(typecheck-fail (: (λ [x] 1) (∀ [a] {a -> a})))
-(typecheck-succeed (: (λ [x y] x) (∀ [a b] {a -> b -> a})))
-(typecheck-fail (: (λ [x y] y) (∀ [a b] {a -> b -> a})))
+(typecheck-succeed (: (λ [x] x) (forall [a] {a -> a})))
+(typecheck-fail (: (λ [x] 1) (forall [a] {a -> a})))
+(typecheck-succeed (: (λ [x y] x) (forall [a b] {a -> b -> a})))
+(typecheck-fail (: (λ [x y] y) (forall [a b] {a -> b -> a})))
 
 (typecheck-succeed True)
 (typecheck-succeed (: True Bool))
@@ -102,18 +102,18 @@
 (typecheck-fail (: False Unit))
 
 (typecheck-succeed Just)
-(typecheck-succeed (: Just (∀ [a] {a -> (Maybe a)})))
+(typecheck-succeed (: Just (forall [a] {a -> (Maybe a)})))
 (typecheck-succeed (: Just {Unit -> (Maybe Unit)}))
 (typecheck-succeed (Just Unit))
 (typecheck-succeed (: (Just Unit) (Maybe Unit)))
 (typecheck-succeed Nothing)
-(typecheck-succeed (: Nothing (∀ [a] (Maybe a))))
+(typecheck-succeed (: Nothing (forall [a] (Maybe a))))
 (typecheck-succeed (: Nothing (Maybe Unit)))
 (typecheck-fail (: Just (Maybe Unit)))
-(typecheck-fail (: (Just Unit) (∀ [a] (Maybe a))))
+(typecheck-fail (: (Just Unit) (forall [a] (Maybe a))))
 (typecheck-fail (: (Just Unit) (Maybe Integer)))
 (typecheck-fail (: Nothing Unit))
-(typecheck-fail (: (: Nothing (Maybe Unit)) (∀ [a] (Maybe a))))
+(typecheck-fail (: (: Nothing (Maybe Unit)) (forall [a] (Maybe a))))
 (typecheck-fail (: (: Nothing (Maybe Unit)) (Maybe Integer)))
 
 (typecheck-succeed (case Nothing
@@ -137,7 +137,7 @@
 (typecheck-fail (: (λ [x] (case x
                             [(Just x) x]
                             [Nothing Unit]))
-                   (∀ [a] (-> (Maybe a) Unit))))
+                   (forall [a] (-> (Maybe a) Unit))))
 (typecheck-succeed (case Nothing
                      [(Just (Just x)) x]
                      [_ Unit]))
@@ -159,14 +159,14 @@
 (typecheck-succeed (: (λ [m] (case m
                                [Nothing Nothing]
                                [_ Nothing]))
-                      (∀ [a b] {(Maybe a) -> (Maybe b)})))
+                      (forall [a b] {(Maybe a) -> (Maybe b)})))
 (typecheck-succeed (λ [f m] (case m
                               [(Just x) (Just (f x))]
                               [Nothing Nothing])))
 (typecheck-succeed (: (λ [f m] (case m
                                  [(Just x) (Just (f x))]
                                  [Nothing Nothing]))
-                      (∀ [a b] {{a -> b} -> (Maybe a) -> (Maybe b)})))
+                      (forall [a b] {{a -> b} -> (Maybe a) -> (Maybe b)})))
 
 (typecheck-succeed {Just . (+ 1)})
 (typecheck-succeed (: {Just . (+ 1)} {Integer -> (Maybe Integer)}))

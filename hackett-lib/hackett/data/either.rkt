@@ -4,7 +4,7 @@
 
 (provide (data Either) either is-left is-right lefts rights partition-eithers)
 
-(defn either : (∀ [a b c] {{a -> c} -> {b -> c} -> (Either a b) -> c})
+(defn either : (forall [a b c] {{a -> c} -> {b -> c} -> (Either a b) -> c})
   [[f _ (Left  x)] (f x)]
   [[_ g (Right y)] (g y)])
 
