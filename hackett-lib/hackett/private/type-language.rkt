@@ -21,10 +21,12 @@
 (provide (for-syntax type-literal-ids type-literals type expand-type
                      ~#%type:app* ~#%type:app+ ?#%type:app*
                      ~#%type:forall* ?#%type:forall* ~#%type:qual* ?#%type:qual*
-                     ~-> ~->* ~->+ ?->*)
+                     ~-> ~->* ~->+ ?->*
+                     value-namespace-introduce type-namespace-introduce ~type)
          #%type:con #%type:app #%type:forall #%type:qual
          #%type:bound-var #%type:wobbly-var #%type:rigid-var
-         #%forall define-base-type ->)
+         #%forall define-base-type ->
+         begin-for-value begin-for-type)
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; fully-expanded types
@@ -162,11 +164,11 @@
              #:attr expansion this-syntax
              #:attr residual (syntax-track-origin #'(values) this-syntax #'head)]
     [pattern (head:letrec-syntaxes+values ~! ([(id:id ...) e:expr] ...) () t:expr)
-             #:do [(define intdef-ctx* (internal-definition-context-extend intdef-ctx))
+             #:do [(define intdef-ctx* (syntax-local-make-definition-context intdef-ctx))
                    (for ([ids (in-list (attribute id))]
                          [e (in-list (attribute e))])
                      (syntax-local-bind-syntaxes ids e intdef-ctx*))]
-             #:with {~var t- (type (internal-definition-context-cons intdef-ctx* intdef-ctx))} #'t
+             #:with {~var t- (type intdef-ctx*)} #'t
              #:attr expansion (internal-definition-context-track intdef-ctx* #'t-.expansion)
              #:attr residual (~> #'(values)
                                  (syntax-track-origin #'t-.residual #'head)
@@ -351,3 +353,40 @@
          (?#%type:app* #,(quasisyntax/loc #'head (#%type:con #,(syntax/loc #'head ->)))
                        a
                        (?->* b c ...)))])))
+
+;; ---------------------------------------------------------------------------------------------------
+;; type and value namespaces
+
+; Hackett programs have two namespaces: types and values. These are represented by two syntax
+; introducers, each with a unique scope. However, in order to properly cooperate with
+; (module* _ #f ....) submodules, it’s important that the scopes are *global*; that is, they are
+; shared across both module instantiations and bytecode marshalling/unmarshalling. For this, we use
+; make-interned-syntax-introducer, which ensures the scope is always the same.
+
+(begin-for-syntax
+  (define value-introducer (make-interned-syntax-introducer 'hackett-value))
+  (define type-introducer (make-interned-syntax-introducer 'hackett-type))
+
+  (define value-namespace-introduce
+    (λ~> (value-introducer 'add) (type-introducer 'remove)))
+
+  (define type-namespace-introduce
+    (λ~> (value-introducer 'remove) (type-introducer 'add)))
+
+  (define-syntax ~type
+    (pattern-expander
+     (syntax-parser
+       [(_ pat)
+        #'{~and tmp {~parse pat (type-namespace-introduce #'tmp)}}]))))
+
+(define-syntax-parser begin-for-value
+  [(_ form ...)
+   #:with [form* ...] (map value-namespace-introduce (attribute form))
+   (syntax/loc this-syntax
+     (begin form* ...))])
+
+(define-syntax-parser begin-for-type
+  [(_ form ...)
+   #:with [form* ...] (map type-namespace-introduce (attribute form))
+   (syntax/loc this-syntax
+     (begin form* ...))])

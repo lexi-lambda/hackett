@@ -3,7 +3,12 @@
 (require (only-in racket/base for-syntax)
 
          (for-syntax racket/base
-                     syntax/parse/class/paren-shape)
+                     racket/syntax
+                     syntax/parse/class/paren-shape
+                     syntax/parse/experimental/template
+
+                     hackett/private/typecheck
+                     hackett/private/util/stx)
 
          (except-in hackett/private/adt data)
          (except-in hackett/private/class class)
@@ -80,14 +85,29 @@
 ;; Show
 
 (class (Show a)
-  [show : {a -> String}])
-
-(instance (Show Unit)
-  [show (λ [Unit] "Unit")])
-
-(instance (Show Bool)
-  [show (λ* [[True ] "True"]
-            [[False] "False"])])
+  [show : {a -> String}]
+  #:deriving-transformer
+  (syntax-parser
+    [(_ _ {~type ty-con:type-constructor-val})
+     #:with [data-con:data-constructor-val ...] (attribute ty-con.data-constructors)
+     #:with [ty-con-var-id ...] (build-list (attribute ty-con.arity) generate-temporary)
+     #:with [[data-con-field-ty ...] ...]
+            (for/list ([con-type (in-list (attribute data-con.type))])
+              (data-constructor-field-types (attribute ty-con-var-id) con-type))
+     #:with [case-clause ...]
+            (for/list ([con-id (in-list (attribute data-con))]
+                       [fields (in-list (attribute data-con-field-ty))])
+              (with-syntax ([[field-binding-id ...] (generate-temporaries fields)]
+                            [con-str (datum->syntax #'here (symbol->string (syntax-e con-id)))])
+                (quasitemplate
+                 [[(#,con-id field-binding-id ...)]
+                  {"(" ++ con-str {?@ ++ " " ++ (show field-binding-id)} ... ++ ")"}])))
+     (syntax-property
+      #'(instance (forall [ty-con-var-id ...] (Show data-con-field-ty) ... ...
+                          => (Show (ty-con ty-con-var-id ...)))
+          [show (λ* case-clause ...)])
+      'disappeared-use
+      (syntax-local-introduce #'ty-con))]))
 
 (instance (Show Integer)
   [show show/Integer])
@@ -98,16 +118,11 @@
 (instance (Show String)
   [show (λ [str] {"\"" ++ str ++ "\""})])
 
-(instance (∀ [a] (Show a) => (Show (Maybe a)))
-  [show (λ* [[(Just x)] {"(Just " ++ (show x) ++ ")"}]
-            [[Nothing ] "Nothing"])])
-
-(instance (∀ [a b] (Show a) (Show b) => (Show (Either a b)))
-  [show (λ* [[(Left x)] {"(Left " ++ (show x) ++ ")"}]
-            [[(Right x)] {"(Right " ++ (show x) ++ ")"}])])
-
-(instance (∀ [a b] (Show a) (Show b) => (Show (Tuple a b)))
-  [show (λ [(Tuple a b)] {"(Tuple " ++ (show a) ++ " " ++ (show b) ++ ")"})])
+(derive-instance Show Unit)
+(derive-instance Show Bool)
+(derive-instance Show Maybe)
+(derive-instance Show Either)
+(derive-instance Show Tuple)
 
 (instance (∀ [a] (Show a) => (Show (List a)))
   [show (λ* [[Nil] "Nil"]

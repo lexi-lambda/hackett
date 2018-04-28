@@ -37,7 +37,8 @@
                        [struct class:info ([vars (listof identifier?)]
                                            [method-table immutable-free-id-table?]
                                            [default-methods immutable-free-id-table?]
-                                           [superclasses (listof constr?)])]
+                                           [superclasses (listof constr?)]
+                                           [deriving-transformer (or/c (-> syntax? syntax?) #f)])]
                        [struct class:instance ([class class:info?]
                                                [vars (listof identifier?)]
                                                [subgoals (listof constr?)]
@@ -49,7 +50,6 @@
          ctx-find-solution current-ctx-solution apply-subst apply-current-subst
          current-type-context modify-type-context
          register-global-class-instance! lookup-instance!
-         value-namespace-introduce type-namespace-introduce ~type
          expand-type attach-type attach-expected get-type get-expected make-typed-var-transformer
 
          (for-template (all-from-out hackett/private/type-language)
@@ -221,7 +221,8 @@
        (head v #,(inst #'t* x s)))]
     [(head:#%type:qual a b)
      (quasisyntax/loc/props this-syntax
-       (head #,(inst #'a x s) #,(inst #'b x s)))]))
+       (head #,(inst #'a x s) #,(inst #'b x s)))]
+    [_ t]))
 
 (define/contract (insts t x+ss)
   (-> type? (listof (cons/c identifier? type?)) type?)
@@ -235,7 +236,7 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; instance contexts
 
-(struct class:info (vars method-table default-methods superclasses) #:transparent
+(struct class:info (vars method-table default-methods superclasses deriving-transformer) #:transparent
   #:property prop:procedure
   (λ (info stx)
     ((make-variable-like-transformer
@@ -470,39 +471,3 @@
 (define/contract (make-typed-var-transformer x t)
   (-> identifier? type? any)
   (make-variable-like-transformer (attach-type x t)))
-
-;; ---------------------------------------------------------------------------------------------------
-;; type and value namespaces
-
-; Hackett programs have two namespaces: types and values. These are represented by two syntax
-; introducers, each with a unique scope. However, in order to properly cooperate with
-; (module* _ #f ....) submodules, it’s important that the scopes are *global*; that is, they are
-; shared across module instantiations. If we simply define value-introducer and type-introducer by
-; directly invoking make-syntax-introducer, the introducers will be recreated on each module
-; instantiation, producing a fresh scope.
-;
-; To work around this, we can embed syntax objects with the appropriate scopes in the expansion of
-; this module, then use make-syntax-delta-introducer to produce a syntax introducer that will always
-; operate on the same scope, even across multiple module instantiations.
-
-(define-simple-macro (define-value/type-introducers value-introducer:id type-introducer:id)
-  #:with scopeless-id (datum->syntax #f 'introducer-id)
-  #:with value-id ((make-syntax-introducer #t) #'scopeless-id)
-  #:with type-id ((make-syntax-introducer #t) #'scopeless-id)
-  (begin
-    (define value-introducer (make-syntax-delta-introducer #'value-id #'scopeless-id))
-    (define type-introducer (make-syntax-delta-introducer #'type-id #'scopeless-id))))
-
-(define-value/type-introducers value-introducer type-introducer)
-
-(define value-namespace-introduce
-  (λ~> (value-introducer 'add) (type-introducer 'remove)))
-
-(define type-namespace-introduce
-  (λ~> (value-introducer 'remove) (type-introducer 'add)))
-
-(define-syntax ~type
-  (pattern-expander
-   (syntax-parser
-     [(_ pat)
-      #'{~and tmp {~parse pat (type-namespace-introduce #'tmp)}}])))

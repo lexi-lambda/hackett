@@ -39,7 +39,7 @@
 
   (define-base-type Pict)
 
-  (provide (type-out #:no-introduce Pict)
+  (provide (for-type #:no-introduce Pict)
            (typed-out
             [pict-width : {Pict -> Double}]
             [pict-height : {Pict -> Double}]
@@ -154,4 +154,4 @@
 
 (provide (all-from-out (submod "." shared))
          (all-from-out (submod "." untyped))
-         (type-out Color Pict))
+         (for-type Color Pict))

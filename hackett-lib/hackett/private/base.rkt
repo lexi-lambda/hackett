@@ -141,7 +141,7 @@
     (define xs (map car bindings))
     (define xs- (generate-temporaries xs))
     (define ts_xs (map cdr bindings))
-    
+
     ; Next, we need to call simplify/elaborate on each e+t pair we are provided. We bind the
     ; elaborated expressions to a variable to be used in expansion, and we keep the continuations for
     ; later.

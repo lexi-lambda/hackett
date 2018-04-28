@@ -20,11 +20,17 @@
                   ∀ => [#%app @%app]))
 
 (provide (for-syntax class-id)
-         class instance)
+         class instance derive-instance)
 
 (begin-for-syntax
-  (define-syntax-class/specialize class-id
-    (local-value class:info? #:failure-message "identifier was not bound to a class")))
+  (define-syntax-class (class-id #:require-deriving-transformer? [require-deriving-transformer? #f])
+    #:description "class id"
+    #:attributes [local-value]
+    [pattern
+     {~var || (local-value class:info? #:failure-message "identifier was not bound to a class")}
+     #:fail-unless (or (not require-deriving-transformer?)
+                       (class:info-deriving-transformer (attribute local-value)))
+                   "class is not derivable"]))
 
 (define-syntax-parser class
   #:literals [: => let-values #%plain-app]
@@ -35,7 +41,9 @@
             {~optional fixity:fixity-annotation}}
        ...
        {~optional method-default-impl:expr}]
-      ...)
+      ...
+      {~optional {~seq #:deriving-transformer deriving-transformer:expr}
+                 #:defaults ([deriving-transformer #'#f])})
    ; The methods in a class’s method table should *not* be quantified. That is, in this class:
    ;
    ;    (class (Show a)
@@ -90,7 +98,8 @@
                          (list (cons #'method-id (quote-syntax method-t.expansion)) ...))
                         (make-immutable-free-id-table
                          (list {?? (cons #'method-id #'method-default-id-)} ...))
-                        (list (quote-syntax super-constr.expansion) ...)))))
+                        (list (quote-syntax super-constr.expansion) ...)
+                        deriving-transformer))))
        (syntax-property 'disappeared-binding
                         (~>> (attribute var-id)
                              (map (λ~>> (internal-definition-context-introduce t-intdef-ctx)
@@ -120,7 +129,7 @@
               {~optional {~seq {~type constr} ... {~type =>/use:=>}}
                          #:defaults ([[constr 1] '()])}
               ~! {~and :instance-head head-stx})]
-    [pattern (constr ... {~type =>/use:=>} {~and :instance-head head-stx})
+    [pattern (constr ... {~type =>/use:=>} ~! {~and :instance-head head-stx})
              #:attr ∀/use #f
              #:attr [var-id 1] '()]))
 
@@ -254,3 +263,10 @@
                  (cons- (quote-syntax method-id) (: method-impl method-t)) ...))
        ; Wrap the entire expression with lambdas for the appropriate subgoal dictionaries
        (foldl #{begin #`(@%with-dictionary #,%1 #,%2)} _ (attribute instance-constr-expr)))])
+
+(define-syntax-parser derive-instance
+  [(_ {~type {~var class (class-id #:require-deriving-transformer? #t)}} . _)
+   #:with result ((class:info-deriving-transformer (attribute class.local-value)) this-syntax)
+   (syntax-property #'result 'disappeared-use
+                    (cons (syntax-local-introduce #'class)
+                          (syntax-property #'result 'disappeared-use)))])

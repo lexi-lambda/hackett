@@ -30,18 +30,18 @@
         (syntax-parse stx
           [(data type-id:id)
            (quasisyntax/loc this-syntax
-             (data #,(pre-expand-export #'(type-out type-id) modes)
+             (data #,(pre-expand-export #'(for-type type-id) modes)
                    #,(type-namespace-introduce #'type-id)))])))
     #:property prop:provide-transformer
     (λ (s)
       (λ (stx modes)
         (syntax-parse stx
-          [(_ type-out-spec {~and _:id type-constructor})
+          [(_ for-type-spec {~and _:id type-constructor})
            #:declare type-constructor (local-value type-constructor?
                                                    #:failure-message "not defined as a datatype")
            #:with [ctor-tag ...] (type-constructor-data-constructors
                                   (attribute type-constructor.local-value))
-           (expand-export #'(combine-out type-out-spec ctor-tag ...) modes)]))))
+           (expand-export #'(combine-out for-type-spec ctor-tag ...) modes)]))))
 
   (struct class-transformer ()
     #:property prop:procedure
@@ -53,16 +53,16 @@
         (syntax-parse stx
           [(class class-id:id)
            (quasisyntax/loc this-syntax
-             (class #,(pre-expand-export #'(type-out class-id) modes)
+             (class #,(pre-expand-export #'(for-type class-id) modes)
                     #,(type-namespace-introduce #'class-id)))])))
     #:property prop:provide-transformer
     (λ (_)
       (λ (stx modes)
         (syntax-parse stx
-          [(_ type-out-spec class-id:class-id)
+          [(_ for-type-spec class-id:class-id)
            #:do [(define class (attribute class-id.local-value))]
            #:with [method-id ...] (free-id-table-keys (class:info-method-table class))
-           (expand-export #'(combine-out type-out-spec method-id ...) modes)])))))
+           (expand-export #'(combine-out for-type-spec method-id ...) modes)])))))
 
 (define-syntax data (data-transformer))
 (define-syntax class (class-transformer))

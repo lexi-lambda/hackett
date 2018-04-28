@@ -1,4 +1,4 @@
-#lang racket/base
+#lang curly-fn racket/base
 
 ; This module implements require and provide transformers for mangling and unmangling type imports and
 ; exports. This is necessary because Hackett has two namespaces: a type namespace, and a value
@@ -7,13 +7,13 @@
 ; Racket modules only allow a single binding to be exported per symbol, per phase, so it’s impossible
 ; to import two different bindings with the same name.
 ;
-; To get around this, exports in the type namespace are mangled by the ‘type-out’ provide transformer,
+; To get around this, exports in the type namespace are mangled by the ‘for-type’ provide transformer,
 ; then subsequently unmangled by the ‘unmangle-types-in’ require transformer. This mangling scheme
 ; currently prepends ‘#%hackett-type:’ to the beginning of symbols, but that should be treated
 ; entirely as an implementation detail, not a part of Hackett’s public interface.
 ;
 ; Generally, when writing Hackett code, this is all transparent. Hackett programmers export types
-; using ‘type-out’, and Hackett’s ‘require’ implicitly surrounds its subforms with
+; using ‘for-type’, and Hackett’s ‘require’ implicitly surrounds its subforms with
 ; ‘unmangle-types-in’, so types are automatically injected into the proper namespace. This gets a bit
 ; trickier, however, when interoperating with Racket modules, which obviously do not have a notion of
 ; a type namespace. In this case, users must explicitly use ‘only-types-in’ or ‘unmangle-types-in’
@@ -32,31 +32,48 @@
 
          (for-syntax hackett/private/typecheck))
 
-(provide type-out only-types-in unmangle-types-in)
+(provide for-type only-types-in unmangle-types-in)
 
 (begin-for-syntax
   (define mangled-type-regexp #rx"^#%hackett-type:(.+)$")
   (define (unmangle-type-name name)
-    (and~> (regexp-match mangled-type-regexp name) second)))
+    (and~> (regexp-match mangled-type-regexp name) second))
 
-(define-syntax type-out
-  (make-provide-pre-transformer
-   (λ (stx modes)
-     (syntax-parse stx
-       [(_ {~optional {~and #:no-introduce no-introduce?}} provide-spec ...)
-        (pre-expand-export
-         #`(prefix-out #%hackett-type:
-                       #,((if (attribute no-introduce?) values type-namespace-introduce)
-                          #'(combine-out provide-spec ...)))
-         modes)]))))
+  (struct for-type-transformer ()
+    #:property prop:require-transformer
+    (λ (self)
+      (syntax-parser
+        [(_ require-spec ...)
+         #:do [(define-values [imports sources] (expand-import (syntax/loc this-syntax
+                                                                 (combine-in require-spec ...))))]
+         (values (for/list ([i (in-list imports)])
+                   (struct-copy import i [local-id (type-namespace-introduce (import-local-id i))]))
+                 sources)]))
+    #:property prop:provide-transformer
+    (λ (self)
+      (λ (stx modes)
+        (syntax-parse stx
+          [(_ {~optional {~and #:no-introduce no-introduce?}} provide-spec ...)
+           (for/list ([e (in-list (expand-export (syntax/loc this-syntax
+                                                   (combine-out provide-spec ...))
+                                                 modes))])
+             (struct-copy export e
+                          [local-id (if (attribute no-introduce?)
+                                        (export-local-id e)
+                                        (type-namespace-introduce (export-local-id e)))]
+                          [out-sym (~>> (export-out-sym e)
+                                        symbol->string
+                                        (string-append "#%hackett-type:")
+                                        string->symbol)]))])))))
+
+(define-syntax for-type (for-type-transformer))
 
 (define-syntax only-types-in
   (make-require-transformer
    (syntax-parser
      [(_ require-spec ...)
       (expand-import
-       #`(filtered-in (λ (name) (and (regexp-match? mangled-type-regexp name) name))
-                      (combine-in require-spec ...)))])))
+       #`(matching-identifiers-in #,mangled-type-regexp (combine-in require-spec ...)))])))
 
 (define-syntax unmangle-types-in
   (make-require-transformer

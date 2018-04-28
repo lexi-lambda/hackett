@@ -15,19 +15,7 @@
                                                            (-> syntax? syntax?))]
                        [make-pattern-like-pattern-expander (-> (or/c syntax? (-> identifier? syntax?))
                                                                 pattern-expander?)]
-                       [preservable-property->expression (-> any/c syntax?)]
-                       [internal-definition-context-extend
-                        (-> (or/c internal-definition-context?
-                                  (listof internal-definition-context?)
-                                  #f)
-                            internal-definition-context?)]
-                       [internal-definition-context-cons
-                        (-> internal-definition-context?
-                            (or/c internal-definition-context?
-                                  (listof internal-definition-context?)
-                                  #f)
-                            (or/c internal-definition-context?
-                                  (listof internal-definition-context?)))])
+                       [preservable-property->expression (-> any/c syntax?)])
          syntax/loc/props quasisyntax/loc/props template/loc/props quasitemplate/loc/props)
 
 ; These two functions are taken with modifications from macrotypes/stx-utils, which implement a
@@ -97,15 +85,3 @@
             (make-syntax/loc/props 'quasisyntax/loc/props #'quasisyntax)
             (make-syntax/loc/props 'template/loc/props #'template)
             (make-syntax/loc/props 'quasitemplate/loc/props #'quasitemplate))))
-
-; Creates a new internal definition context that extends a context in the shape local-expand expects.
-(define (internal-definition-context-extend old-ctx)
-  (if (list? old-ctx)
-      (syntax-local-make-definition-context (first old-ctx))
-      (syntax-local-make-definition-context old-ctx)))
-
-; Adds to a list of internal definition contexts in the shape that local-expand expects.
-(define (internal-definition-context-cons new-ctx old-ctx)
-  (cond [(not old-ctx) new-ctx]
-        [(list? old-ctx) (cons new-ctx old-ctx)]
-        [else (list new-ctx old-ctx)]))

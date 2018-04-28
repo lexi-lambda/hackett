@@ -28,7 +28,7 @@
          (class Monad) =<< >>= do ap
 
          seq error! undefined!
-         (type-out IO) main print println
+         (for-type IO) main print println
          + - * quotient! remainder! < > <= >=
          d+ d- d* d/ d< d> d<= d>= integer->double
          string-length string-split

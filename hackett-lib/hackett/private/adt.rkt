@@ -15,16 +15,20 @@
          syntax/parse/define
 
          (except-in hackett/private/base @%app)
+         (only-in hackett/private/class class-id derive-instance)
          (only-in hackett/private/kernel [λ plain-λ])
          (only-in (unmangle-types-in #:no-introduce (only-types-in hackett/private/kernel))
                   forall [#%app @%app]))
 
-(provide (for-syntax type-constructor-spec data-constructor-spec)
+(provide (for-syntax type-constructor-spec data-constructor-spec
+                     type-constructor-val data-constructor-val
+                     data-constructor-field-types)
          (rename-out [λ lambda] [λ* lambda*])
          data case* case λ λ* defn _)
 
 (begin-for-syntax
   (provide (contract-out [struct type-constructor ([type type?]
+                                                   [arity exact-nonnegative-integer?]
                                                    [data-constructors (listof identifier?)]
                                                    [fixity operator-fixity?])]
                          [struct data-constructor ([macro procedure?]
@@ -79,17 +83,38 @@
              #:attr nullary? #f
              #:attr fixity #f])
 
-  (struct type-constructor (type data-constructors fixity)
+  (struct type-constructor (type arity data-constructors fixity)
+    #:transparent
     #:property prop:procedure
     (λ (ctor stx) ((make-variable-like-transformer (type-constructor-type ctor)) stx))
     #:property prop:infix-operator (λ (ctor) (type-constructor-fixity ctor)))
 
   (struct data-constructor (macro type make-match-pat fixity)
+    #:transparent
     #:property prop:procedure (struct-field-index macro)
     #:property prop:infix-operator (λ (ctor) (data-constructor-fixity ctor)))
 
-  (define-syntax-class/specialize data-constructor-val
-    (local-value data-constructor? #:failure-message "not bound as a data constructor"))
+  (define-syntax-class type-constructor-val
+    #:attributes [local-value type arity data-constructors fixity]
+    #:commit
+    #:description #f
+    [pattern
+     {~var || (local-value type-constructor? #:failure-message "not bound as a type constructor")}
+     #:attr type (type-constructor-type (attribute local-value))
+     #:attr arity (type-constructor-arity (attribute local-value))
+     #:attr data-constructors (type-constructor-data-constructors (attribute local-value))
+     #:attr fixity (type-constructor-fixity (attribute local-value))])
+
+  (define-syntax-class data-constructor-val
+    #:attributes [local-value macro type make-match-pat fixity]
+    #:commit
+    #:description #f
+    [pattern
+     {~var || (local-value data-constructor? #:failure-message "not bound as a data constructor")}
+     #:attr macro (data-constructor-macro (attribute local-value))
+     #:attr type (data-constructor-type (attribute local-value))
+     #:attr make-match-pat (data-constructor-make-match-pat (attribute local-value))
+     #:attr fixity (data-constructor-fixity (attribute local-value))])
 
   ; Given a curried function type, produce a list of uncurried arguments and the result type. If the
   ; function is quantified, the type will be instantiated with fresh solver variables.
@@ -134,6 +159,43 @@
         [(~#%type:forall* _ (~->* _ ... (~#%type:app* (#%type:con type-id) _ ...)))
          (type-constructor-data-constructors (syntax-local-value #'type-id))])))
 
+  ; Given the type of a data constructor, returns the types of its fields, where all type variables
+  ; are instantiated using the provided list of replacement types. Order of instantiation is
+  ; consistent with the order of type arguments to the type constructor, so when fetching the fields
+  ; for (Tuple a b), the first element of inst-tys will be used for a, and the second will be used
+  ; for b. If the number of supplied replacement types is inconsistent with the number of arguments to
+  ; the type constructor, a contract violation is raised.
+  ;
+  ; Example:
+  ; > (data-constructor-field-types (list x^ y^)
+  ;                                 (forall [b a] {a -> Integer -> (Maybe b) -> (Foo a b)}))
+  ; (list x^ Integer (Maybe y^))
+  ;
+  ; While the data constructor type must be a fully-expanded type, the replacement types do not
+  ; strictly need to be; they may be arbitrary syntax objects, in which case they will be left
+  ; unexpanded in the result.
+  (define/contract (data-constructor-field-types inst-tys con-ty)
+    (-> (listof type?) type? (listof type?))
+    (define/syntax-parse {~#%type:forall* [x ...] t_fn} con-ty)
+    (define/syntax-parse
+      {~->* t_arg ... {~#%type:app* ({~literal #%type:con} _)
+                                    ({~literal #%type:bound-var} con-var) ...}}
+      #'t_fn)
+    (unless (equal? (length (attribute x)) (length (attribute con-var)))
+      (raise-arguments-error 'data-constructor-field-types
+                             "unexpected number of quantified variables in constructor"
+                             "quantified" (length (attribute x))
+                             "constructor" (length (attribute con-var))))
+    (unless (equal? (length (attribute con-var)) (length inst-tys))
+      (raise-arguments-error 'data-constructor-field-types
+                             (format "too ~a variables given for instantiation"
+                                     (if (> (length (attribute con-var)) (length inst-tys))
+                                         "few" "many"))
+                             "expected" (length (attribute con-var))
+                             "given" (length inst-tys)))
+    (define var-subst (map cons (attribute con-var) inst-tys))
+    (map #{insts % var-subst} (attribute t_arg)))
+
   (struct pat-base (stx) #:transparent)
   (struct pat-var pat-base (id) #:transparent)
   (struct pat-hole pat-base () #:transparent)
@@ -153,12 +215,9 @@
                                "constructor with arity " arity)
              #:attr pat (pat-con this-syntax val '())
              #:attr disappeared-uses (list (syntax-local-introduce #'constructor))]
-    [pattern (~parens constructor:data-constructor-val ~! arg:pat ...+)
+    [pattern (~parens constructor:data-constructor-val ~! arg:pat ...)
              #:do [(define val (attribute constructor.local-value))
                    (define arity (data-constructor-arity val))]
-             #:fail-when (zero? arity)
-                         (~a "cannot match ‘" (syntax-e #'constructor) "’ as a constructor; it is a "
-                             "value and should not be enclosed with parentheses")
              #:fail-when {(length (attribute arg)) . < . arity}
                          (~a "not enough arguments provided for constructor ‘"
                              (syntax-e #'constructor) "’, which has arity " arity)
@@ -192,10 +251,9 @@
                                "pattern")
              #:with :pat (template {{a ctor b} {?@ ctors bs} ...})]
     [pattern {~braces {~seq as:expr ctors:data-constructor-val} ...
-                      a:pat ctor:data-constructor-val b:pat
-                      }
+                      a:pat ctor:data-constructor-val b:pat}
              #:when (eq? 'right (data-constructor-fixity (attribute ctor.local-value)))
-             #:with ~! #f
+             #:and ~!
              #:fail-unless (andmap #{eq? % 'right}
                                    (map data-constructor-fixity (attribute ctors.local-value)))
                            (~a "cannot mix left- and right-associative operators in the same infix "
@@ -448,15 +506,20 @@
                                      fixity-expr)))))])
 
 (define-syntax-parser data
-  [(_ τ:type-constructor-spec constructor:data-constructor-spec ...)
+  [(_ τ:type-constructor-spec constructor:data-constructor-spec ...
+      {~optional
+       {~seq #:deriving [{~type {~var class-id (class-id #:require-deriving-transformer? #t)}} ...]}
+       #:defaults ([[class-id 1] '()])})
    #:with [τ*:type-constructor-spec] (type-namespace-introduce #'τ)
    #:with fixity-expr (preservable-property->expression (or (attribute τ.fixity) 'left))
    #`(begin-
        (define-syntax- τ*.tag (type-constructor
                                #'(#%type:con τ*.tag)
+                               '#,(attribute τ*.len)
                                (list #'constructor.tag ...)
                                fixity-expr))
-       (define-data-constructor τ* constructor) ...)])
+       (define-data-constructor τ* constructor) ...
+       (derive-instance class-id τ*.tag) ...)])
 
 (begin-for-syntax
   (define-syntax-class (case*-clause num-pats)
