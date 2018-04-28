@@ -133,10 +133,32 @@
 ;; Eq
 
 (class (Eq a)
-  [== : {a -> a -> Bool}])
-
-(instance (Eq Unit)
-  [== (λ [Unit Unit] True)])
+  [== : {a -> a -> Bool}]
+  #:deriving-transformer
+  (syntax-parser
+    [(_ _ {~type ty-con:type-constructor-val})
+     #:with [data-con:data-constructor-val ...] (attribute ty-con.data-constructors)
+     #:with [ty-con-var-id ...] (build-list (attribute ty-con.arity) generate-temporary)
+     #:with [[data-con-field-ty ...] ...]
+            (for/list ([con-type (in-list (attribute data-con.type))])
+              (data-constructor-field-types (attribute ty-con-var-id) con-type))
+     #:with [case-clause ...]
+            (for/list ([con-id (in-list (attribute data-con))]
+                       [fields (in-list (attribute data-con-field-ty))])
+              (with-syntax ([[field-binding-id-1 ...] (generate-temporaries fields)]
+                            [[field-binding-id-2 ...] (generate-temporaries fields)])
+                #`[[(#,con-id field-binding-id-1 ...) (#,con-id field-binding-id-2 ...)]
+                   #,(foldr (λ (a b r) #`(&& (== #,a #,b) #,r))
+                            #'True
+                            (syntax->list #'[field-binding-id-1 ...])
+                            (syntax->list #'[field-binding-id-2 ...]))]))
+     (syntax-property
+      #'(instance (forall [ty-con-var-id ...] (Eq data-con-field-ty) ... ...
+                          => (Eq (ty-con ty-con-var-id ...)))
+          [== (λ* case-clause ...
+                  [[_ _] False])])
+      'disappeared-use
+      (syntax-local-introduce #'ty-con))]))
 
 (instance (Eq Bool)
   [== (λ* [[True  y] y]
@@ -151,23 +173,11 @@
 (instance (Eq String)
   [== equal?/String])
 
-(instance (∀ [a] (Eq a) => (Eq (Maybe a)))
-  [== (λ* [[(Just a) (Just b)] {a == b}]
-          [[Nothing  Nothing ] True]
-          [[_        _       ] False])])
-
-(instance (∀ [a b] (Eq a) (Eq b) => (Eq (Either a b)))
-  [== (λ* [[(Right a) (Right b)] {a == b}]
-          [[(Left  a) (Left  b)] {a == b}]
-          [[_         _        ] False])])
-
-(instance (∀ [a b] (Eq a) (Eq b) => (Eq (Tuple a b)))
-  [== (λ [(Tuple a b) (Tuple c d)] {{a == c} && {b == d}})])
-
-(instance (∀ [a] (Eq a) => (Eq (List a)))
-  [== (λ* [[{x :: xs} {y :: ys}] {{x == y} && {xs == ys}}]
-          [[Nil       Nil      ] True]
-          [[_         _        ] False])])
+(derive-instance Eq Unit)
+(derive-instance Eq Maybe)
+(derive-instance Eq Either)
+(derive-instance Eq Tuple)
+(derive-instance Eq List)
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Semigroup / Monoid

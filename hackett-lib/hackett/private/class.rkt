@@ -91,7 +91,7 @@
                 #`(define-syntax- #,method-id
                     (make-typed-var-transformer #'#,method-id- (quote-syntax #,quantified-t)))
                 fixity))
-          {?? (def method-default-id- : quantified-t method-default-impl)} ...
+          {?? (def method-default-id- : quantified-t #:exact method-default-impl)} ...
           (define-syntax- name
             (class:info (list #'var-id-* ...)
                         (make-immutable-free-id-table
@@ -177,6 +177,13 @@
    #:with [(~var constr- (type t-intdef-ctx)) ...] (attribute constr)
    #:with [(~var bare-t- (type t-intdef-ctx)) ...] (attribute bare-t)
 
+   ; Reduce the instance context, and include the instance currently being defined as a tautological
+   ; constraint to eliminate silly things like (instance (forall [a] (Eq (X a)) => (Eq (X a))) ....).
+   #:with (~var this-instance-constr (type t-intdef-ctx)) #'(@%app class bare-t-.expansion ...)
+   #:with [constr-/reduced ...] (reduce-context
+                                 (attribute constr-.expansion)
+                                 #:extra-tautological-constrs (list #'this-instance-constr.expansion))
+
    ; With the types actually expanded, we need to skolemize them for the pupose of typechecking
    ; method implementations.
    #:do [(define skolem-ids (generate-temporaries (attribute var-id)))
@@ -184,7 +191,7 @@
          (define var+skolem-ids
            (map #{cons %1 #`(#%type:rigid-var #,%2)} (attribute var-id-*) skolem-ids))
          (define bare-ts/skolemized (map #{insts % var+skolem-ids} (attribute bare-t-.expansion)))]
-   #:with [constr/skolemized ...] (map #{insts % var+skolem-ids} (attribute constr-.expansion))
+   #:with [constr/skolemized ...] (map #{insts % var+skolem-ids} (attribute constr-/reduced))
 
    ; With the skolemized constraints and instance head, we need to synthesize expected types for each
    ; typeclass method by replacing each variable in the class signatures with the corresponding type
@@ -218,7 +225,7 @@
              (register-global-class-instance!
               (class:instance (syntax-local-value #'class)
                               (list (quote-syntax var-id-*) ...)
-                              (list (quote-syntax constr-.expansion) ...)
+                              (list (quote-syntax constr-/reduced) ...)
                               (list (quote-syntax bare-t-.expansion) ...)
                               #'dict-id-)))
            ; The defined dict-id- might appear in the expansion of :/instance-dictionary, since it
@@ -260,7 +267,7 @@
    (~> #'(make-immutable-free-id-table-
           (list- (cons- (quote-syntax @%superclasses-key)
                         (vector-immutable- superclass-dict-placeholder ...))
-                 (cons- (quote-syntax method-id) (: method-impl method-t)) ...))
+                 (cons- (quote-syntax method-id) (: method-impl method-t #:exact)) ...))
        ; Wrap the entire expression with lambdas for the appropriate subgoal dictionaries
        (foldl #{begin #`(@%with-dictionary #,%1 #,%2)} _ (attribute instance-constr-expr)))])
 

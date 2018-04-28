@@ -40,9 +40,6 @@
 
 (define-syntax -> (infix-operator-impl #'->/prefix 'right))
 
-(define-syntax (@%superclasses-key stx)
-  (raise-syntax-error #f "cannot be used as an expression" stx))
-
 (begin-for-syntax
   ;; -------------------------------------------------------------------------------------------------
   ;; inference/checking + erasure/expansion
@@ -97,38 +94,38 @@
          (syntax-parse t
            #:context 'simplify/elaborate
            #:literal-sets [type-literals]
-           ; If the expected type is quantified, we need to skolemize it before continuing with
-           ; inference.
-           [(#%type:forall x a)
-            #:with x^ (generate-temporary #'x)
-            (modify-type-context #{snoc % (ctx:rigid #'x^)})
-            (match-let ([(list e* k) (simplify/elaborate e (inst #'a #'x #'(#%type:rigid-var x^)))])
-              (list e* (λ (e- t_⇒)
-                         (begin0
-                           (k e- t_⇒)
-                           (modify-type-context #{ctx-remove % (ctx:rigid #'x^)})))))]
-           ; If the expected type is qualified, we need to wrap the expression with a lambda so that
-           ; it can receive a dictionary.
-           [(#%type:qual constr a)
-            (match-let ([(list e* k) (simplify/elaborate e #'a)])
-              (list e* (λ (e- t_⇒)
-                         (let-values ([(e-* t*) (k e- t_⇒)])
-                           (values
-                            (quasisyntax/loc e-*
-                              (@%with-dictionary constr #,e-*))
-                            t*)))))]
-           ; Otherwise, we are in checking mode with no special cases. We need to infer and expand,
-           ; then check that the types match and elaborate dictionaries.
-           [_
-            (list (attach-expected e t)
-                  (λ (e- t_⇒)
-                    (let ([constrs (τ<:/elaborate! t_⇒ t #:src e)])
-                      (values (foldr #{quasisyntax/loc e
-                                        (lazy- (#%app- (force- #,%2)
-                                                       #,(quasisyntax/loc e
-                                                           (@%dictionary-placeholder #,%1 #,e))))}
-                                     e- constrs)
-                              t))))])]
+           [(~#%type:forall* [x ...] a)
+            ; If the expected type is qualified, we need to skolemize it before continuing with
+            ; inference.
+            #:with [x^ ...] (generate-temporaries (attribute x))
+            #:do [(modify-type-context #{append % (map ctx:rigid (attribute x^))})]
+            #:with a_skolemized (let ([skolem-subst
+                                       (map cons (attribute x) (syntax->list
+                                                                #'[(#%type:rigid-var x^) ...]))])
+                                  (insts #'a skolem-subst))
+            ; If the expected type is qualified, we need to wrap the expansion in the necessary set of
+            ; @%with-dictionary forms to allow recieving the necessary typeclass dictionaries.
+            #:with (~#%type:qual* [constr ...] b) #'a_skolemized
+            (list
+             (attach-expected e #'b)
+             (λ (e- t_⇒)
+               (modify-type-context #{foldl #{ctx-remove %2 (ctx:rigid %1)} % (attribute x^)})
+               ; Once inference is finished, we first check that the inferred type matches the
+               ; expected one. If so, it may have some extra constraints on it that need to be
+               ; supplied dictionaries, so elaborate them here.
+               (define e-elaborated
+                 (let ([constrs (τ<:/elaborate! t_⇒ #'b #:src e)])
+                   (foldr #{quasisyntax/loc e
+                             (lazy- (#%app- (force- #,%2)
+                                            #,(quasisyntax/loc e
+                                                (@%dictionary-placeholder #,%1 #,e))))}
+                          e- constrs)))
+               ; Next, we need to insert the necessary uses of @%with-dictionary, as described above.
+               (define e-wrapped
+                 (foldr #{quasisyntax/loc e
+                           (@%with-dictionary #,%1 #,%2)}
+                        e-elaborated (attribute constr)))
+               (values e-wrapped t)))])]
         [else
          ; If t is #f, we’re in inference mode, so we don’t need to do anything but pass values
          ; through unchanged.
@@ -254,33 +251,7 @@
                [ts '()])
               ([e (in-list es)])
       (let-values ([(e- t) (τ⇒! e)])
-        (values (snoc es- e-) (snoc ts t)))))
-
-  ; Given a constraint, calculate the instances it brings in scope, including instances that can be
-  ; derived via superclasses. For example, the constraint (Monad m) brings in three instances, one for
-  ; Monad and two for Functor and Applicative.
-  (define/contract (constraint->instances constr dict-expr)
-    (-> constr? syntax? (listof class:instance?))
-    (syntax-parse constr
-      #:context 'constraint->instances
-      #:literal-sets [type-literals]
-     [(~#%type:app* (#%type:con class-id) ts ...)
-      (let* ([class-info (syntax-local-value #'class-id)]
-             [instance (class:instance class-info '() '()
-                                       (map apply-current-subst (attribute ts))
-                                       dict-expr)]
-             ; instantiate the superclass constraints, so for (Monad Unit), we get (Applicative Unit)
-             ; instead of (Applicative m)
-             [super-constrs (~>> (class:info-superclasses class-info)
-                                 (map #{insts % (map cons
-                                                     (class:info-vars class-info)
-                                                     (attribute ts))}))]
-             [superclass-dict-expr #`(free-id-table-ref- #,dict-expr #'@%superclasses-key)]
-             [super-instances (for/list ([(super-constr i) (in-indexed (in-list super-constrs))])
-                                (constraint->instances
-                                 super-constr
-                                 #`(vector-ref- #,superclass-dict-expr '#,i)))])
-        (cons instance (append* super-instances)))])))
+        (values (snoc es- e-) (snoc ts t))))))
 
 (define-syntax-parser @%with-dictionary
   [(_ constr e)
@@ -290,7 +261,7 @@
        (syntax-parameterize
            ([local-class-instances
              (let ([existing-instances (syntax-parameter-value #'local-class-instances)]
-                   [new-instances (constraint->instances (quote-syntax constr) #'dict-id)])
+                   [new-instances (constr->instances (quote-syntax constr) #'dict-id)])
                (append new-instances existing-instances))])
          e))])
 
@@ -338,10 +309,19 @@
    (raise-syntax-error #f "literal not supported" #'x)])
 
 (define-syntax-parser :
-  [(_ e {~type t:type})
+  ; The #:exact option prevents : from performing context reduction. This is not normally important,
+  ; but it is required for forms that use : to ensure an expression has a particular shape in order to
+  ; interface with untyped (i.e. Racket) code, and therefore the resulting type is ignored. For
+  ; example, the def form wraps an expression in its expansion with :, but it binds the actual
+  ; identifier to a syntax transformer that attaches the type directly. Therefore, it needs to perform
+  ; context reduction itself prior to expanding to :, and it must use #:exact.
+  [(_ e {~type t:type} {~optional {~and #:exact exact?}})
+   #:with t_reduced (if (attribute exact?)
+                        #'t.expansion
+                        (type-reduce-context #'t.expansion))
    (attach-type #`(let-values- ([() t.residual])
-                    #,(τ⇐! #'e #'t.expansion))
-                #'t.expansion)])
+                    #,(τ⇐! #'e #'t_reduced))
+                #'t_reduced)])
 
 (define-syntax-parser λ1
   [(_ x:id e:expr)
@@ -369,15 +349,17 @@
 (define-syntax-parser def
   #:literals [:]
   [(_ id:id
-      {~or {~once {~seq {~and : {~var :/use}} {~type t:type}}}
+      {~or {~once {~seq {~and : {~var :/use}} {~type t:type}
+                        {~optional {~and #:exact exact?}}}}
            {~optional fixity:fixity-annotation}}
       ...
       e:expr)
    #:with id- (generate-temporary #'id)
+   #:with t_reduced (if (attribute exact?) #'t.expansion (type-reduce-context #'t.expansion))
    #`(begin-
-       (define- id- (:/use e t.expansion))
+       (define- id- (:/use e t_reduced #:exact))
        #,(indirect-infix-definition
-          #'(define-syntax- id (make-typed-var-transformer #'id- (quote-syntax t.expansion)))
+          #'(define-syntax- id (make-typed-var-transformer #'id- (quote-syntax t_reduced)))
           (attribute fixity.fixity)))]
   [(_ id:id
       {~optional fixity:fixity-annotation}
@@ -386,7 +368,7 @@
            (let-values ([(e- t) (τ⇒! #'e)])
              (values e- (apply-current-subst t))))]
    #:with id- (generate-temporary #'id)
-   #:with t_gen (generalize t)
+   #:with t_gen (type-reduce-context (generalize t))
    #`(begin-
        (define- id- #,e-)
        #,(indirect-infix-definition
@@ -417,7 +399,8 @@
 (define-syntax-parser let1
   #:literals [:]
   [(_ [id:id {~optional {~seq colon:: {~type t-ann:type}}} val:expr] body:expr)
-   #:do [(define-values [val- t_val] (τ⇔! #'val (attribute t-ann.expansion)))
+   #:do [(define-values [val- t_val]
+           (τ⇔! #'val (and~> (attribute t-ann.expansion) type-reduce-context)))
          (match-define-values [(list id-) body- t_body]
            (τ⇔/λ! #'body (get-expected this-syntax) (list (cons #'id t_val))))]
    (~> (quasitemplate/loc this-syntax
@@ -459,7 +442,9 @@
                             [t-ann (in-list (attribute t-ann.expansion))]
                             [val (in-list (attribute val))])
                    (if t-ann
-                       (values (cons (list id t-ann val) ids+ts+vals/ann) ids+ts+vals/unann)
+                       (values (cons (list id (type-reduce-context t-ann) val)
+                                     ids+ts+vals/ann)
+                               ids+ts+vals/unann)
                        (let* ([t_val-id (generate-temporary)]
                               [t_val #`(#%type:wobbly-var #,t_val-id)])
                          (values ids+ts+vals/ann (cons (list id t_val val) ids+ts+vals/unann)))))])
