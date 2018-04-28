@@ -5,7 +5,6 @@
          (for-syntax racket/base
                      racket/syntax
                      syntax/parse/class/paren-shape
-                     syntax/parse/experimental/template
 
                      hackett/private/typecheck
                      hackett/private/util/stx)
@@ -99,9 +98,10 @@
                        [fields (in-list (attribute data-con-field-ty))])
               (with-syntax ([[field-binding-id ...] (generate-temporaries fields)]
                             [con-str (datum->syntax #'here (symbol->string (syntax-e con-id)))])
-                (quasitemplate
-                 [[(#,con-id field-binding-id ...)]
-                  {"(" ++ con-str {?@ ++ " " ++ (show field-binding-id)} ... ++ ")"}])))
+                #`[[(#,con-id field-binding-id ...)]
+                   #,(if (zero? (length fields))
+                         #'con-str
+                         #'{"(" ++ con-str {~@ ++ " " ++ (show field-binding-id)} ... ++ ")"})]))
      (syntax-property
       #'(instance (forall [ty-con-var-id ...] (Show data-con-field-ty) ... ...
                           => (Show (ty-con ty-con-var-id ...)))

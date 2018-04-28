@@ -234,7 +234,8 @@ bindings in the type namespace, but otherwise, the behavior is the same.}
 
 @(define data-examples-eval (make-hackett-eval))
 @defform[#:literals [left right]
-         (data type-clause data-clause ...)
+         (data type-clause data-clause ...
+           maybe-deriving)
          #:grammar
          ([type-clause type-id
                        (code:line (type-constructor-id param-id ...+) maybe-fixity-ann)
@@ -244,7 +245,9 @@ bindings in the type namespace, but otherwise, the behavior is the same.}
                        (code:line {arg-type data-constructor-id arg-type} maybe-fixity-ann)]
           [maybe-fixity-ann (code:line #:fixity fixity)
                             (code:line)]
-          [fixity left right])]{
+          [fixity left right]
+          [maybe-deriving (code:line #:deriving [class-id ...])
+                          (code:line)])]{
 
 Defines a new @deftech{algebraic datatype}. The defined type is distinct from all other types, whether
 or not they have the same shape or name.
@@ -264,19 +267,15 @@ contains the provided values.
 @(hackett-examples
   #:eval data-examples-eval
   (data Foo
-    (foo1 t:Integer t:Bool)
-    (foo2 t:String)
-    foo3)
-  (instance (t:Show Foo)
-    [show (λ* [[(foo1 a b)] {"(foo1 " ++ (show a) ++ " "
-                                      ++ (show b) ++ ")"}]
-              [[(foo2 a)] {"(foo2 " ++ (show a) ++ ")"}]
-              [[foo3] "foo3"])])
-  (#:type foo1)
-  (foo1 42 True)
-  (#:type foo2)
-  (foo2 "hello")
-  foo3)
+    (Foo1 t:Integer t:Bool)
+    (Foo2 t:String)
+    Foo3
+    #:deriving [t:Show])
+  (#:type Foo1)
+  (Foo1 42 True)
+  (#:type Foo2)
+  (Foo2 "hello")
+  Foo3)
 
 Additionally, the bound @racket[value-id]s and @racket[data-constructor-id]s serve as @tech{patterns}
 that match against different values of the defined type. The pattern associated with each
@@ -285,10 +284,15 @@ pattern-matching allows extracting values stored “inside” data constructors.
 
 @(hackett-examples
   #:eval data-examples-eval
-  (case (foo1 42 True)
-    [(foo1 n _) n]
-    [(foo2 _)   2]
-    [foo3       3]))
+  (case (Foo1 42 True)
+    [(Foo1 n _) n]
+    [(Foo2 _)   2]
+    [Foo3       3]))
+
+If @racket[#:deriving] is provided, a @tech{typeclass instance} on the defined type is derived for
+each of the @tech[#:key "typeclass"]{typeclasses} bound to each @racket[class-id] using its
+@tech{deriving transformer}. Specifically, for each @racket[class-id], a @racket[derive-instance] form
+of the shape @racket[(derive-instance class-id type-id)] is generated.
 
 Like @racket[def], @racket[data] supports @tech{operator fixity} annotations. Each @racket[fixity]
 specified controls the fixity used by the associated @racket[type-constructor-id] or
@@ -297,11 +301,11 @@ specified controls the fixity used by the associated @racket[type-constructor-id
 @(hackett-examples
   (data (Tree a)
     {(Tree a) :&: (Tree a)} #:fixity right
-    (leaf a))
+    (Leaf a))
   (instance (t:forall [a] (t:Show a) t:=> (t:Show (Tree a)))
     [show (λ* [[{a :&: b}] {"{" ++ (show a) ++ " :&: " ++ (show b) ++ "}"}]
-              [[(leaf a)] {"(leaf " ++ (show a) ++ ")"}])])
-  {(leaf 1) :&: (leaf 2) :&: (leaf 3)})}
+              [[(Leaf a)] {"(Leaf " ++ (show a) ++ ")"}])])
+  {(Leaf 1) :&: (Leaf 2) :&: (Leaf 3)})}
 @(close-eval data-examples-eval)
 
 @subsection[#:tag "reference-numbers"]{Numbers}
@@ -745,12 +749,15 @@ Adds the elements of @racket[xs] together and returns the sum. Equivalent to @ra
 
 @defform[#:literals [: t:=>]
          (class maybe-superclasses (class-id var-id ...)
-           [method-id : method-type maybe-default-method-impl] ...)
+           [method-id : method-type maybe-default-method-impl] ...
+           maybe-deriving-transformer)
          #:grammar
          ([maybe-superclasses (code:line superclass-constraint ... t:=>)
                               (code:line)]
           [maybe-default-method-impl default-method-impl-expr
-                                     (code:line)])]{
+                                     (code:line)]
+          [maybe-deriving-transformer (code:line #:deriving-transformer deriving-transformer-expr)
+                                      (code:line)])]{
 
 Defines a @deftech{typeclass}. As the name implies, a typeclass describes a @italic{class}, or set, of
 @tech{types}. Types that belong to the class are known as @tech[#:key "typeclass instance"]{instances}
@@ -767,7 +774,13 @@ implementation for that method. Each default method implementation must be polym
 valid implementation for any instance of the class. Default methods are generally used when a
 typeclass method may be defined in terms of other typeclass methods, but the implementor can be given
 a choice of which methods to implement, or they can provide a more efficient implementation for
-commonly-used methods.}
+commonly-used methods.
+
+If @racket[deriving-transformer-expr] is provided, it is evaluated in the
+@tech/racket-reference{transformer environment} to obtain a @deftech{deriving transformer} for the
+defined class. A deriving transformer must be a @tech/racket-reference{syntax transformer}, which will
+be used to expand uses of @racket[derive-instance] or @racket[data] @racket[#:deriving] clauses that
+reference the class.}
 
 @defform[#:literals [t:forall t:=>]
          (instance instance-spec
@@ -781,6 +794,13 @@ commonly-used methods.}
 
 Defines a @deftech{typeclass instance}, which declares that the given @racket[instance-type]s belong
 to the @tech{typeclass} bound to @racket[class-id].}
+
+@defform[(derive-instance class-id . args)]{
+
+Derives a a @tech{typeclass instance} using the @tech{deriving transformer} of the @tech{typeclass}
+bound to @racket[class-id]. The @tech{deriving transformer} procedure is applied to the
+@tech/racket-reference{syntax object} that represents the entire @racket[derive-instance] form. The
+result of applying the transformer should be an @racket[instance] form.}
 
 @subsection[#:tag "reference-show"]{Printing for debugging}
 
