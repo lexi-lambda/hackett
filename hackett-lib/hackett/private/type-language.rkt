@@ -306,10 +306,15 @@
 
 (define-simple-macro (define-base-type name:id)
   #:with {~var ~name} (format-id #'name "~~~a" #'name #:source #'name #:props #'name)
+  ; Ensure that the binding does not have either the type or the value scope on it. Otherwise, if the
+  ; type appears in a fully-expanded type or value, and the namespace on the resulting piece of syntax
+  ; is flipped, the identifier can become unbound.
+  #:with name- (datum->syntax #'here (syntax-e #'name) #'name)
   (begin
-    (define-syntax name (make-variable-like-transformer
-                         (λ (name-id)
-                           #`(#%type:con #,(replace-stx-loc (quote-syntax name) name-id)))))
+    (define-syntax name- (make-variable-like-transformer
+                          (λ (name-id)
+                            #`(#%type:con #,(replace-stx-loc (quote-syntax name-) name-id)))))
+    (define-syntax name (make-rename-transformer #'name-))
     (begin-for-syntax
       (define-syntax ~name (make-type-con-pattern-expander (quote-syntax name))))))
 
