@@ -10,7 +10,7 @@
            syntax/macro-testing
            syntax/parse/define
            (only-in hackett/private/base τ⇒!)
-           (only-in hackett/private/typecheck τ->string))
+           (only-in hackett/private/typecheck type->string))
 
   (provide typecheck-succeed typecheck-fail)
 
@@ -33,7 +33,7 @@
     (with-handlers ([exn:fail? (λ (exn) (test-log! #t))])
       (eprintf "~a typechecked successfully, inferred ~a\n"
                (syntax->datum #'e)
-               (τ->string (convert-compile-time-error (typecheck! e))))
+               (type->string (convert-compile-time-error (typecheck! e))))
       (test-log! #f))))
 
 ;; ---------------------------------------------------------------------------------------------------

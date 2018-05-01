@@ -94,7 +94,7 @@
 (define-syntax-parser @%top-interaction*
   [(_ . (#:type ~! expr:expr))
    (match-let-values ([(_ τ_e) (τ⇒! #'expr)])
-     #`(type-result '#,(τ->string (apply-current-subst τ_e))))]
+     #`(type-result '#,(type->string (apply-current-subst τ_e))))]
   [(_ . form)
    (syntax-parse (local-expand #'form 'top-level (kernel-form-identifier-list))
      #:context this-syntax
@@ -111,4 +111,4 @@
                           [(e-/show) (τ⇐! (quasisyntax/loc this-syntax
                                             (@%app show #,e-))
                                           (expand-type #'String))])
-        #`(repl-result (force #,e-/show) '#,(τ->string (apply-current-subst τ_e))))])])
+        #`(repl-result (force #,e-/show) '#,(type->string (apply-current-subst τ_e))))])])

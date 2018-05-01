@@ -90,7 +90,7 @@
           (list/c syntax? (-> syntax? type? (values syntax? type?))))
       (cond
         [t
-         (current-τ-wf! t)
+         (current-type-wf! t)
          (syntax-parse t
            #:context 'simplify/elaborate
            #:literal-sets [type-literals]
@@ -114,7 +114,7 @@
                ; expected one. If so, it may have some extra constraints on it that need to be
                ; supplied dictionaries, so elaborate them here.
                (define e-elaborated
-                 (let ([constrs (τ<:/elaborate! t_⇒ #'b #:src e)])
+                 (let ([constrs (type<:/elaborate! t_⇒ #'b #:src e)])
                    (foldr #{quasisyntax/loc e
                              (lazy- (#%app- (force- #,%2)
                                             #,(quasisyntax/loc e
@@ -242,7 +242,7 @@
                                     (@%dictionary-placeholder constr #,src)))))
                #'t e_arg #:src src)]
       [_ (raise-syntax-error #f (format "cannot apply expression of type ~a to expression ~a"
-                                        (τ->string t_fn) (syntax->datum e_arg))
+                                        (type->string t_fn) (syntax->datum e_arg))
                              e_arg)]))
 
   (define/contract (τs⇒! es)
@@ -327,7 +327,7 @@
   [(_ x:id e:expr)
    #:do [(define t (get-expected this-syntax))]
    #:fail-unless t "no expected type, add more type annotations"
-   #:with {~or {~-> a b} {~fail (format "expected ~a, given function" (τ->string t))}} t
+   #:with {~or {~-> a b} {~fail (format "expected ~a, given function" (type->string t))}} t
    #:do [(define-values [xs- e-] (τ⇐/λ! #'e #'b (list (cons #'x #'a))))]
    #:with [x-] xs-
    (attach-type #`(λ- (x-) #,e-) t)]
@@ -382,7 +382,7 @@
 (define-syntax-parser todo!*
   [(_ v e ...)
    #:do [(define type (apply-current-subst #'(#%type:wobbly-var v)))
-         (define type-str (τ->string type))]
+         (define type-str (type->string type))]
    #:with message (string-append (source-location->prefix this-syntax)
                                  "todo! with type "
                                  type-str)
@@ -481,6 +481,6 @@
        (call-with-values _ list)
        second
        apply-current-subst
-       τ->string
+       type->string
        displayln)
    #'(void)])

@@ -298,7 +298,7 @@
         (values (listof (cons/c identifier? type?))
                 (-> (listof identifier?) (values syntax? (listof identifier?)))))
     (let-values ([(t_⇒ assumps mk-pat) (pat⇒! pat)])
-      (τ<:! t_⇒ t #:src (pat-base-stx pat))
+      (type<:! t_⇒ t #:src (pat-base-stx pat))
       (values assumps mk-pat)))
 
   ; Combines a list of `match` pattern constructors to properly run them against a list of identifiers
@@ -580,7 +580,7 @@
                                 [ts_pats (in-list tss_pats-transposed)]
                                 [pats (in-list patss-transposed)])
                        (let ([val^ (generate-temporary)])
-                         (for-each #{τ<:! %1 #`(#%type:wobbly-var #,val^) #:src %2} ts_pats pats)
+                         (for-each #{type<:! %1 #`(#%type:wobbly-var #,val^) #:src %2} ts_pats pats)
                          (τ⇐! val (apply-current-subst #`(#%type:wobbly-var #,val^)))))
 
    #:do [; Perform exhaustiveness checking.
@@ -597,7 +597,7 @@
          ; whole expression.
          (define t_result
            (let ([result^ (generate-temporary)])
-             (for-each #{τ<:! %1 #`(#%type:wobbly-var #,result^) #:src %2}
+             (for-each #{type<:! %1 #`(#%type:wobbly-var #,result^) #:src %2}
                        ts_bodies (attribute clause.body))
              (apply-current-subst #`(#%type:wobbly-var #,result^))))]
 
