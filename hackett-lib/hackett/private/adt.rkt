@@ -535,12 +535,19 @@
 
 (define-syntax-parser case*
   [(_ [val:expr ...+] {~var clause (case*-clause (length (attribute val)))} ...+)
-   #:do [; First, infer the types of each clause and expand the bodies. Each clause has N patterns,
-         ; each of which match against a particular type, and it also has a body, which must be
-         ; typechecked as well. Additionally, inferring the pattern types also produces a racket/match
-         ; pattern, which we can use to implement the untyped expansion.
-         (define-values [tss_pats match-pats- bodies- ts_bodies]
-           (for/lists [tss_pats match-pats- bodies- ts_bodies]
+   #:do [; Determine the type to use to unify all of the body clauses. If there is
+         ; an expected type (from τ⇐/λ!), then use that type, otherwise generate a
+         ; wobbly var that will be unified against each body type.
+         (define t_body
+           (or (get-expected this-syntax)
+               #`(#%type:wobbly-var #,(generate-temporary #'body))))
+
+         ; Infer the types of each clause and expand the bodies. Each clause has N patterns, each of
+         ; which match against a particular type, and it also has a body, which must be typechecked
+         ; as well. Additionally, inferring the pattern types produces a racket/match pattern, which
+         ; we can use to implement the untyped expression.
+         (define-values [tss_pats match-pats- bodies-]
+           (for/lists [tss_pats match-pats- bodies-]
                       ([clause (in-list (attribute clause))]
                        [body (in-list (attribute clause.body))]
                        [pats (in-list (attribute clause.pat.pat))])
@@ -552,8 +559,8 @@
                      (pat⇒! pat))]
                   ; Collect the set of bindings introduced by the patterns.
                   [(assumps) (append* assumpss)]
-                  ; Infer the type of the body expression, as well as the bindings it introduces.
-                  [(bound-ids- body- t_body) (τ⇒/λ! body assumps)]
+                  ; Typecheck the body expression against the expected type.
+                  [(bound-ids- body-) (τ⇐/λ! body t_body assumps)]
                   ; Use the bound ids to construct racket/match patterns from the case patterns.
                   [(match-pats- (list))
                    (for/fold ([match-pats- '()]
@@ -565,7 +572,7 @@
                   [(match-pat-) (quasisyntax/loc clause
                                   (#,@(reverse match-pats-)))])
                ; Return all the results of the inference process.
-               (values ts_pats match-pat- body- t_body))))
+               (values ts_pats match-pat- body-))))
 
          ; Now that we’ve inferred the types that each pattern can match against, we should infer the
          ; types of each value being matched and ensure that all the patterns match against it. In
@@ -592,14 +599,9 @@
                               ":" (string-append* (map #{string-append "\n    " (ideal->string %)}
                                                        non-exhaust)))
 
-   #:do [; Now that we’ve inferred the types for the patterns, the inputs, and the bodies, we need to
-         ; ensure all the body types actually agree. If they do, that will be the result type of the
-         ; whole expression.
+   #:do [; The resulting type of the case expression is the type we unified each clause against.
          (define t_result
-           (let ([result^ (generate-temporary)])
-             (for-each #{type<:! %1 #`(#%type:wobbly-var #,result^) #:src %2}
-                       ts_bodies (attribute clause.body))
-             (apply-current-subst #`(#%type:wobbly-var #,result^))))]
+           (apply-current-subst t_body))]
 
    ; Finally, we can actually emit the result syntax, using racket/match.
    #:with [match-pat- ...] match-pats-
