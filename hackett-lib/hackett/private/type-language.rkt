@@ -1,4 +1,4 @@
-#lang racket/base
+#lang curly-fn racket/base
 
 ; This module defines Hackett’s type-level language, which is entirely separate from its value-level
 ; language. Types, like expressions, are represented by syntax objects, and also like expressions,
@@ -107,32 +107,39 @@
 (begin-for-syntax
   (define-syntax-class (type [intdef-ctx #f])
     #:description "type"
-    #:attributes [expansion residual]
+    #:attributes [expansion scoped-binding-ctxs residual scoped-binding-introducer]
     [pattern _ #:with {~var || (expanded-type intdef-ctx)}
-                      (local-expand this-syntax 'expression type-literal-ids intdef-ctx)])
+                      (local-expand this-syntax 'expression type-literal-ids intdef-ctx)
+               #:attr scoped-binding-introducer
+                      (λ (stx) (foldl #{internal-definition-context-introduce %1 %2 'add}
+                                      stx (attribute scoped-binding-ctxs)))])
 
   (define-syntax-class (expanded-type intdef-ctx)
     #:description #f
-    #:attributes [expansion residual]
+    #:attributes [expansion scoped-binding-ctxs residual]
     #:commit
     #:literal-sets [kernel-literals type-literals]
     [pattern {~and x:id ~!}
              #:with x- (local-expand #'x 'expression '())
              #:attr expansion #'x-
+             #:attr scoped-binding-ctxs '()
              #:attr residual (syntax-property #'(values)
                                               'disappeared-use
                                               (syntax-local-introduce #'x-))]
     [pattern (head:#%expression ~! {~var a (type intdef-ctx)})
              #:attr expansion (syntax-track-origin #'a.expansion this-syntax #'head)
+             #:attr scoped-binding-ctxs '()
              #:attr residual (~> #'(values)
                                  (syntax-track-origin #'a.residual #'head)
                                  (syntax-track-origin #'expansion #'head))]
     [pattern (head:#%type:con ~! _:id)
              #:attr expansion this-syntax
+             #:attr scoped-binding-ctxs '()
              #:attr residual (syntax-track-origin #'(values) this-syntax #'head)]
     [pattern (head:#%type:app ~! {~var a (type intdef-ctx)} {~var b (type intdef-ctx)})
              #:attr expansion (syntax/loc/props this-syntax
                                 (head a.expansion b.expansion))
+             #:attr scoped-binding-ctxs '()
              #:attr residual (~> #'(values)
                                  (syntax-track-origin #'a.residual #'head)
                                  (syntax-track-origin #'b.residual #'head)
@@ -145,21 +152,25 @@
              #:attr expansion (~>> (syntax/loc/props this-syntax
                                      (head x- t-.expansion))
                                    (internal-definition-context-track intdef-ctx*))
+             #:attr scoped-binding-ctxs (cons intdef-ctx* (attribute t-.scoped-binding-ctxs))
              #:attr residual (~> #'(values)
                                  (syntax-track-origin #'t-.residual #'head)
                                  (syntax-track-origin #'expansion #'head))]
     [pattern (head:#%type:qual ~! {~var a (type intdef-ctx)} {~var b (type intdef-ctx)})
              #:attr expansion (syntax/loc/props this-syntax
                                 (head a.expansion b.expansion))
+             #:attr scoped-binding-ctxs '()
              #:attr residual (~> #'(values)
                                  (syntax-track-origin #'a.residual #'head)
                                  (syntax-track-origin #'b.residual #'head)
                                  (syntax-track-origin #'expansion #'head))]
     [pattern (head:#%type:wobbly-var ~! _:id)
              #:attr expansion this-syntax
+             #:attr scoped-binding-ctxs '()
              #:attr residual (syntax-track-origin #'(values) this-syntax #'head)]
     [pattern (head:#%type:rigid-var ~! _:id)
              #:attr expansion this-syntax
+             #:attr scoped-binding-ctxs '()
              #:attr residual (syntax-track-origin #'(values) this-syntax #'head)]
     [pattern (head:letrec-syntaxes+values ~! ([(id:id ...) e:expr] ...) () t:expr)
              #:do [(define intdef-ctx* (syntax-local-make-definition-context intdef-ctx))
@@ -168,6 +179,7 @@
                      (syntax-local-bind-syntaxes ids e intdef-ctx*))]
              #:with {~var t- (type intdef-ctx*)} #'t
              #:attr expansion (internal-definition-context-track intdef-ctx* #'t-.expansion)
+             #:attr scoped-binding-ctxs '()
              #:attr residual (~> #'(values)
                                  (syntax-track-origin #'t-.residual #'head)
                                  (syntax-track-origin #'expansion #'head))])

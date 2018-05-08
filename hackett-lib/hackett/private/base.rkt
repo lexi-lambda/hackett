@@ -5,6 +5,7 @@
 (require (for-syntax (multi-in racket [base contract list match provide-transform require-transform
                                        syntax])
                      syntax/parse/experimental/template
+                     syntax/intdef
                      syntax/srcloc
                      threading)
          (postfix-in - (combine-in racket/base
@@ -80,32 +81,42 @@
     ; operates in checking mode, otherwise it operates in inference mode.
     ;
     ; The result of this function is a syntax object to serve as the expression (checking mode adds a
-    ; property before handing the expression off for expansion) and a continuation that accepts the
-    ; fully-expanded syntax as well as its inferred type, which will be invoked after the inference
-    ; process is complete. When in checking mode, this continuation checks that the inferred type
-    ; matches the expected one, and it performs dictionary elaboration. In inference mode, the type
-    ; and expression are passed along unchanged.
+    ; property before handing the expression off for expansion), possibly an internal definition
+    ; context to use when expanding the expression (checking mode adds some bindings to this context
+    ; to implement scoped type variables) and a continuation that accepts the fully-expanded syntax as
+    ; well as its inferred type, which will be invoked after the inference process is complete. When
+    ; in checking mode, this continuation checks that the inferred type matches the expected one, and
+    ; it performs dictionary elaboration. In inference mode, the type and expression are passed along
+    ; unchanged.
     (define/contract (simplify/elaborate e t)
       (-> syntax? (or/c type? #f)
-          (list/c syntax? (-> syntax? type? (values syntax? type?))))
+          (list/c syntax? (or/c internal-definition-context? #f)
+                  (-> syntax? type? (values syntax? type?))))
       (cond
         [t
-         (syntax-parse (expand-type t)
+         (syntax-parse t
            #:context 'simplify/elaborate
            #:literal-sets [type-literals]
-           [(~#%type:forall* [x ...] a)
+           [{~and t:type {~parse (~#%type:forall* [x ...] a) #'t.expansion}}
             ; If the expected type is qualified, we need to skolemize it before continuing with
             ; inference.
             #:with [x^ ...] (generate-temporaries (attribute x))
-            #:with a_skolemized (let ([skolem-subst
-                                       (map cons (attribute x) (syntax->list
-                                                                #'[(#%type:rigid-var x^) ...]))])
+            #:with [rigid-x^ ...] #'[(#%type:rigid-var x^) ...]
+            #:with a_skolemized (let ([skolem-subst (map cons (attribute x) (attribute rigid-x^))])
                                   (insts #'a skolem-subst))
+            ; To support scoped type variables, we want the same skolems to be in scope while
+            ; expanding the expression.
+            #:do [(define intdef-ctx (syntax-local-make-definition-context))
+                  (syntax-local-bind-syntaxes (attribute x)
+                                              #'(values (make-variable-like-transformer
+                                                         (quote-syntax rigid-x^)) ...)
+                                              intdef-ctx)]
             ; If the expected type is qualified, we need to wrap the expansion in the necessary set of
             ; @%with-dictionary forms to allow recieving the necessary typeclass dictionaries.
             #:with (~#%type:qual* [constr ...] b) #'a_skolemized
             (list
-             (attach-expected e #'b)
+             (attach-expected ((attribute t.scoped-binding-introducer) e) #'b)
+             intdef-ctx
              (λ (e- t_⇒)
                ; Once inference is finished, we first check that the inferred type matches the
                ; expected one. If so, it may have some extra constraints on it that need to be
@@ -122,11 +133,14 @@
                  (foldr #{quasisyntax/loc e
                            (@%with-dictionary #,%1 #,%2)}
                         e-elaborated (attribute constr)))
-               (values e-wrapped this-syntax)))])]
+               ; Finally, include information about scoped type variable bindings for Check Syntax.
+               (define e+disappeared-bindings
+                 (internal-definition-context-track intdef-ctx e-wrapped))
+               (values e+disappeared-bindings this-syntax)))])]
         [else
          ; If t is #f, we’re in inference mode, so we don’t need to do anything but pass values
          ; through unchanged.
-         (list e (λ (e- t_⇒) (values e- t_⇒)))]))
+         (list e #f (λ (e- t_⇒) (values e- t_⇒)))]))
 
     ; To begin the actual inference process, we need to generate some bindings for the assumptions. We
     ; do this by binding a slot for each identifier in a definition context, then binding each
@@ -137,9 +151,10 @@
     (define ts_xs (map cdr bindings))
 
     ; Next, we need to call simplify/elaborate on each e+t pair we are provided. We bind the
-    ; elaborated expressions to a variable to be used in expansion, and we keep the continuations for
-    ; later.
-    (match-define (list (list es/elab ks) ...) (map #{simplify/elaborate (car %) (cdr %)} es+ts))
+    ; elaborated expressions and internal definition contexts to variables to be used in expansion,
+    ; and we keep the continuations for later.
+    (match-define (list (list es/elab scoped-intdef-ctxs ks) ...)
+      (map #{simplify/elaborate (car %) (cdr %)} es+ts))
 
     ; Next, we need to expand each expression. We start by building an internal definition context,
     ; then binding the slots for the assumptions inside it.
@@ -172,8 +187,11 @@
         (for/lists [es- ts_es]
                  ([k (in-list ks)]
                   [e (in-list (map car es+ts))]
-                  [e/elab (in-list es/elab)])
-        (let* ([e- (local-expand e/elab 'expression stop-ids intdef-ctx)]
+                  [e/elab (in-list es/elab)]
+                  [scoped-intdef-ctx (in-list scoped-intdef-ctxs)])
+        (let* ([e- (local-expand e/elab 'expression stop-ids (if scoped-intdef-ctx
+                                                                 (list intdef-ctx scoped-intdef-ctx)
+                                                                 intdef-ctx))]
                [t_e (get-type e-)])
           (unless t_e (raise-syntax-error #f "no inferred type" e))
           (k (syntax-property e- 'disappeared-binding
@@ -317,7 +335,7 @@
                         #'t.expansion
                         (type-reduce-context #'t.expansion))
    (attach-type #`(let-values- ([() t.residual])
-                    #,(τ⇐! #'e #'t_reduced))
+                  #,(τ⇐! ((attribute t.scoped-binding-introducer) #'e) #'t_reduced))
                 #'t_reduced)])
 
 (define-syntax-parser λ1
@@ -354,7 +372,7 @@
    #:with id- (generate-temporary #'id)
    #:with t_reduced (if (attribute exact?) #'t.expansion (type-reduce-context #'t.expansion))
    #`(begin-
-       (define- id- (:/use e t_reduced #:exact))
+       (define- id- (:/use #,((attribute t.scoped-binding-introducer) #'e) t_reduced #:exact))
        #,(indirect-infix-definition
           #'(define-syntax- id (make-typed-var-transformer #'id- (quote-syntax t_reduced)))
           (attribute fixity.fixity)))]
