@@ -470,14 +470,3 @@
        (attach-type t_body)
        (syntax-property 'disappeared-use
                         (map syntax-local-introduce (filter values (attribute colon)))))])
-
-(define-syntax-parser :infer/print-type
-  [(_ e)
-   (~> (τ⇒! #'e)
-       (λ () _)
-       (call-with-values _ list)
-       second
-       apply-current-subst
-       type->string
-       displayln)
-   #'(void)])
