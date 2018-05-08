@@ -441,10 +441,6 @@
 (define-syntax-parser letrec
   #:literals [:]
   [(_ ([id:id {~optional {~seq colon:: {~type t-ann:type}}} val:expr] ...+) body:expr)
-   ; First, infer or check the type of each binding. Use τ⇐!\λ to check the type if a type annotation
-   ; is provided. Otherwise, use τ⇒!/λ to infer it, and synthesize a fresh type variable for id’s
-   ; type during inference. If a type is successfully inferred, unify it with the fresh type variable
-   ; afterwards.
    #:do [; First, start by grouping bindings into two sets: those with explicit type annotations, and
          ; those without. For those without explicit type annotations, synthesize a fresh type
          ; variable to serve as their types.
