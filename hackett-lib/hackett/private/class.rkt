@@ -54,15 +54,10 @@
    ; a context where ‘a’ is bound, we need to bind it into a definition context before expanding it.
    ; We also want to expand superclass constraints in the same context so that the same variable is
    ; bound in both situations.
-   #:with [var-id- ...] (generate-temporaries (attribute var-id))
    #:do [(define t-intdef-ctx (syntax-local-make-definition-context))]
-   #:with [var-id-* ...] (map #{internal-definition-context-introduce t-intdef-ctx %}
-                              (attribute var-id-))
-   #:do [(syntax-local-bind-syntaxes (attribute var-id-) #f t-intdef-ctx)
-         (syntax-local-bind-syntaxes
-          (attribute var-id)
-          #'(values (make-variable-like-transformer (quote-syntax (#%type:bound-var var-id-))) ...)
-          t-intdef-ctx)]
+   #:with [var-id- ...] (map #{internal-definition-context-introduce t-intdef-ctx %}
+                             (attribute var-id))
+   #:do [(syntax-local-bind-syntaxes (attribute var-id) #f t-intdef-ctx)]
 
    #:with [(~var method-t (type t-intdef-ctx)) ...] (attribute bare-t)
    #:with [(~var super-constr (type t-intdef-ctx)) ...] (attribute constr)
@@ -93,7 +88,7 @@
                 fixity))
           {?? (def method-default-id- : quantified-t #:exact method-default-impl)} ...
           (define-syntax- name
-            (class:info (list #'var-id-* ...)
+            (class:info (list #'var-id- ...)
                         (make-immutable-free-id-table
                          (list (cons #'method-id (quote-syntax method-t.expansion)) ...))
                         (make-immutable-free-id-table
@@ -165,15 +160,10 @@
 
    ; Calculate the expected type of each method. First, we have to expand each provided subgoal and
    ; type in the instance head in a context where the various type variables are bound.
-   #:with [var-id- ...] (generate-temporaries (attribute var-id))
    #:do [(define t-intdef-ctx (syntax-local-make-definition-context))]
-   #:with [var-id-* ...] (map #{internal-definition-context-introduce t-intdef-ctx %}
-                              (attribute var-id-))
-   #:do [(syntax-local-bind-syntaxes (attribute var-id-) #f t-intdef-ctx)
-         (syntax-local-bind-syntaxes
-          (attribute var-id)
-          #`(values (make-variable-like-transformer (quote-syntax (#%type:bound-var var-id-*))) ...)
-          t-intdef-ctx)]
+   #:with [var-id- ...] (map #{internal-definition-context-introduce t-intdef-ctx %}
+                             (attribute var-id))
+   #:do [(syntax-local-bind-syntaxes (attribute var-id) #f t-intdef-ctx)]
    #:with [(~var constr- (type t-intdef-ctx)) ...] (attribute constr)
    #:with [(~var bare-t- (type t-intdef-ctx)) ...] (attribute bare-t)
 
@@ -187,9 +177,8 @@
    ; With the types actually expanded, we need to skolemize them for the pupose of typechecking
    ; method implementations.
    #:do [(define skolem-ids (generate-temporaries (attribute var-id)))
-         (modify-type-context #{append % (map ctx:rigid skolem-ids)})
          (define var+skolem-ids
-           (map #{cons %1 #`(#%type:rigid-var #,%2)} (attribute var-id-*) skolem-ids))
+           (map #{cons %1 #`(#%type:rigid-var #,%2)} (attribute var-id-) skolem-ids))
          (define bare-ts/skolemized (map #{insts % var+skolem-ids} (attribute bare-t-.expansion)))]
    #:with [constr/skolemized ...] (map #{insts % var+skolem-ids} (attribute constr-/reduced))
 
@@ -224,7 +213,7 @@
            (begin-for-syntax-
              (register-global-class-instance!
               (class:instance (syntax-local-value #'class)
-                              (list (quote-syntax var-id-*) ...)
+                              (list (quote-syntax var-id-) ...)
                               (list (quote-syntax constr-/reduced) ...)
                               (list (quote-syntax bare-t-.expansion) ...)
                               #'dict-id-)))

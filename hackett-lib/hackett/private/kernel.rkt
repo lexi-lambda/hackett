@@ -70,8 +70,8 @@
   [(_ [] t) #'t]
   [(_ [x:id xs:id ...] t)
    (quasisyntax/loc this-syntax
-     (#%forall x #,(syntax/loc this-syntax
-                     (∀ [xs ...] t))))]
+     (#%type:forall x #,(syntax/loc this-syntax
+                          (∀ [xs ...] t))))]
   [(_ [x:id ...] constr ... =>/use:=> t)
    (quasisyntax/loc this-syntax
      (∀ [x ...] #,(syntax/loc this-syntax

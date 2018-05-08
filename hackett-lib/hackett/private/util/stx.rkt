@@ -15,7 +15,9 @@
                                                            (-> syntax? syntax?))]
                        [make-pattern-like-pattern-expander (-> (or/c syntax? (-> identifier? syntax?))
                                                                 pattern-expander?)]
-                       [preservable-property->expression (-> any/c syntax?)])
+                       [preservable-property->expression (-> any/c syntax?)]
+                       [generate-bound-temporaries (-> (or/c syntax? list?) (listof identifier?))]
+                       [generate-bound-temporary (-> any/c identifier?)])
          syntax/loc/props quasisyntax/loc/props template/loc/props quasitemplate/loc/props)
 
 ; These two functions are taken with modifications from macrotypes/stx-utils, which implement a
@@ -85,3 +87,18 @@
             (make-syntax/loc/props 'quasisyntax/loc/props #'quasisyntax)
             (make-syntax/loc/props 'template/loc/props #'template)
             (make-syntax/loc/props 'quasitemplate/loc/props #'quasitemplate))))
+
+; Like generate-temporaries, but also binds each identifier to a runtime binding. Though the
+; identifier will always be out of context if actually used in an expanded program, when used with
+; local-expand, it will be left untouched. Later, it’s possible to arrange for the identifier to be
+; placed in binding position of some other form.
+(define (generate-bound-temporaries stx-pair)
+  (let* ([intdef-ctx (syntax-local-make-definition-context)]
+         [ids (generate-temporaries stx-pair)])
+    (syntax-local-bind-syntaxes ids #f intdef-ctx)
+    (map (λ (id) (internal-definition-context-introduce intdef-ctx id)) ids)))
+
+; Like generate-temporary but with the binding behavior of generate-bound-temporaries.
+(define (generate-bound-temporary [name-base 'g])
+  (first (generate-bound-temporaries (list name-base))))
+

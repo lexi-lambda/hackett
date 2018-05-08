@@ -178,8 +178,7 @@
     (-> (listof type?) type? (listof type?))
     (define/syntax-parse {~#%type:forall* [x ...] t_fn} con-ty)
     (define/syntax-parse
-      {~->* t_arg ... {~#%type:app* ({~literal #%type:con} _)
-                                    ({~literal #%type:bound-var} con-var) ...}}
+      {~->* t_arg ... {~#%type:app* ({~literal #%type:con} _) con-var:id ...}}
       #'t_fn)
     (unless (equal? (length (attribute x)) (length (attribute con-var)))
       (raise-arguments-error 'data-constructor-field-types

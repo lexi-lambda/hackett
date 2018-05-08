@@ -23,9 +23,8 @@
                      ~#%type:forall* ?#%type:forall* ~#%type:qual* ?#%type:qual*
                      ~-> ~->* ~->+ ?->*
                      value-namespace-introduce type-namespace-introduce ~type)
-         #%type:con #%type:app #%type:forall #%type:qual
-         #%type:bound-var #%type:wobbly-var #%type:rigid-var
-         #%forall define-base-type ->
+         #%type:con #%type:app #%type:forall #%type:qual #%type:wobbly-var #%type:rigid-var
+         define-base-type ->
          begin-for-value begin-for-type)
 
 ;; ---------------------------------------------------------------------------------------------------
@@ -57,8 +56,8 @@
 
    ; (#%type:forall id type)
    ;
-   ; Universal quantification over types. The primitive quantifier abstracts a single type variable
-   ; within its type. Within t, (type:bound-var x) may appear.
+   ; Universal quantification over types. #%type:forall acts as a binding form like lambda, and it
+   ; binds all occurrences of id within type.
    #%type:forall
 
    ; (#%type:qual type type)
@@ -68,13 +67,6 @@
    ; do not (directly) describe any terms. Typeclass names may serve as type constructors that can be
    ; applied to other types just like any others.
    #%type:qual
-
-   ; (#%type:bound-var id)
-   ;
-   ; Bound type variables. In the type (forall [a] a), a is a bound-var until the forall is
-   ; instantiated. These usually do not appear in typechecking (since they will be instantiated to
-   ; wobbly-var, rigid-var, or a concrete type).
-   #%type:bound-var
 
    ; (#%type:wobbly-var id)
    ;
@@ -100,16 +92,14 @@
    #%type:rigid-var]
 
   (let ([type-literal (λ (stx) (raise-syntax-error #f "cannot be used as an expression" stx))])
-    (values type-literal type-literal type-literal type-literal
-            type-literal type-literal type-literal)))
+    (values type-literal type-literal type-literal type-literal type-literal type-literal)))
 
 (begin-for-syntax
   (define type-literal-ids
     (list #'#%type:con #'#%type:app #'#%type:forall #'#%type:qual
-          #'#%type:bound-var #'#%type:wobbly-var #'#%type:rigid-var))
+          #'#%type:wobbly-var #'#%type:rigid-var))
   (define-literal-set type-literals
-    [#%type:con #%type:app #%type:forall #%type:qual
-     #%type:bound-var #%type:wobbly-var #%type:rigid-var]))
+    [#%type:con #%type:app #%type:forall #%type:qual #%type:wobbly-var #%type:rigid-var]))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; type expansion
@@ -126,6 +116,12 @@
     #:attributes [expansion residual]
     #:commit
     #:literal-sets [kernel-literals type-literals]
+    [pattern {~and x:id ~!}
+             #:with x- (local-expand #'x 'expression '())
+             #:attr expansion #'x-
+             #:attr residual (syntax-property #'(values)
+                                              'disappeared-use
+                                              (syntax-local-introduce #'x-))]
     [pattern (head:#%expression ~! {~var a (type intdef-ctx)})
              #:attr expansion (syntax-track-origin #'a.expansion this-syntax #'head)
              #:attr residual (~> #'(values)
@@ -141,11 +137,16 @@
                                  (syntax-track-origin #'a.residual #'head)
                                  (syntax-track-origin #'b.residual #'head)
                                  (syntax-track-origin #'expansion #'head))]
-    [pattern (head:#%type:forall ~! x:id {~var t (type intdef-ctx)})
-             #:attr expansion (syntax/loc/props this-syntax
-                                (head x t.expansion))
+    [pattern (head:#%type:forall ~! x:id t)
+             #:do [(define intdef-ctx* (syntax-local-make-definition-context intdef-ctx))
+                   (syntax-local-bind-syntaxes (list #'x) #f intdef-ctx*)]
+             #:with x- (internal-definition-context-introduce intdef-ctx* #'x)
+             #:with {~var t- (type intdef-ctx*)} #'t
+             #:attr expansion (~>> (syntax/loc/props this-syntax
+                                     (head x- t-.expansion))
+                                   (internal-definition-context-track intdef-ctx*))
              #:attr residual (~> #'(values)
-                                 (syntax-track-origin #'t.residual #'head)
+                                 (syntax-track-origin #'t-.residual #'head)
                                  (syntax-track-origin #'expansion #'head))]
     [pattern (head:#%type:qual ~! {~var a (type intdef-ctx)} {~var b (type intdef-ctx)})
              #:attr expansion (syntax/loc/props this-syntax
@@ -154,9 +155,6 @@
                                  (syntax-track-origin #'a.residual #'head)
                                  (syntax-track-origin #'b.residual #'head)
                                  (syntax-track-origin #'expansion #'head))]
-    [pattern (head:#%type:bound-var ~! _:id)
-             #:attr expansion this-syntax
-             #:attr residual (syntax-track-origin #'(values) this-syntax #'head)]
     [pattern (head:#%type:wobbly-var ~! _:id)
              #:attr expansion this-syntax
              #:attr residual (syntax-track-origin #'(values) this-syntax #'head)]
@@ -174,25 +172,10 @@
                                  (syntax-track-origin #'t-.residual #'head)
                                  (syntax-track-origin #'expansion #'head))])
 
-  (define expand-type
-    (syntax-parser
+  (define (expand-type stx [intdef-ctx #f])
+    (syntax-parse stx
       #:context 'expand-type
-      [t:type #'t.expansion])))
-
-; Expanding #%type:forall multiple times should be idempotent, so it can’t do variable renaming on its
-; own. Instead, this slightly higher-level macro performs the renaming.
-(define-syntax-parser #%forall
-  [(_ x:id t)
-   #:with x- (generate-temporary #'x)
-   #:do [(define intdef-ctx (syntax-local-make-definition-context))
-         (syntax-local-bind-syntaxes (list #'x)
-                                     #'(make-variable-like-transformer
-                                        (quote-syntax (#%type:bound-var x-)))
-                                     intdef-ctx)]
-   #:with {~var t- (type intdef-ctx)} #'t
-   (~>> (syntax/loc this-syntax
-          (#%type:forall x- t-.expansion))
-        (internal-definition-context-track intdef-ctx))])
+      [{~var t (type intdef-ctx)} #'t.expansion])))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; helper expanders / metafunctions

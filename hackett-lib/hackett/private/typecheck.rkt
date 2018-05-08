@@ -33,9 +33,7 @@
          hackett/private/util/list
          hackett/private/util/stx)
 
-(provide (contract-out [struct ctx:var ([x identifier?])]
-                       [struct ctx:rigid ([x^ identifier?])]
-                       [struct ctx:solution ([x^ identifier?] [t type?])]
+(provide (contract-out [struct ctx:solution ([x^ identifier?] [t type?])]
                        [struct class:info ([vars (listof identifier?)]
                                            [method-table immutable-free-id-table?]
                                            [default-methods immutable-free-id-table?]
@@ -46,7 +44,7 @@
                                                [subgoals (listof constr?)]
                                                [ts (listof (and/c type? type-mono?))]
                                                [dict-expr syntax?])])
-         type? type=? constr? type-mono? type-vars^ type->string type-wf! current-type-wf!
+         type? type=? constr? type-mono? type-vars^ type->string
          generalize inst insts type<:/full! type<:/elaborate! type<:! type-inst-l! type-inst-r!
          ctx-elem? ctx? ctx-elem=? ctx-member? ctx-remove
          ctx-find-solution current-ctx-solution apply-subst apply-current-subst
@@ -72,7 +70,7 @@
   (syntax-parse (list a b)
     #:context 'type=?
     #:literal-sets [type-literals]
-    [[(#%type:bound-var x) (#%type:bound-var y)] (free-identifier=? #'x #'y)]
+    [[x:id y:id] (free-identifier=? #'x #'y)]
     [[(#%type:wobbly-var x) (#%type:wobbly-var y)] (free-identifier=? #'x #'y)]
     [[(#%type:rigid-var x) (#%type:rigid-var y)] (free-identifier=? #'x #'y)]
     [[(#%type:con a) (#%type:con b)] (free-identifier=? #'a #'b)]
@@ -86,7 +84,7 @@
   (syntax-parser
     #:context 'type-mono?
     #:literal-sets [type-literals]
-    [(#%type:bound-var _) #t]
+    [_:id #t]
     [(#%type:wobbly-var _) #t]
     [(#%type:rigid-var _) #t]
     [(#%type:con _) #t]
@@ -100,7 +98,7 @@
   (syntax-parser
     #:context 'type-vars^
     #:literal-sets [type-literals]
-    [(#%type:bound-var _) '()]
+    [_:id '()]
     [(#%type:wobbly-var x) (list #'x)]
     [(#%type:rigid-var _) '()]
     [(#%type:con _) '()]
@@ -119,7 +117,7 @@
   (syntax-parser
     #:context 'τ->datum
     #:literal-sets [type-literals]
-    [(#%type:bound-var x) (syntax-e #'x)]
+    [x:id (syntax-e #'x)]
     [(#%type:wobbly-var x^) (string->symbol (format "~a^" (syntax-e #'x^)))]
     [(#%type:rigid-var x^) (syntax-e #'x^)]
     [(#%type:con name) (syntax-e #'name)]
@@ -136,17 +134,13 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; type contexts
 
-(struct ctx:var (x) #:prefab)
-(struct ctx:rigid (x^) #:prefab)
 (struct ctx:solution (x^ t) #:prefab)
 
-(define (ctx-elem? x) ((disjoin ctx:var? ctx:rigid? ctx:solution?) x))
+(define (ctx-elem? x) ((disjoin ctx:solution?) x))
 (define (ctx? x) ((listof ctx-elem?) x))
 (define/contract ctx-elem=?
   (-> ctx-elem? ctx-elem? boolean?)
   (match-lambda**
-   [[(ctx:var x) (ctx:var y)] (free-identifier=? x y)]
-   [[(ctx:rigid x^) (ctx:rigid y^)] (free-identifier=? x^ y^)]
    [[(ctx:solution x^ a) (ctx:solution y^ b)] (and (free-identifier=? x^ y^) (type=? a b))]
    [[_ _] #f]))
 (define/contract (ctx-member? ctx elem)
@@ -164,36 +158,18 @@
   (-> identifier? (or/c type? #f))
   (ctx-find-solution (current-type-context) x^))
 
-(define/contract (type-wf! ctx t)
-  (-> ctx? type? void?)
-  (syntax-parse t
-    #:context 'type-wf!
-    #:literal-sets [type-literals]
-    [(#%type:bound-var ~! x:id) (unless (ctx-member? ctx (ctx:var #'x))
-                                  (raise-syntax-error #f "unbound type variable" #'x))]
-    [(#%type:wobbly-var ~! _:id) (void)]
-    [(#%type:rigid-var ~! x^:id) (unless (ctx-member? ctx (ctx:rigid #'x^))
-                                   (raise-syntax-error #f "skolem escaped its scope" #'x^))]
-    [(#%type:con ~! _:id) (void)]
-    [(#%type:app ~! a b) (type-wf! ctx #'a) (type-wf! ctx #'b)]
-    [(#%type:forall ~! x:id t) (type-wf! (snoc ctx (ctx:var #'x)) #'t)]
-    [(#%type:qual ~! a b) (type-wf! ctx #'a) (type-wf! ctx #'b)]))
-(define/contract (current-type-wf! t)
-  (-> type? void?)
-  (type-wf! (current-type-context) t))
-
 (define/contract (apply-subst ctx t)
   (-> ctx? type? type?)
   (syntax-parse t
     #:context 'apply-subst
     #:literal-sets [type-literals]
-    [(#%type:bound-var _) t]
+    [_:id t]
     [(#%type:wobbly-var x) (let ([s (ctx-find-solution ctx #'x)])
                              (if s (apply-subst ctx s) t))]
     [(#%type:rigid-var _) t]
     [(#%type:con _) t]
     [(head:#%type:app a b) (quasisyntax/loc/props this-syntax
-                             (#%type:app #,(apply-subst ctx #'a) #,(apply-subst ctx #'b)))]
+                             (head #,(apply-subst ctx #'a) #,(apply-subst ctx #'b)))]
     [(head:#%type:forall x t) (quasisyntax/loc/props this-syntax
                                 (head x #,(apply-subst ctx #'t)))]
     [(head:#%type:qual a b) (quasisyntax/loc/props this-syntax
@@ -205,32 +181,24 @@
   (-> type? type?)
   (let* ([xs^ (type-vars^ t)]
          [xs (generate-temporaries xs^)]
-         [subst (map #{ctx:solution %1 #`(#%type:bound-var #,%2)} xs^ xs)])
-    (quasitemplate (?#%type:forall* #,xs #,(apply-subst subst t)))))
+         [subst (map ctx:solution xs^ xs)])
+    (expand-type (quasitemplate (?#%type:forall* #,xs #,(apply-subst subst t))))))
 
 (define/contract (inst t x s)
   (-> type? identifier? type? type?)
-  (syntax-parse t
-    #:context 'inst
-    #:literal-sets [type-literals]
-    [(#%type:bound-var y) (if (free-identifier=? x #'y) s t)]
-    [(#%type:wobbly-var _) t]
-    [(#%type:rigid-var _) t]
-    [(#%type:con _) t]
-    [(head:#%type:app a b)
-     (quasisyntax/loc/props this-syntax
-       (head #,(inst #'a x s) #,(inst #'b x s)))]
-    [(head:#%type:forall v t*)
-     (quasisyntax/loc/props this-syntax
-       (head v #,(inst #'t* x s)))]
-    [(head:#%type:qual a b)
-     (quasisyntax/loc/props this-syntax
-       (head #,(inst #'a x s) #,(inst #'b x s)))]
-    [_ t]))
+  (insts t (list (cons x s))))
 
 (define/contract (insts t x+ss)
   (-> type? (listof (cons/c identifier? type?)) type?)
-  (foldl #{inst %2 (car %1) (cdr %1)} t x+ss))
+  (let ([intdef-ctx (with-handlers ([exn:fail? (λ (e)
+                                                 (println (syntax-local-context))
+                                                 (raise e))])
+                      (syntax-local-make-definition-context))])
+    (for ([x+s (in-list x+ss)])
+      (syntax-local-bind-syntaxes (list (car x+s))
+                                  #`(make-variable-like-transformer (quote-syntax #,(cdr x+s)))
+                                  intdef-ctx))
+    (expand-type t intdef-ctx)))
 
 (define/contract current-type-context (parameter/c ctx?) (make-parameter '()))
 (define/contract (modify-type-context f)
@@ -297,7 +265,7 @@
      #:when (free-identifier=? #'a #'b)
      no-op]
     ; <:Var
-    [[(#%type:bound-var x) (#%type:bound-var y)]
+    [[x:id y:id]
      #:when (free-identifier=? #'x #'y)
      no-op]
     ; <:Exvar
@@ -330,10 +298,7 @@
     [[a (#%type:forall x b)]
      (let* ([x^ (generate-temporary #'x)]
             [b* (inst #'b #'x #`(#%type:rigid-var #,x^))])
-       (modify-type-context #{snoc % (ctx:rigid x^)})
-       (begin0
-         (type<:/full! #'a b* #:src src #:elaborate? elaborate?)
-         (modify-type-context #{ctx-remove % (ctx:rigid x^)})))]
+       (type<:/full! #'a b* #:src src #:elaborate? elaborate?))]
     ; <:Qual
     [[(#%type:qual constr a) b]
      #:when elaborate?
@@ -381,9 +346,7 @@
      (type-inst-l! #'x2^ (apply-current-subst #'b))]
     ; InstLAllR
     [(#%type:forall x t*)
-     (modify-type-context #{snoc % (ctx:var #'x)})
-     (type-inst-l! x^ #'t*)
-     (modify-type-context #{ctx-remove % (ctx:var #'x)})]
+     (type-inst-l! x^ #'t*)]
     [_ (error 'type-inst-l! (format "internal error: failed to instantiate ~a to a subtype of ~a"
                                  (type->string #`(#%type:wobbly-var #,x^)) (type->string t)))]))
 

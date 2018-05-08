@@ -89,7 +89,7 @@
   (syntax-parser
     [(_ _ {~type ty-con:type-constructor-val})
      #:with [data-con:data-constructor-val ...] (attribute ty-con.data-constructors)
-     #:with [ty-con-var-id ...] (build-list (attribute ty-con.arity) generate-temporary)
+     #:with [ty-con-var-id ...] (build-list (attribute ty-con.arity) generate-bound-temporary)
      #:with [[data-con-field-ty ...] ...]
             (for/list ([con-type (in-list (attribute data-con.type))])
               (data-constructor-field-types (attribute ty-con-var-id) con-type))
@@ -119,6 +119,7 @@
   [show (λ [str] {"\"" ++ str ++ "\""})])
 
 (derive-instance Show Unit)
+
 (derive-instance Show Bool)
 (derive-instance Show Maybe)
 (derive-instance Show Either)
@@ -138,7 +139,7 @@
   (syntax-parser
     [(_ _ {~type ty-con:type-constructor-val})
      #:with [data-con:data-constructor-val ...] (attribute ty-con.data-constructors)
-     #:with [ty-con-var-id ...] (build-list (attribute ty-con.arity) generate-temporary)
+     #:with [ty-con-var-id ...] (build-list (attribute ty-con.arity) generate-bound-temporary)
      #:with [[data-con-field-ty ...] ...]
             (for/list ([con-type (in-list (attribute data-con.type))])
               (data-constructor-field-types (attribute ty-con-var-id) con-type))

@@ -90,15 +90,13 @@
           (list/c syntax? (-> syntax? type? (values syntax? type?))))
       (cond
         [t
-         (current-type-wf! t)
-         (syntax-parse t
+         (syntax-parse (expand-type t)
            #:context 'simplify/elaborate
            #:literal-sets [type-literals]
            [(~#%type:forall* [x ...] a)
             ; If the expected type is qualified, we need to skolemize it before continuing with
             ; inference.
             #:with [x^ ...] (generate-temporaries (attribute x))
-            #:do [(modify-type-context #{append % (map ctx:rigid (attribute x^))})]
             #:with a_skolemized (let ([skolem-subst
                                        (map cons (attribute x) (syntax->list
                                                                 #'[(#%type:rigid-var x^) ...]))])
@@ -109,7 +107,6 @@
             (list
              (attach-expected e #'b)
              (λ (e- t_⇒)
-               (modify-type-context #{foldl #{ctx-remove %2 (ctx:rigid %1)} % (attribute x^)})
                ; Once inference is finished, we first check that the inferred type matches the
                ; expected one. If so, it may have some extra constraints on it that need to be
                ; supplied dictionaries, so elaborate them here.
@@ -125,7 +122,7 @@
                  (foldr #{quasisyntax/loc e
                            (@%with-dictionary #,%1 #,%2)}
                         e-elaborated (attribute constr)))
-               (values e-wrapped t)))])]
+               (values e-wrapped this-syntax)))])]
         [else
          ; If t is #f, we’re in inference mode, so we don’t need to do anything but pass values
          ; through unchanged.
