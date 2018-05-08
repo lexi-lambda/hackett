@@ -14,10 +14,10 @@ Here are some of the features that Hackett supports **right now**:
   - Type-aware/type-directed macros
   - Laziness
   - Syntax for infix operators
+  - Scoped type variables
 
 Here are some of the features that still need to be implemented for a minimal release:
 
-  - Scoped type variables
   - Kindchecking
   - Type expanders (of which type aliases are a subset)
 
