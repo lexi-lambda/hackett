@@ -14,37 +14,46 @@
          syntax/parse/class/local-value)
 
 (provide (contract-out
-          [prop:infix-operator (struct-type-property/c (-> any/c operator-fixity?))]
-          [struct infix-operator-impl ([id identifier?] [fixity operator-fixity?])])
-         operator-fixity? infix-operator? infix-operator-fixity
-         infix-operator fixity-annotation indirect-infix-definition)
+          [prop:infix-operator (struct-type-property/c (-> any/c (or/c operator-fixity? #f)))]
+          [infix-operator-fixity (-> infix-operator? operator-fixity?)]
+          [make-infix-variable-like-transformer
+           (-> (or/c syntax? (-> syntax? syntax?)) (or/c operator-fixity? #f) (-> syntax? syntax?))]
+          [indirect-infix-definition (-> syntax? (or/c operator-fixity? #f) syntax?)])
+         operator-fixity? infix-operator? infix-operator fixity-annotation)
 
 (define operator-fixity?
   (flat-named-contract
    'operator-fixity?
    (or/c 'left 'right)))
 
-(define-values [prop:infix-operator infix-operator? infix-operator-fixity-procedure]
+(define-values [prop:infix-operator has-prop:infix-operator? infix-operator-fixity-procedure]
   (make-struct-type-property 'infix-operator))
 
 (define (infix-operator-fixity operator)
   ((infix-operator-fixity-procedure operator) operator))
-  
-(struct infix-operator-impl (id fixity)
-  #:transparent
-  #:property prop:procedure
-  (λ (operator stx) ((make-variable-like-transformer (infix-operator-impl-id operator)) stx))
-  #:property prop:infix-operator
-  (λ (operator) (infix-operator-impl-fixity operator)))
 
-(define-syntax-class infix-operator
+(define (infix-operator? x)
+  (and (has-prop:infix-operator? x)
+       (operator-fixity? (infix-operator-fixity x))))
+  
+(struct infix-variable-like-transformer (procedure fixity)
+  #:property prop:procedure (struct-field-index procedure)
+  #:property prop:infix-operator
+  (λ (operator) (infix-variable-like-transformer-fixity operator)))
+
+(define (make-infix-variable-like-transformer expr fixity)
+  (let ([proc (make-variable-like-transformer expr)])
+    (if fixity (infix-variable-like-transformer proc fixity) proc)))
+
+(define-syntax-class (infix-operator #:default-fixity [default-fixity 'left])
   #:description #f
   #:commit
   #:attributes [fixity]
   [pattern {~var op (local-value infix-operator?)}
            #:attr fixity (infix-operator-fixity (attribute op.local-value))]
   [pattern _:expr
-           #:attr fixity 'left])
+           #:when default-fixity
+           #:attr fixity default-fixity])
 
 (define-splicing-syntax-class fixity-annotation
   #:description "fixity annotation"
@@ -61,10 +70,9 @@
 ;   > (indirect-infix-definition #'(define :: cons) 'right)
 ;   #'(begin
 ;       (define ::1 cons)
-;       (define-syntax :: (infix-operator-impl #'::1 'right)))
+;       (define-syntax :: (infix-variable-like-transformer #'::1 'right)))
 ;
-(define/contract (indirect-infix-definition stx fixity)
-  (-> syntax? (or/c operator-fixity? #f) syntax?)
+(define (indirect-infix-definition stx fixity)
   (if fixity
       (syntax-parse stx
         #:context 'indirect-infix-definition
@@ -73,5 +81,5 @@
          #:with fixity-expr (preservable-property->expression fixity)
          #'(begin
              (d id- expr)
-             (define-syntax id (infix-operator-impl #'id- fixity-expr)))])
+             (define-syntax id (make-infix-variable-like-transformer #'id- fixity-expr)))])
       stx))

@@ -21,6 +21,7 @@
          racket/function
          racket/list
          racket/match
+         racket/string
          racket/syntax
          racket/stxparam-exptime
          syntax/id-table
@@ -30,6 +31,7 @@
          syntax/parse/experimental/template
          threading
 
+         hackett/private/infix
          hackett/private/util/list
          hackett/private/util/stx)
 
@@ -111,26 +113,44 @@
 
 (define/contract (type->string t)
   (-> type? string?)
-  (format "~a" (τ->datum t)))
+  (~a (type->datum t)))
 
-(define/contract τ->datum
+(define/contract type->datum
   (-> type? any/c)
   (syntax-parser
-    #:context 'τ->datum
+    #:context 'type->string
     #:literal-sets [type-literals]
     [x:id (syntax-e #'x)]
     [(#%type:wobbly-var x^) (string->symbol (format "~a^" (syntax-e #'x^)))]
     [(#%type:rigid-var x^) (syntax-e #'x^)]
     [(#%type:con name) (syntax-e #'name)]
-    [{~#%type:app+ t ...} (map τ->datum (attribute t))]
+    [{~#%type:app+ (#%type:con {~var op (infix-operator #:default-fixity #f)}) _ _}
+     (infix-type->string #'op (attribute op.fixity) this-syntax)]
+    [{~#%type:app+ t ...} (map type->datum (attribute t))]
     [{~#%type:forall* [x ...+] {~#%type:qual* [constr ...+] t}}
      `(forall ,(map syntax-e (attribute x))
-              ,@(map τ->datum (attribute constr))
-              => ,(τ->datum #'t))]
+              ,@(map type->datum (attribute constr))
+              => ,(type->datum #'t))]
     [{~#%type:forall* [x ...+] t}
-     `(forall ,(map syntax-e (attribute x)) ,(τ->datum #'t))]
+     `(forall ,(map syntax-e (attribute x)) ,(type->datum #'t))]
     [{~#%type:qual* [constr ...+] t}
-     `(=> ,(map τ->datum (attribute constr)) ,(τ->datum #'t))]))
+     `(=> ,(map type->datum (attribute constr)) ,(type->datum #'t))]))
+
+(define/contract (infix-type->string op-id fixity t0)
+  (-> identifier? operator-fixity? type? string?)
+  (define traverse
+    (syntax-parser
+      #:literal-sets [type-literals]
+      [{~#%type:app* (#%type:con op) t s}
+       #:when (free-identifier=? #'op op-id)
+       (case fixity
+         [(left)  (snoc (traverse #'t) #'s)]
+         [(right) (cons #'t (traverse #'s))])]
+      [t (list #'t)]))
+  (string-join (map type->string (traverse t0))
+               (format " ~a " (syntax-e op-id))
+               #:before-first "{"
+               #:after-last "}"))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; type contexts

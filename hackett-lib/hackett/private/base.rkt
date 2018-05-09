@@ -15,7 +15,7 @@
          syntax/parse/define
 
          (for-syntax hackett/private/infix
-                     (rename-in hackett/private/typecheck [-> ->/prefix])
+                     hackett/private/typecheck
                      hackett/private/util/list
                      hackett/private/util/stx))
 
@@ -38,8 +38,6 @@
    (~> #'(define-syntax op (make-typed-var-transformer #'op- (quote-syntax t.expansion)))
        (syntax-property 'disappeared-use (list (syntax-local-introduce #'op-)
                                                (syntax-local-introduce #'colon))))])
-
-(define-syntax -> (infix-operator-impl #'->/prefix 'right))
 
 (begin-for-syntax
   ;; -------------------------------------------------------------------------------------------------
