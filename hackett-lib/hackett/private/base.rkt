@@ -16,10 +16,12 @@
 
          (for-syntax hackett/private/infix
                      hackett/private/typecheck
+                     hackett/private/typeclass
                      hackett/private/util/list
                      hackett/private/util/stx))
 
 (provide (for-syntax (all-from-out hackett/private/typecheck)
+                     (all-from-out hackett/private/typeclass)
                      τs⇔/λ! τ⇔/λ! τ⇔! τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒!)
          (rename-out [#%top @%top])
          @%module-begin @%datum @%app
