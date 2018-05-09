@@ -157,8 +157,17 @@
                                  (syntax-track-origin #'t-.residual #'head)
                                  (syntax-track-origin #'expansion #'head))]
     [pattern (head:#%type:qual ~! {~var a (type intdef-ctx)} {~var b (type intdef-ctx)})
-             #:attr expansion (syntax/loc/props this-syntax
-                                (head a.expansion b.expansion))
+             #:do [(define outer-this-syntax this-syntax)]
+             ; There’s never really any reason to have a #%type:forall immediately inside a
+             ; #%type:qual, and users don’t expect to see such types, so push #%type:qual down when it
+             ; appears immediately around a #%type:forall.
+             #:attr expansion (syntax-parse #'b.expansion
+                                [(~#%type:forall* [x ...+] t)
+                                 (quasisyntax/loc/props this-syntax
+                                   (?#%type:forall* [x ...] #,(syntax/loc/props outer-this-syntax
+                                                                (head a.expansion t))))]
+                                [_ (syntax/loc/props outer-this-syntax
+                                     (head a.expansion b.expansion))])
              #:attr scoped-binding-ctxs '()
              #:attr residual (~> #'(values)
                                  (syntax-track-origin #'a.residual #'head)
@@ -187,7 +196,7 @@
   (define (expand-type stx [intdef-ctx #f])
     (syntax-parse stx
       #:context 'expand-type
-      [{~var t (type intdef-ctx)} #'t.expansion])))
+      [{~var t (type intdef-ctx)} #'t.expansion]))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; helper expanders / metafunctions
@@ -199,7 +208,6 @@
 ; {?#%type:app Either String Integer}. Similar helpers are provided for nested foralls and nested
 ; qualifications.
 
-(begin-for-syntax
   (define-syntax-class nested-apps
     #:description #f
     #:attributes [[linearized 1]]
