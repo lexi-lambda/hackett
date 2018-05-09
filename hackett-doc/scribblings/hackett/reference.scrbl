@@ -822,9 +822,14 @@ evaluated, produces the value.
 @subsection[#:tag "reference-equality"]{Equality}
 
 @defclass[(t:Eq a)
-          [== {a t:-> a t:-> t:Bool}]]{
+          [== {a t:-> a t:-> t:Bool}]
+          [/= {a t:-> a t:-> t:Bool}]]{
 The class of types with a notion of equality. The @racket[==] method should produce @racket[True] if
-both of its arguments are equal, otherwise it should produce @racket[False].
+both of its arguments are equal, otherwise it should produce @racket[False], and @racket[/=] should be
+its inverse.
+
+An implementation for at least one of @racket[==] or @racket[/=] must be provided. If one is omitted,
+a default implementation will be provided in terms of the other.
 
 @defmethod[== {a t:-> a t:-> t:Bool}]{
 
@@ -833,7 +838,16 @@ both of its arguments are equal, otherwise it should produce @racket[False].
   (eval:check {10 == 11} False)
   (eval:check {{1 :: 2 :: Nil} == {1 :: 2 :: Nil}} True)
   (eval:check {{1 :: 2 :: Nil} == {1 :: Nil}} False)
-  (eval:check {{1 :: 2 :: Nil} == {1 :: 3 :: Nil}} False))}}
+  (eval:check {{1 :: 2 :: Nil} == {1 :: 3 :: Nil}} False))}
+
+@defmethod[/= {a t:-> a t:-> t:Bool}]{
+
+@(hackett-examples
+  (eval:check {10 /= 10} False)
+  (eval:check {10 /= 11} True)
+  (eval:check {{1 :: 2 :: Nil} /= {1 :: 2 :: Nil}} False)
+  (eval:check {{1 :: 2 :: Nil} /= {1 :: Nil}} True)
+  (eval:check {{1 :: 2 :: Nil} /= {1 :: 3 :: Nil}} True))}}
 
 @subsection[#:tag "reference-semigroup-monoid"]{Semigroups and monoids}
 

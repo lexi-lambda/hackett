@@ -135,6 +135,8 @@
 
 (class (Eq a)
   [== : {a -> a -> Bool}]
+  [/= : {a -> a -> Bool}
+      (λ [x y] (not {x == y}))]
   #:deriving-transformer
   (syntax-parser
     [(_ _ {~type ty-con:type-constructor-val})
