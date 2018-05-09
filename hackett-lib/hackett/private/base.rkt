@@ -379,16 +379,15 @@
   [(_ id:id
       {~optional fixity:fixity-annotation}
       e:expr)
-   #:do [(define-values [e- t]
-           (let-values ([(e- t) (τ⇒! #'e)])
-             (values e- (apply-current-subst t))))]
-   #:with id- (generate-temporary #'id)
-   #:with t_gen (type-reduce-context (generalize t))
+   #:with x^ (generate-temporary)
+   #:with t_e #'(#%type:wobbly-var x^)
+   #:do [(match-define-values [(list id-) e-] (τ⇐/λ! #'e #'t_e (list (cons #'id #'t_e))))]
+   #:with t_gen (type-reduce-context (generalize (apply-current-subst #'t_e)))
    #`(begin-
-       (define- id- #,e-)
+       (define- #,id- #,e-)
        #,(indirect-infix-definition
-          #'(define-syntax- id
-              (make-typed-var-transformer #'id- (quote-syntax t_gen)))
+          #`(define-syntax- id
+              (make-typed-var-transformer (quote-syntax #,id-) (quote-syntax t_gen)))
           (attribute fixity.fixity)))])
 
 (begin-for-syntax
