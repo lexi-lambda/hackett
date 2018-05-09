@@ -163,7 +163,11 @@
     ; We add the internal definition context’s scope to each temporary identifier to allow them to be
     ; used in reference and binding positions. We’ll need to return these at the end, to allow callers
     ; to arrange for these identifiers to appear in binding positions.
-    (define xs-* (map #{internal-definition-context-introduce intdef-ctx %} xs-))
+    (define xs-* (for/list ([x (in-list xs)]
+                            [x- (in-list xs-)]
+                            [t_x (in-list ts_xs)])
+                   (attach-type (internal-definition-context-introduce intdef-ctx x-) t_x
+                                #:tooltip-src x)))
     (for ([x (in-list xs)]
           [x-* (in-list xs-*)]
           [t_x (in-list ts_xs)])
@@ -308,18 +312,20 @@
 
 (define-syntax-parser @%module-begin
   [(_ form ...)
-   (value-namespace-introduce
-    (syntax/loc this-syntax
-      (#%plain-module-begin- form ...)))])
+   (~> (local-expand (value-namespace-introduce
+                      (syntax/loc this-syntax
+                        (#%plain-module-begin- form ...)))
+                     'module-begin '())
+       apply-current-subst-in-tooltips)])
 
 (define-syntax-parser @%datum
   [(_ . n:exact-integer)
-   (attach-type #'(#%datum . n) (expand-type #'Integer))]
+   (attach-type #'(#%datum . n) (expand-type #'Integer) #:tooltip-src #'n)]
   [(_ . n:number)
    #:when (double-flonum? (syntax-e #'n))
-   (attach-type #'(#%datum . n) (expand-type #'Double))]
+   (attach-type #'(#%datum . n) (expand-type #'Double) #:tooltip-src #'n)]
   [(_ . s:str)
-   (attach-type #'(#%datum . s) (expand-type #'String))]
+   (attach-type #'(#%datum . s) (expand-type #'String) #:tooltip-src #'n)]
   [(_ . x)
    (raise-syntax-error #f "literal not supported" #'x)])
 
@@ -359,7 +365,7 @@
    #:do [(define-values [f- t_f] (τ⇒! #'f))
          (define-values [r- t_r] (τ⇒app! f- (apply-current-subst t_f) #'e
                                          #:src this-syntax))]
-   (attach-type r- t_r)])
+   (attach-type r- t_r #:tooltip-src this-syntax)])
 
 (define-syntax-parser def
   #:literals [:]

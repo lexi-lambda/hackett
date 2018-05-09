@@ -3,7 +3,8 @@
 (require (for-syntax hackett/private/infix
                      racket/base
                      syntax/parse/class/paren-shape
-                     syntax/parse/experimental/template)
+                     syntax/parse/experimental/template
+                     threading)
          syntax/parse/define
 
          (rename-in hackett/private/base
@@ -97,10 +98,14 @@
 
      (define-syntax-parser @%app/prefix
        [(_ f:expr) #'f]
+       [(_ f:expr x:expr)
+        (syntax/loc this-syntax
+          (@%app1 f x))]
        [(_ f:expr x:expr xs:expr ...)
         (quasisyntax/loc this-syntax
-          (@%app/prefix #,(syntax/loc this-syntax
-                            (@%app1 f x))
+          (@%app/prefix #,(~> (syntax/loc this-syntax
+                                (@%app1 f x))
+                              (syntax-property 'omit-type-tooltip #t))
                         xs ...))])
 
      (define-syntax-parser @%app/infix
@@ -110,8 +115,9 @@
         #:fail-unless (andmap #{eq? % 'left} (attribute ops.fixity))
                       "cannot mix left- and right-associative operators in the same infix expression"
         (quasitemplate/loc this-syntax
-          (@%app/infix #,(syntax/loc this-syntax
-                           (@%app/infix a op b))
+          (@%app/infix #,(~> (syntax/loc this-syntax
+                               (@%app/infix a op b))
+                             (syntax-property 'omit-type-tooltip #t))
                        {?@ ops bs} ...))]
        [(_ {~seq as:expr ops:infix-operator} ...+ a:expr op:infix-operator b:expr)
         #:when (eq? 'right (attribute op.fixity))
@@ -120,8 +126,9 @@
                       "cannot mix left- and right-associative operators in the same infix expression"
         (quasitemplate/loc this-syntax
           (@%app/infix {?@ as ops} ...
-                       #,(syntax/loc this-syntax
-                           (@%app/infix a op b))))]
+                       #,(~> (syntax/loc this-syntax
+                               (@%app/infix a op b))
+                             (syntax-property 'omit-type-tooltip #t))))]
        [(_ a:expr op:expr b:expr)
         (syntax/loc this-syntax
           (@%app/prefix op a b))]

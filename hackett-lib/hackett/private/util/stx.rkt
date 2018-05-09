@@ -8,7 +8,8 @@
          racket/match
          syntax/parse
          syntax/parse/define
-         syntax/parse/experimental/template)
+         syntax/parse/experimental/template
+         threading)
 
 (provide (contract-out [replace-stx-loc (-> syntax? syntax? syntax?)]
                        [make-variable-like-transformer (-> (or/c syntax? (-> identifier? syntax?))
@@ -17,7 +18,9 @@
                                                                 pattern-expander?)]
                        [preservable-property->expression (-> any/c syntax?)]
                        [generate-bound-temporaries (-> (or/c syntax? list?) (listof identifier?))]
-                       [generate-bound-temporary (-> any/c identifier?)])
+                       [generate-bound-temporary (-> any/c identifier?)]
+                       [adjust-property (-> syntax? any/c (-> any/c any/c) syntax?)]
+                       [recursively-adjust-property (-> syntax? any/c (-> any/c any/c) syntax?)])
          syntax/loc/props quasisyntax/loc/props template/loc/props quasitemplate/loc/props)
 
 ; These two functions are taken with modifications from macrotypes/stx-utils, which implement a
@@ -102,3 +105,32 @@
 (define (generate-bound-temporary [name-base 'g])
   (first (generate-bound-temporaries (list name-base))))
 
+; Modifies the property of a syntax object by applying a procedure to its value. If the syntax object
+; does not contain any such property, the original syntax object is returned. Otherwise, the
+; property’s value is recursively traversed as a tree of cons pairs, and the procedure is applied to
+; each leaf to produce a new result.
+(define (adjust-property stx key proc)
+  (let ([val (syntax-property stx key)])
+    (if val
+        (syntax-property stx key
+                         (let loop ([val val])
+                           (cond [(list? val) (map loop val)]
+                                 [(pair? val) (cons (loop (car val)) (loop (cdr val)))]
+                                 [else (proc val)])))
+        stx)))
+
+; Like adjust-property, but recursively walks the syntax object and applies the function to each
+; subform. Handles arming and disarming as necessary.
+(define (recursively-adjust-property stx key proc)
+  (let loop ([stx stx])
+    (let* ([disarmed (syntax-disarm stx #f)]
+           [result (~> (match (syntax-e disarmed)
+                         [(list a ...) (map loop a)]
+                         [(list* a ..1 b) (append (map loop a) (loop b))]
+                         [a a])
+                       (datum->syntax disarmed _ disarmed disarmed)
+                       (adjust-property key proc)
+                       (syntax-rearm stx))])
+      (when (syntax-tainted? result)
+        (raise-syntax-error 'recursively-adjust-property "could not disarm syntax object" stx))
+      result)))

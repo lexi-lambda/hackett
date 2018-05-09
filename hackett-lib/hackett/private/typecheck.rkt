@@ -51,7 +51,8 @@
          current-type-context modify-type-context
          register-global-class-instance! constr->instances lookup-instance!
          reduce-context type-reduce-context
-         attach-type attach-expected get-type get-expected make-typed-var-transformer
+         attach-type attach-expected get-type get-expected apply-current-subst-in-tooltips
+         make-typed-var-transformer
 
          (for-template (all-from-out hackett/private/type-language)
                        local-class-instances @%superclasses-key))
@@ -576,9 +577,51 @@
 
 ;; -------------------------------------------------------------------------------------------------
 
-(define/contract (attach-type stx t)
-  (-> syntax? type? syntax?)
-  (syntax-property stx ': t))
+; To support type tooltips, we attach 'mouse-over-tooltips properties to syntax objects whenever we
+; attach a type, unless the 'omit-type-tooltip property is already present. When we attach these
+; tooltips, we might not know the fully-solved type yet, so we perform a second pass after the module
+; is fully-expanded that applies the current substitution whenever it sees a type. It’s important to
+; apply this substitution while the module is still being expanded, since otherwise, the type context
+; will be empty!
+;
+; To support this, we wrap the type inside a deferred-type-in-tooltip struct. This struct cooperates
+; with the 'mouse-over-tooltips property by being a procedure, so even if we somehow fail to discover
+; the property and evaluate it earlier, we’ll at least get *some* information. When
+; apply-current-subst-in-tooltips is called, however, we evaluate the thunk early and replace the
+; property with the new value, improving the information in the tooltips.
+
+(struct deferred-type-in-tooltip (type)
+  #:property prop:procedure
+  (λ (self) (type->string (apply-current-subst (deferred-type-in-tooltip-type self)))))
+
+(define/contract (attach-type stx t #:tooltip-src [tooltip-src stx])
+  (->* [syntax? type?] [#:tooltip-src any/c] syntax?)
+  (let ([stx* (syntax-property stx ': t)])
+    (if (and (not (syntax-property tooltip-src 'omit-type-tooltip))
+             (syntax-source tooltip-src)
+             (syntax-position tooltip-src)
+             (syntax-span tooltip-src))
+        (syntax-property
+         stx* 'mouse-over-tooltips
+         (syntax-parse tooltip-src
+           ; If it’s a pair, just add the tooltip “on the parens”.
+           [(_ . _)
+            (cons
+             (vector tooltip-src
+                     (sub1 (syntax-position tooltip-src))
+                     (syntax-position tooltip-src)
+                     (deferred-type-in-tooltip t))
+             (vector tooltip-src
+                     (+ (sub1 (syntax-position tooltip-src)) (sub1 (syntax-span tooltip-src)))
+                     (+ (sub1 (syntax-position tooltip-src)) (syntax-span tooltip-src))
+                     (deferred-type-in-tooltip t)))]
+           ; Otherwise, add the tooltip on the whole region.
+           [_
+            (vector tooltip-src
+                    (sub1 (syntax-position tooltip-src))
+                    (+ (sub1 (syntax-position tooltip-src)) (syntax-span tooltip-src))
+                    (deferred-type-in-tooltip t))]))
+        stx*)))
 (define/contract (attach-expected stx t)
   (-> syntax? type? syntax?)
   (syntax-property stx ':⇐ t))
@@ -592,6 +635,17 @@
   (let loop ([val (syntax-property stx ':⇐)])
     (if (pair? val) (loop (car val)) val)))
 
+(define (apply-current-subst-in-tooltips stx)
+  (recursively-adjust-property
+   stx 'mouse-over-tooltips
+   (match-lambda
+     [(vector a b c (? deferred-type-in-tooltip? d))
+      (vector a b c (d))]
+     [other other])))
+
 (define/contract (make-typed-var-transformer x t)
   (-> identifier? type? any)
-  (make-variable-like-transformer (attach-type x t)))
+  (make-variable-like-transformer
+   ; Adjust source location information before calling attach-type so that tooltips end up in the
+   ; right place.
+   (λ (stx) (attach-type (replace-stx-loc x stx) t))))
