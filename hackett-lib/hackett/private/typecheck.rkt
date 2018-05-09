@@ -124,10 +124,7 @@
     [(#%type:wobbly-var x^) (string->symbol (format "~a^" (syntax-e #'x^)))]
     [(#%type:rigid-var x^) (syntax-e #'x^)]
     [(#%type:con name) (syntax-e #'name)]
-    ;; Here -> is the one provided by type-language.rkt, so its fixity
-    ;; must be hard-coded.
-    [{~->+ t ...} (infix-type->string #'-> 'right this-syntax)]
-    [{~#%type:app+ (#%type:con op:infix-operator) _ _}
+    [{~#%type:app+ (#%type:con {~var op (infix-operator #:default-fixity #f)}) _ _}
      (infix-type->string #'op (attribute op.fixity) this-syntax)]
     [{~#%type:app+ t ...} (map type->datum (attribute t))]
     [{~#%type:forall* [x ...+] {~#%type:qual* [constr ...+] t}}

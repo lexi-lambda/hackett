@@ -15,6 +15,7 @@
                      syntax/parse/experimental/template
                      threading
 
+                     hackett/private/infix
                      hackett/private/util/stx)
          syntax/parse/define)
 
@@ -307,17 +308,19 @@
                               ({~literal #%type:con} {~literal #,con-id}))
                           pat ...))])))))
 
-(define-simple-macro (define-base-type name:id)
+(define-simple-macro (define-base-type name:id {~optional fixity-ann:fixity-annotation})
   #:with {~var ~name} (format-id #'name "~~~a" #'name #:source #'name #:props #'name)
   ; Ensure that the binding does not have either the type or the value scope on it. Otherwise, if the
   ; type appears in a fully-expanded type or value, and the namespace on the resulting piece of syntax
   ; is flipped, the identifier can become unbound.
   #:with name- (datum->syntax #'here (syntax-e #'name) #'name)
+  #:with fixity (attribute fixity-ann.fixity)
   (begin
-    (define-syntax name- (make-variable-like-transformer
+    (define-syntax name- (make-infix-variable-like-transformer
                           (λ (name-id)
-                            #`(#%type:con #,(replace-stx-loc (quote-syntax name-) name-id)))))
-    (define-syntax name (make-rename-transformer #'name-))
+                            #`(#%type:con #,(replace-stx-loc (quote-syntax name-) name-id)))
+                          'fixity))
+    (define-syntax name (make-rename-transformer (quote-syntax name-)))
     (begin-for-syntax
       (define-syntax ~name (make-type-con-pattern-expander (quote-syntax name))))))
 
@@ -328,7 +331,7 @@
 ; handled specially by the typechecker in order to implement higher-rank polymorphism, so they are
 ; defined here.
 
-(define-base-type ->)
+(define-base-type -> #:fixity right)
 
 (begin-for-syntax
   (define-syntax-class nested-->s

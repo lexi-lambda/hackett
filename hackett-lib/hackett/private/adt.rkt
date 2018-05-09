@@ -30,11 +30,11 @@
   (provide (contract-out [struct type-constructor ([type type?]
                                                    [arity exact-nonnegative-integer?]
                                                    [data-constructors (listof identifier?)]
-                                                   [fixity operator-fixity?])]
+                                                   [fixity (or/c operator-fixity? #f)])]
                          [struct data-constructor ([macro procedure?]
                                                    [type type?]
                                                    [make-match-pat procedure?]
-                                                   [fixity operator-fixity?])])))
+                                                   [fixity (or/c operator-fixity? #f)])])))
 
 (begin-for-syntax
   (define-splicing-syntax-class type-constructor-spec
@@ -472,7 +472,7 @@
    ; quantify the type using the type variables in τ, then evaluate the type
    #:with τ_con:type #'(forall [τ.arg ...] τ_con_unquantified)
    #:with [field ...] (generate-temporaries (attribute constructor.arg))
-   #:with fixity-expr (preservable-property->expression (or (attribute constructor.fixity) 'left))
+   #:with fixity (attribute constructor.fixity)
    #`(begin-
        (define-values- [] τ_con.residual)
        ; check if the constructor is nullary or not
@@ -488,7 +488,7 @@
                     (make-typed-var-transformer #'tag- (quote-syntax τ_con.expansion))
                     (quote-syntax τ_con.expansion)
                     (match-lambda [(list) #'(app force- (==- tag-))])
-                    fixity-expr)))
+                    'fixity)))
              ; if it isn’t, define a constructor function
              #`(splicing-local- [(struct- tag- (field ...) #:transparent
                                           #:reflection-name 'constructor.tag)
@@ -502,7 +502,7 @@
                                      (quote-syntax τ_con.expansion)
                                      (match-lambda [(list field ...)
                                                     #`(app force- (tag- #,field ...))])
-                                     fixity-expr)))))])
+                                     'fixity)))))])
 
 (define-syntax-parser data
   [(_ τ:type-constructor-spec constructor:data-constructor-spec ...
@@ -510,13 +510,13 @@
        {~seq #:deriving [{~type {~var class-id (class-id #:require-deriving-transformer? #t)}} ...]}
        #:defaults ([[class-id 1] '()])})
    #:with [τ*:type-constructor-spec] (type-namespace-introduce #'τ)
-   #:with fixity-expr (preservable-property->expression (or (attribute τ.fixity) 'left))
+   #:with fixity (attribute τ.fixity)
    #`(begin-
        (define-syntax- τ*.tag (type-constructor
                                #'(#%type:con τ*.tag)
                                '#,(attribute τ*.len)
                                (list #'constructor.tag ...)
-                               fixity-expr))
+                               'fixity))
        (define-data-constructor τ* constructor) ...
        (derive-instance class-id τ*.tag) ...)])
 
