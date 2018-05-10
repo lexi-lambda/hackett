@@ -14,6 +14,7 @@
          syntax/parse/define
 
          (for-syntax hackett/private/infix
+                     hackett/private/typeclass
                      hackett/private/util/stx)
          (except-in hackett/private/base @%app)
          (only-in (unmangle-types-in #:no-introduce (only-types-in hackett/private/kernel))
