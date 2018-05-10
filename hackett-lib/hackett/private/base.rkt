@@ -241,9 +241,7 @@
       #:literal-sets [type-literals]
       [(#%type:wobbly-var x^)
        #:with [x1^ x2^] (generate-temporaries #'[x^ x^])
-       (modify-type-context
-        #{snoc % (ctx:solution #'x^ (template
-                                     (?->* (#%type:wobbly-var x1^) (#%type:wobbly-var x2^))))})
+       (type-inst-l! #'x^ (template (?->* (#%type:wobbly-var x1^) (#%type:wobbly-var x2^))))
        (values (quasisyntax/loc src
                  (lazy- (#%app- (force- #,e_fn) #,(τ⇐! e_arg #'(#%type:wobbly-var x1^)))))
                #'(#%type:wobbly-var x2^))]

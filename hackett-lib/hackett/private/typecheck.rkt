@@ -31,11 +31,9 @@
          hackett/private/util/list
          hackett/private/util/stx)
 
-(provide (contract-out [struct ctx:solution ([x^ identifier?] [t type?])])
-         type? type=? constr? type-mono? type-vars^ type->string
+(provide type? type=? constr? type-mono? type-vars^ type->string
          generalize inst insts type<:/full! type<:/elaborate! type<:! type-inst-l! type-inst-r!
-         ctx-elem? ctx? ctx-elem=? ctx-member? ctx-remove
-         ctx-find-solution current-ctx-solution apply-subst apply-current-subst
+         apply-subst apply-current-subst
          current-type-context modify-type-context
          attach-type attach-expected get-type get-expected apply-current-subst-in-tooltips
          make-typed-var-transformer
@@ -155,11 +153,9 @@
 
 (define/contract (ctx-find-solution ctx x^)
   (-> ctx? identifier? (or/c type? #f))
-  (and~> (findf #{and (ctx:solution? %) (free-identifier=? x^ (ctx:solution-x^ %))} ctx)
+  (and~> (findf #{and (ctx:solution? %)
+                      (free-identifier=? x^ (ctx:solution-x^ %))} ctx)
          ctx:solution-t))
-(define/contract (current-ctx-solution x^)
-  (-> identifier? (or/c type? #f))
-  (ctx-find-solution (current-type-context) x^))
 
 (define/contract (apply-subst ctx t)
   (-> ctx? type? type?)

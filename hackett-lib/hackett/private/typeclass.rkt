@@ -273,7 +273,7 @@
      #t]
     [[(#%type:wobbly-var x^) t]
      #:when (type-mono? #'t)
-     (modify-type-context #{snoc % (ctx:solution #'x^ #'t)})
+     (type-inst-l! #'x^ #'t)
      #t]
     [[(#%type:con a) (#%type:con b)]
      #:when (free-identifier=? #'a #'b)
