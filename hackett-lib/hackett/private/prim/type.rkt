@@ -1,7 +1,6 @@
 #lang hackett/private/kernel
 
-(require (except-in hackett/private/adt data)
-         hackett/private/provide)
+(require hackett/private/provide)
 
 (provide (data Unit) (data Bool) (data Tuple) (data Maybe) (data Either) (data List)
          (data IO) (data Real-World))

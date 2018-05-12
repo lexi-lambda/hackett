@@ -1,21 +1,16 @@
 #lang curly-fn racket/base
 
-(require racket/require
-         hackett/private/type-reqprov
-         hackett/private/util/require)
+(require racket/require hackett/private/type-reqprov hackett/private/util/require
 
-(require (for-syntax (multi-in racket [base format list match syntax])
-                     (multi-in syntax/parse [class/local-value experimental/specialize
-                                             experimental/template])
+         (for-syntax (multi-in racket [base format list syntax])
+                     (multi-in syntax/parse [class/local-value experimental/template])
                      syntax/id-table
                      threading)
          (postfix-in - (combine-in racket/base
                                    syntax/id-table))
          syntax/parse/define
 
-         (for-syntax hackett/private/infix
-                     hackett/private/typeclass
-                     hackett/private/util/stx)
+         (for-syntax hackett/private/infix)
          (except-in hackett/private/base @%app)
          (only-in (unmangle-types-in #:no-introduce (only-types-in hackett/private/kernel))
                   ∀ => [#%app @%app]))

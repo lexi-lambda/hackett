@@ -26,7 +26,6 @@
                      racket/provide-transform
                      racket/require-transform
                      threading)
-         racket/provide
          racket/require
          syntax/parse/define
 

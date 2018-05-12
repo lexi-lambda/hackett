@@ -10,10 +10,8 @@
                      racket/list
                      racket/match
                      racket/require-transform
-                     racket/syntax
                      syntax/parse/experimental/template)
 
-         racket/sandbox
          scribble/core
          scribble/example
          scribble/html-properties

@@ -2,8 +2,7 @@
 
 (require hackett/private/type-reqprov
          hackett/private/util/require
-         (for-syntax hackett/private/util/stx
-                     racket/base
+         (for-syntax racket/base
                      racket/provide-transform
                      syntax/parse)
          (postfix-in - racket/base)

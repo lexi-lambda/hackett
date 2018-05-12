@@ -3,7 +3,6 @@
 (require (only-in racket/base all-from-out)
 
          (except-in hackett/private/adt data)
-         (except-in hackett/private/class class)
 
          hackett/data/either
          hackett/data/list

@@ -1,10 +1,10 @@
 #lang curly-fn racket/base
 
-(require racket/require hackett/private/util/require hackett/private/type-reqprov)
+(require racket/require hackett/private/util/require hackett/private/type-reqprov
 
-(require (for-syntax (multi-in racket [base contract string format list match syntax])
+         (for-syntax (multi-in racket [base contract string format list match syntax])
                      (multi-in syntax/parse [class/local-value class/paren-shape
-                                             experimental/template experimental/specialize])
+                                             experimental/template])
                      threading
 
                      hackett/private/infix

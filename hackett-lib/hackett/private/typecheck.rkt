@@ -22,8 +22,6 @@
          racket/string
          racket/syntax
          syntax/parse
-         syntax/parse/class/local-value
-         syntax/parse/define
          syntax/parse/experimental/template
          threading
 

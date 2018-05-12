@@ -1,16 +1,14 @@
 #lang curly-fn racket/base
 
-(require racket/provide racket/require hackett/private/util/require)
+(require racket/require hackett/private/util/require)
 
-(require (for-syntax (multi-in racket [base contract list match provide-transform require-transform
-                                       syntax])
+(require (for-syntax (multi-in racket [base contract list match syntax])
                      syntax/parse/experimental/template
                      syntax/intdef
                      syntax/srcloc
                      threading)
          (postfix-in - (combine-in racket/base
-                                   racket/promise
-                                   syntax/id-table))
+                                   racket/promise))
          racket/stxparam
          syntax/parse/define
 

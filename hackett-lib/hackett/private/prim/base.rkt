@@ -3,7 +3,6 @@
 (require (only-in racket/base for-syntax)
 
          (for-syntax racket/base
-                     racket/syntax
                      syntax/parse/class/paren-shape
 
                      hackett/private/typecheck

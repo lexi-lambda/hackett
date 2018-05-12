@@ -4,8 +4,7 @@
 
 (module assertions racket/base
   (require (for-syntax racket/base
-                       hackett/private/typecheck
-                       hackett/private/util/stx)
+                       hackett/private/typecheck)
            rackunit/log
            syntax/macro-testing
            syntax/parse/define

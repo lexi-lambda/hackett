@@ -5,8 +5,7 @@
 ; functions for reducing redundant instance contexts.
 
 (require (for-template racket/base
-                       syntax/id-table
-                       hackett/private/type-language)
+                       syntax/id-table)
 
          data/gvector
          racket/contract
@@ -19,7 +18,6 @@
          syntax/id-table
 
          hackett/private/typecheck
-         hackett/private/util/list
          hackett/private/util/stx)
 
 (provide (contract-out [struct class:info ([vars (listof identifier?)]
