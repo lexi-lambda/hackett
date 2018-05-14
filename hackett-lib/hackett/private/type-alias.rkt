@@ -1,0 +1,59 @@
+#lang curly-fn racket/base
+
+(require (for-syntax racket/base
+                     racket/format
+
+                     hackett/private/infix
+                     hackett/private/typecheck
+                     hackett/private/util/stx)
+         syntax/parse/define
+
+         (only-in hackett/private/adt type-constructor-spec))
+
+(provide type)
+
+(begin-for-syntax
+  ; Alias transformer bindings; use the make-alias-transformer constructor instead of creating
+  ; instances of this struct directly.
+  (struct alias-transformer (procedure)
+    #:property prop:procedure (struct-field-index procedure))
+
+  (define (make-alias-transformer args type-template)
+    (let ([arity (length args)])
+      (alias-transformer
+       (cond
+         [(zero? arity)
+          (make-variable-like-transformer type-template)]
+         [else
+          (syntax-parser
+            [(_ t:type ...)
+             #:fail-unless (= (length (attribute t)) arity)
+                           (~a "expected " arity " argument(s) to type alias, got "
+                               (length (attribute t)))
+             (insts type-template (map cons args (attribute t)))]
+            [:id
+             #:fail-when #t (~a "expected " arity " argument(s) to type alias")
+             (error "unreachable")])])))))
+
+
+(define-syntax-parser type
+  [(_ ctor-spec:type-constructor-spec {~type type-template:expr})
+   #:with [ctor-spec*:type-constructor-spec] (type-namespace-introduce #'ctor-spec)
+   #:fail-when (attribute ctor-spec.fixity) "type aliases do not support infix notation"
+
+   ; Create a dummy internal definition context with args.
+   #:do [(define intdef-ctx (syntax-local-make-definition-context))
+         (syntax-local-bind-syntaxes (attribute ctor-spec*.arg) #f intdef-ctx)]
+   #:with [arg* ...] (map #{internal-definition-context-introduce intdef-ctx %}
+                          (attribute ctor-spec*.arg))
+
+   ; Expanding the type in `ctx` checks immediately that it is a valid type,
+   ; rather than deferring that check to when the type alias is applied.
+   #:with {~var type-template- (type intdef-ctx)} #'type-template
+   #'(begin
+       (define-values [] type-template-.residual)
+       (define-syntax ctor-spec*.tag
+         (make-alias-transformer
+          (list (quote-syntax arg*) ...)
+          (quote-syntax type-template-.expansion))))])
+

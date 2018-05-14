@@ -35,7 +35,9 @@
 (define (infix-operator? x)
   (and (has-prop:infix-operator? x)
        (operator-fixity? (infix-operator-fixity x))))
-  
+
+; Infix transformer bindings; use the make-infix-variable-like-transformer constructor instead of
+; creating instances of this struct directly.
 (struct infix-variable-like-transformer (procedure fixity)
   #:property prop:procedure (struct-field-index procedure)
   #:property prop:infix-operator
