@@ -1,6 +1,9 @@
 #lang racket/base
 
-(require (for-label hackett)
+(require hackett/private/type-reqprov
+
+         (for-label hackett
+                    (only-in (unmangle-types-in #:no-introduce (only-types-in hackett)) =>))
 
          (for-syntax racket/base
                      racket/contract
