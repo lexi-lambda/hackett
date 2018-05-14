@@ -321,7 +321,7 @@
    #:when (double-flonum? (syntax-e #'n))
    (attach-type #'(#%datum . n) (expand-type #'Double) #:tooltip-src #'n)]
   [(_ . s:str)
-   (attach-type #'(#%datum . s) (expand-type #'String) #:tooltip-src #'n)]
+   (attach-type #'(#%datum . s) (expand-type #'String) #:tooltip-src #'s)]
   [(_ . x)
    (raise-syntax-error #f "literal not supported" #'x)])
 
