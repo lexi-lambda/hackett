@@ -1081,25 +1081,40 @@ different.
 
 A flipped version of @racket[=<<].}
 
-@defform[#:literals [<-]
+@defform[#:literals [<- let letrec]
          (do do-clause ... monadic-expr)
          #:grammar
-         ([do-clause [binding-id <- monadic-expr]
-                     monadic-expr])]{
+         ([do-clause monadic-do-clause
+                     pure-do-clause]
+          [monadic-do-clause [binding-id <- monadic-expr]
+                             monadic-expr]
+          [pure-do-clause (let binding-pair ...)
+                          (letrec binding-pair ...)])]{
 
 A convenient, imperative-style shorthand for a sequence of monadic expressions chained together with
 @racket[>>=]. Each @racket[do-clause] corresponds to a single use of @racket[>>=], and each
 @racket[monadic-expr] must have a type with the shape @racket[(_m _a)], where @racket[_m] is a
 @racket[t:Monad].
 
-Any use of @racket[do] with a single subform expands to the subform: @racket[(do _expr)] is equivalent
-to @racket[_expr]. Each @racket[do-clause] introduces a use of @racket[>>=], with the result
-potentially bound to a @racket[binding-id]. That is, @racket[(do [_x <- _m] _more ...+)] expands to
-@racket[{_ma >>= (λ [_x] (do _more ...))}], and @racket[(do _m _more ...+)] expands to
-@racket[{_ma >>= (λ [_] (do _more ...))}].
+The @racket[do] form is desugared using the following rules:
 
-This is often much more readable than writing the uses of @racket[>>=] out by hand, especially when
-the result of each action must be give a name.
+@itemlist[
+  #:style 'ordered
+  @item{Any use of @racket[do] with a single subform expands to the subform—@racket[(do _expr)] is
+        equivalent to @racket[_expr].}
+  @item{Each @racket[monadic-do-clause] introduces a use of @racket[>>=], with the result potentially
+        bound to a @racket[binding-id]. That is, @racket[(do [_x <- _m] _more ...+)] expands to
+        @racket[{_ma >>= (λ [_x] (do _more ...))}], and @racket[(do _m _more ...+)] expands to
+        @racket[{_ma >>= (λ [_] (do _more ...))}].}
+  @item{Each @racket[pure-do-clause] produces a local binding form @emph{without} any uses of
+        @racket[>>=], which is useful to create local bindings that are not monadic.
+        @racket[(do (let binding-pair ...) _more ...+)] expands to
+        @racket[(let (binding-pair ...) (do _more ...))], and
+        @racket[(do (letrec binding-pair ...) _more ...+)] expands to
+        @racket[(letrec (binding-pair ...) (do _more ...))].}]
+
+Using @racket[do] is often much more readable than writing the uses of @racket[>>=] out by hand,
+especially when it is helpful to give the result of each action a name.
 
 @(hackett-examples
   (do [xs <- (tail {1 :: 2 :: 3 :: 4 :: Nil})]
@@ -1109,7 +1124,21 @@ the result of each action must be give a name.
   (do [xs <- (tail {1 :: 2 :: 3 :: Nil})]
       [ys <- (tail xs)]
       [zs <- (tail ys)]
-      (head zs)))}
+      (head zs))
+  (eval:alts
+   (do (let [x 1]
+            [y 2])
+       (println {"x is " ++ (show x)})
+       (println {"y is " ++ (show y)})
+       (let [z {x + y}])
+       (println {"x + y is " ++ (show z)}))
+   (unsafe-run-io!
+    (do (let [x 1]
+             [y 2])
+        (println {"x is " ++ (show x)})
+        (println {"y is " ++ (show y)})
+        (let [z {x + y}])
+        (println {"x + y is " ++ (show z)})))))}
 
 @defthing[ap (t:forall [m a b] (t:Monad m) t:=> {(m {a t:-> b}) t:-> (m a) t:-> (m b)})]{
 

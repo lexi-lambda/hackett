@@ -303,7 +303,11 @@
   (flip =<<))
 
 (define-syntax-parser do
+  #:literals [let letrec]
   #:datum-literals [<-]
+  [(_ {~and form ({~and form-id {~or let letrec}} ~! binding-pair ...)} rest ...+)
+   (syntax/loc #'form
+     (form-id (binding-pair ...) (do rest ...)))]
   [(_ {~and clause [~brackets ~! x:id <- e:expr]} rest ...+)
    (syntax/loc #'clause
      (>>= e (λ [x] (do rest ...))))]
@@ -311,7 +315,7 @@
    #'e]
   [(_ e:expr rest ...+)
    (syntax/loc #'e
-     (>>= e (λ [x] (do rest ...))))])
+     (>>= e (λ [_] (do rest ...))))])
 
 (defn ap : (forall [m a b] (Monad m) => {(m {a -> b}) -> (m a) -> (m b)})
   [[mf mx] (do [f <- mf]
