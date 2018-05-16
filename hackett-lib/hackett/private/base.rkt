@@ -6,6 +6,7 @@
                      syntax/parse/experimental/template
                      syntax/intdef
                      syntax/srcloc
+                     syntax/parse/class/local-value
                      threading)
          (postfix-in - (combine-in racket/base
                                    racket/promise))
@@ -324,6 +325,28 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
+(begin-for-syntax
+  ; fixity : [Maybe Fixity]
+  (struct val-decl [internal-id type fixity]
+    #:property prop:procedure
+    (λ (this stx)
+      (match-define (val-decl x- type _) this)
+      ((make-typed-var-transformer x- type) stx))
+    #:property prop:infix-operator
+    (λ (this) (val-decl-fixity this)))
+
+  (define-syntax-class id/val-decl
+    #:attributes [internal-id type.expansion type.scoped-binding-introducer]
+    [pattern (~var x (local-value val-decl?))
+             #:attr internal-id
+             (syntax-local-introduce
+              (val-decl-internal-id (attribute x.local-value)))
+             #:with type:type
+             (syntax-local-introduce
+              (val-decl-type (attribute x.local-value)))]))
+
+;; ---------------------------------------------------------------------------------------------------
+
 (define-syntax-parser @%module-begin
   [(_ form ...)
    (~> (local-expand (value-namespace-introduce
@@ -343,20 +366,48 @@
   [(_ . x)
    (raise-syntax-error #f "literal not supported" #'x)])
 
-(define-syntax-parser :
-  ; The #:exact option prevents : from performing context reduction. This is not normally important,
-  ; but it is required for forms that use : to ensure an expression has a particular shape in order to
-  ; interface with untyped (i.e. Racket) code, and therefore the resulting type is ignored. For
-  ; example, the def form wraps an expression in its expansion with :, but it binds the actual
-  ; identifier to a syntax transformer that attaches the type directly. Therefore, it needs to perform
-  ; context reduction itself prior to expanding to :, and it must use #:exact.
-  [(_ e {~type t:type} {~optional {~and #:exact exact?}})
-   #:with t_reduced (if (attribute exact?)
-                        #'t.expansion
-                        (type-reduce-context #'t.expansion))
-   (attach-type #`(let-values- ([() t.residual])
-                  #,(τ⇐! ((attribute t.scoped-binding-introducer) #'e) #'t_reduced))
-                #'t_reduced)])
+;; The `:` form behaves differently in an expression context vs. a
+;; module context by dispatching on (syntax-local-context).
+(define-syntax :
+  (λ (stx)
+    (match (syntax-local-context)
+      ; In an expression context, `:` annotates an expression with
+      ; an expected type.
+      ['expression
+       (syntax-parse stx
+         ; The #:exact option prevents : from performing context reduction. This is not normally important,
+         ; but it is required for forms that use : to ensure an expression has a particular shape in order to
+         ; interface with untyped (i.e. Racket) code, and therefore the resulting type is ignored. For
+         ; example, the def form wraps an expression in its expansion with :, but it binds the actual
+         ; identifier to a syntax transformer that attaches the type directly. Therefore, it needs to perform
+         ; context reduction itself prior to expanding to :, and it must use #:exact.
+         [(_ e {~type t:type} {~optional {~and #:exact exact?}})
+          #:with t_reduced (if (attribute exact?)
+                               #'t.expansion
+                               (type-reduce-context #'t.expansion))
+          (attach-type #`(let-values- ([() t.residual])
+                                      #,(τ⇐! ((attribute t.scoped-binding-introducer) #'e) #'t_reduced))
+                       #'t_reduced)])]
+
+      ; In other contexts, such as module-level bindings or
+      ; in the REPL, : is a type declaration for `x`, and
+      ; will be understood by `def`.
+      [_
+       (syntax-parse stx
+         [(_ x:id {~type t:type}
+             {~alt {~optional {~and #:exact exact?}}
+                   {~optional f:fixity-annotation}}
+             ...)
+          #:with x- (generate-temporary #'x)
+          #:with fixity (attribute f.fixity)
+          #:with t_reduced (if (attribute exact?)
+                               #'t.expansion
+                               (type-reduce-context #'t.expansion))
+          #'(define-syntax x
+              (let-values ([() t.residual])
+                (val-decl (quote-syntax x-)
+                          (quote-syntax t_reduced)
+                          'fixity)))])])))
 
 (define-syntax-parser λ1
   [(_ x:id e:expr)
@@ -383,31 +434,47 @@
 
 (define-syntax-parser def
   #:literals [:]
-  [(_ id:id
-      {~or {~once {~seq {~and : {~var :/use}} {~type t:type}
-                        {~optional {~and #:exact exact?}}}}
-           {~optional fixity:fixity-annotation}}
-      ...
+  [(_ x:id/val-decl e:expr)
+   #:with x- #'x.internal-id
+   (syntax-property
+    #`(define- x- (: #,((attribute x.type.scoped-binding-introducer)
+                        #'e)
+                     x.type.expansion
+                     #:exact))
+    'disappeared-use
+    (syntax-local-introduce #'x))]
+
+  [(_ x:id {~and : {~var :/use}} type:expr
+      {~and {~seq stuff ...}
+            {~seq {~alt {~optional {~and #:exact exact?}}
+                        {~optional f:fixity-annotation}}
+                  ...}}
       e:expr)
-   #:with id- (generate-temporary #'id)
-   #:with t_reduced (if (attribute exact?) #'t.expansion (type-reduce-context #'t.expansion))
-   #`(begin-
-       #,(indirect-infix-definition
-          #'(define-syntax- id (make-typed-var-transformer #'id- (quote-syntax t_reduced)))
-          (attribute fixity.fixity))
-       (define- id- (:/use #,((attribute t.scoped-binding-introducer) #'e) t_reduced #:exact)))]
+   #'(begin-
+       (:/use x type stuff ...)
+       (def x e))]
+
   [(_ id:id
-      {~optional fixity:fixity-annotation}
+      {~and {~seq fixity-stuff ...}
+            {~optional fixity:fixity-annotation}}
       e:expr)
-   #:with x^ (generate-temporary)
+   #:with x^ (generate-temporary #'z)
    #:with t_e #'(#%type:wobbly-var x^)
    #:do [(match-define-values [(list id-) e-] (τ⇐/λ! #'e #'t_e (list (cons #'id #'t_e))))]
    #:with t_gen (type-reduce-context (generalize (apply-current-subst #'t_e)))
+   #:with id-/gen (attach-type id- #'t_gen)
    #`(begin-
-       #,(indirect-infix-definition
-          #`(define-syntax- id (make-typed-var-transformer (quote-syntax #,id-) (quote-syntax t_gen)))
-          (attribute fixity.fixity))
-       (define- #,id- #,e-))])
+       (: id t_gen fixity-stuff ... #:exact)
+       (define/val-decl id
+         (let-syntax ([id-/gen
+                       (make-rename-transformer (quote-syntax id))])
+           #,e-)))])
+
+(define-syntax-parser define/val-decl
+  [(_ x:id/val-decl rhs)
+   #:with x- #'x.internal-id
+   #'(define- x- rhs)])
+
 
 (begin-for-syntax
   (struct todo-item (full summary) #:prefab))
