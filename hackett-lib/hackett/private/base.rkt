@@ -327,23 +327,26 @@
 
 (begin-for-syntax
   ; fixity : [Maybe Fixity]
-  (struct val-decl [internal-id type fixity]
+  (struct val-decl [internal-id type exact? fixity]
     #:property prop:procedure
     (λ (this stx)
-      (match-define (val-decl x- type _) this)
+      (match-define (val-decl x- type _ _) this)
       ((make-typed-var-transformer x- type) stx))
     #:property prop:infix-operator
     (λ (this) (val-decl-fixity this)))
 
   (define-syntax-class id/val-decl
-    #:attributes [internal-id type.expansion type.scoped-binding-introducer]
+    #:attributes [internal-id
+                  type.expansion type.scoped-binding-introducer
+                  exact?
+                  fixity]
     [pattern (~var x (local-value val-decl?))
-             #:attr internal-id
-             (syntax-local-introduce
-              (val-decl-internal-id (attribute x.local-value)))
-             #:with type:type
-             (syntax-local-introduce
-              (val-decl-type (attribute x.local-value)))]))
+             #:do [(match-define (val-decl x-* type* exact?* fixity*)
+                     (attribute x.local-value))]
+             #:attr internal-id (syntax-local-introduce x-*)
+             #:with type:type   (syntax-local-introduce type*)
+             #:attr exact?      exact?*
+             #:attr fixity      fixity*]))
 
 ;; ---------------------------------------------------------------------------------------------------
 
@@ -399,6 +402,7 @@
                    {~optional f:fixity-annotation}}
              ...)
           #:with x- (generate-temporary #'x)
+          #:with exct? (and (attribute exact?) #true)
           #:with fixity (attribute f.fixity)
           #:with t_reduced (if (attribute exact?)
                                #'t.expansion
@@ -407,6 +411,7 @@
               (let-values ([() t.residual])
                 (val-decl (quote-syntax x-)
                           (quote-syntax t_reduced)
+                          'exct?
                           'fixity)))])])))
 
 (define-syntax-parser λ1
