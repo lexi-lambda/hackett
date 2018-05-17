@@ -454,11 +454,9 @@
    #:with x- #'x.internal-id
    (syntax-property
     #`(define- x-
-        (#%expression
-         (: #,((attribute x.scoped-binding-introducer)
-               #'e)
-            x.type
-            #:exact)))
+        (: #,((attribute x.scoped-binding-introducer) #'e)
+           x.type
+           #:exact))
     'disappeared-use
     (syntax-local-introduce #'x))]
 
