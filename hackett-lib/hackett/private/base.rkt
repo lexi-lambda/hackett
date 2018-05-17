@@ -7,7 +7,8 @@
                      syntax/intdef
                      syntax/srcloc
                      syntax/parse/class/local-value
-                     threading)
+                     threading
+                     serialize-syntax-introducer)
          (postfix-in - (combine-in racket/base
                                    racket/promise))
          racket/stxparam
@@ -331,7 +332,7 @@
   ; forms), it searches for a `binding-declaration` and fills in `internal-id` with the
   ; actual definition. The `type` field is used as the expected type of the definition.
   ; fixity : [Maybe Fixity]
-  (struct binding-declaration [internal-id type delta-syntax fixity]
+  (struct binding-declaration [internal-id type scoped-binding-introducer fixity]
     #:property prop:procedure
     (λ (this stx)
       (match-define (binding-declaration x- type _ _) this)
@@ -342,11 +343,11 @@
   (define-syntax-class id/binding-declaration
     #:attributes [internal-id type scoped-binding-introducer fixity]
     [pattern (~var x (local-value binding-declaration?))
-             #:do [(match-define (binding-declaration x-* type* delta* fixity*)
+             #:do [(match-define (binding-declaration x-* type* sbi* fixity*)
                      (attribute x.local-value))]
              #:attr internal-id (syntax-local-introduce x-*)
              #:with type        (syntax-local-introduce type*)
-             #:attr scoped-binding-introducer (make-syntax-delta-introducer delta* #'_)
+             #:attr scoped-binding-introducer (deserialize-syntax-introducer sbi*)
              #:attr fixity      fixity*]))
 
 (define-syntax-parser define/binding-declaration
@@ -403,26 +404,25 @@
       ; will be understood by `def`.
       [_
        (syntax-parse stx
-         [(_ x:id t_unexpanded:expr
+         [(_ x:id {~type t:type}
              {~alt {~optional {~and #:exact exact?}}
                    {~optional f:fixity-annotation}}
              ...)
           #:with x- (generate-temporary #'x)
           #:with exct? (and (attribute exact?) #true)
           #:with fixity (attribute f.fixity)
-          #:with {~type t:type} #'t_unexpanded
           #:with t_reduced (if (attribute exact?)
                                #'t.expansion
                                (type-reduce-context #'t.expansion))
-          #:with delta (syntax-local-introduce
-                        ((attribute t.scoped-binding-introducer) #'_))
+          #:with sbi (serialize-syntax-introducer
+                      (attribute t.scoped-binding-introducer))
           #`(begin-
               (define-values- [] t.residual)
               (define-syntax- x
                 (binding-declaration
                  (quote-syntax x-)
                  (quote-syntax t_reduced)
-                 (quote-syntax delta)
+                 (quote-syntax sbi)
                  'fixity)))])])))
 
 (define-syntax-parser λ1
