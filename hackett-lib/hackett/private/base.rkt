@@ -326,31 +326,34 @@
 ;; ---------------------------------------------------------------------------------------------------
 
 (begin-for-syntax
+  ; Instances of this struct are created by `:` when declaring the types of bindings
+  ; seperately from their definitions. When a binding is defined (with `def` or related
+  ; forms), it searches for a `binding-declaration` and fills in `internal-id` with the
+  ; actual definition. The `type` field is used as the expected type of the definition.
   ; fixity : [Maybe Fixity]
-  (struct val-decl [internal-id
-                    type
-                    type-unexpanded
-                    exact?
-                    fixity]
+  (struct binding-declaration [internal-id type delta-syntax residual fixity]
     #:property prop:procedure
     (λ (this stx)
-      (match-define (val-decl x- type _ _ _) this)
+      (match-define (binding-declaration x- type _ _ _) this)
       ((make-typed-var-transformer x- type) stx))
     #:property prop:infix-operator
-    (λ (this) (val-decl-fixity this)))
+    (λ (this) (binding-declaration-fixity this)))
 
-  (define-syntax-class id/val-decl
-    #:attributes [internal-id
-                  type-unexpanded
-                  exact?
-                  fixity]
-    [pattern (~var x (local-value val-decl?))
-             #:do [(match-define (val-decl x-* _ type* exact?* fixity*)
+  (define-syntax-class id/binding-declaration
+    #:attributes [internal-id type scoped-binding-introducer residual fixity]
+    [pattern (~var x (local-value binding-declaration?))
+             #:do [(match-define (binding-declaration x-* type* delta* resid* fixity*)
                      (attribute x.local-value))]
-             #:attr internal-id       (syntax-local-introduce x-*)
-             #:with type-unexpanded   (syntax-local-introduce type*)
-             #:attr exact?            exact?*
-             #:attr fixity            fixity*]))
+             #:attr internal-id (syntax-local-introduce x-*)
+             #:with type        (syntax-local-introduce type*)
+             #:attr scoped-binding-introducer (make-syntax-delta-introducer delta* #'_)
+             #:with residual    (syntax-local-introduce resid*)
+             #:attr fixity      fixity*]))
+
+(define-syntax-parser define/binding-declaration
+  [(_ x:id/binding-declaration rhs)
+   #:with x- #'x.internal-id
+   #'(define- x- rhs)])
 
 ;; ---------------------------------------------------------------------------------------------------
 
@@ -412,12 +415,15 @@
           #:with t_reduced (if (attribute exact?)
                                #'t.expansion
                                (type-reduce-context #'t.expansion))
-          #'(define-syntax x
-              (val-decl (quote-syntax x-)
-                        (quote-syntax t_reduced)
-                        (quote-syntax t_unexpanded)
-                        'exct?
-                        'fixity))])])))
+          #:with delta (syntax-local-introduce
+                        ((attribute t.scoped-binding-introducer) #'_))
+          #`(define-syntax x
+              (binding-declaration
+               (quote-syntax x-)
+               (quote-syntax t_reduced)
+               (quote-syntax delta)
+               (quote-syntax t.residual)
+               'fixity))])])))
 
 (define-syntax-parser λ1
   [(_ x:id e:expr)
@@ -444,19 +450,15 @@
 
 (define-syntax-parser def
   #:literals [:]
-  [(_ x:id/val-decl e:expr)
+  [(_ x:id/binding-declaration e:expr)
    #:with x- #'x.internal-id
-   #:with {~type t:type} #'x.type-unexpanded
-   #:with t_reduced (if (attribute x.exact?)
-                        #'t.expansion
-                        (type-reduce-context #'t.expansion))
    (syntax-property
     #`(define- x-
-        (let-values ([() t.residual])
+        (let-values ([() x.residual])
           (#%expression
-           (: #,((attribute t.scoped-binding-introducer)
+           (: #,((attribute x.scoped-binding-introducer)
                  #'e)
-              t_reduced
+              x.type
               #:exact))))
     'disappeared-use
     (syntax-local-introduce #'x))]
@@ -482,15 +484,10 @@
    #:with id-/gen (attach-type id- #'t_gen)
    #`(begin-
        (: id t_gen fixity-stuff ... #:exact)
-       (define/val-decl id
+       (define/binding-declaration id
          (let-syntax ([id-/gen
                        (make-rename-transformer (quote-syntax id))])
            #,e-)))])
-
-(define-syntax-parser define/val-decl
-  [(_ x:id/val-decl rhs)
-   #:with x- #'x.internal-id
-   #'(define- x- rhs)])
 
 
 (begin-for-syntax
