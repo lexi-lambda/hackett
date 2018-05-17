@@ -327,26 +327,30 @@
 
 (begin-for-syntax
   ; fixity : [Maybe Fixity]
-  (struct val-decl [internal-id type exact? fixity]
+  (struct val-decl [internal-id
+                    type
+                    type-unexpanded
+                    exact?
+                    fixity]
     #:property prop:procedure
     (λ (this stx)
-      (match-define (val-decl x- type _ _) this)
+      (match-define (val-decl x- type _ _ _) this)
       ((make-typed-var-transformer x- type) stx))
     #:property prop:infix-operator
     (λ (this) (val-decl-fixity this)))
 
   (define-syntax-class id/val-decl
     #:attributes [internal-id
-                  type.expansion type.scoped-binding-introducer
+                  type-unexpanded
                   exact?
                   fixity]
     [pattern (~var x (local-value val-decl?))
-             #:do [(match-define (val-decl x-* type* exact?* fixity*)
+             #:do [(match-define (val-decl x-* _ type* exact?* fixity*)
                      (attribute x.local-value))]
-             #:attr internal-id (syntax-local-introduce x-*)
-             #:with type:type   (syntax-local-introduce type*)
-             #:attr exact?      exact?*
-             #:attr fixity      fixity*]))
+             #:attr internal-id       (syntax-local-introduce x-*)
+             #:with type-unexpanded   (syntax-local-introduce type*)
+             #:attr exact?            exact?*
+             #:attr fixity            fixity*]))
 
 ;; ---------------------------------------------------------------------------------------------------
 
@@ -397,22 +401,23 @@
       ; will be understood by `def`.
       [_
        (syntax-parse stx
-         [(_ x:id {~type t:type}
+         [(_ x:id t_unexpanded:expr
              {~alt {~optional {~and #:exact exact?}}
                    {~optional f:fixity-annotation}}
              ...)
           #:with x- (generate-temporary #'x)
           #:with exct? (and (attribute exact?) #true)
           #:with fixity (attribute f.fixity)
+          #:with {~type t:type} #'t_unexpanded
           #:with t_reduced (if (attribute exact?)
                                #'t.expansion
                                (type-reduce-context #'t.expansion))
           #'(define-syntax x
-              (let-values ([() t.residual])
-                (val-decl (quote-syntax x-)
-                          (quote-syntax t_reduced)
-                          'exct?
-                          'fixity)))])])))
+              (val-decl (quote-syntax x-)
+                        (quote-syntax t_reduced)
+                        (quote-syntax t_unexpanded)
+                        'exct?
+                        'fixity))])])))
 
 (define-syntax-parser λ1
   [(_ x:id e:expr)
@@ -441,11 +446,18 @@
   #:literals [:]
   [(_ x:id/val-decl e:expr)
    #:with x- #'x.internal-id
+   #:with {~type t:type} #'x.type-unexpanded
+   #:with t_reduced (if (attribute x.exact?)
+                        #'t.expansion
+                        (type-reduce-context #'t.expansion))
    (syntax-property
-    #`(define- x- (: #,((attribute x.type.scoped-binding-introducer)
-                        #'e)
-                     x.type.expansion
-                     #:exact))
+    #`(define- x-
+        (let-values ([() t.residual])
+          (#%expression
+           (: #,((attribute t.scoped-binding-introducer)
+                 #'e)
+              t_reduced
+              #:exact))))
     'disappeared-use
     (syntax-local-introduce #'x))]
 
