@@ -18,8 +18,9 @@ Here are some of the features that Hackett supports **right now**:
 
 Here are some of the features that still need to be implemented for a minimal release:
 
+  - Orphan/overlapping instance detection/prevention
+  - Strictness analysis
   - Kindchecking
-  - Type expanders (of which type aliases are a subset)
 
 And finally, here is a (non-exhaustive) collection of features I would like to eventually support:
 
