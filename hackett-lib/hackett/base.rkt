@@ -1,11 +1,13 @@
 #lang racket/base
 
 (require (only-in hackett/private/adt case* case λ λ* lambda lambda* defn _)
+         (only-in hackett/private/type-alias type)
          (only-in hackett/private/class instance derive-instance)
          (except-in hackett/private/kernel λ lambda)
          hackett/private/provide
          (only-in hackett/private/toplevel @%top-interaction))
 (provide (all-from-out hackett/private/adt)
+         (all-from-out hackett/private/type-alias)
          (all-from-out hackett/private/class)
          (all-from-out hackett/private/kernel)
          (all-from-out hackett/private/provide)

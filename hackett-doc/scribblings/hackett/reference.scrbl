@@ -107,7 +107,7 @@ following combination of @racket[def], @racket[lambda], and @racket[case*]:
 The @racket[defn] form is generally preferred when defining top-level functions.
 
 @(hackett-examples
-  (defn square : (t:-> t:Integer t:Integer)
+  (defn square : {t:Integer t:-> t:Integer}
     [[x] {x * x}])
   (eval:check (square 5) 25))}
 
@@ -307,6 +307,47 @@ specified controls the fixity used by the associated @racket[type-constructor-id
               [[(Leaf a)] {"(Leaf " ++ (show a) ++ ")"}])])
   {(Leaf 1) :&: (Leaf 2) :&: (Leaf 3)})}
 @(close-eval data-examples-eval)
+
+@subsection[#:tag "reference-type-alias"]{Defining type aliases}
+
+@(define alias-examples-eval (make-hackett-eval))
+@defform[#:literals [left right]
+         (type type-clause type-expr)
+         #:grammar
+         ([type-clause name-id
+                       (code:line (name-id param-id ...+))]
+          [maybe-fixity-ann (code:line #:fixity fixity)
+                            (code:line)]
+          [fixity left right])]{
+
+Defines a @deftech{type alias} named @racket[name-id]. Uses of @racket[name-id] are equivalent to
+uses of the type specified in @racket[type-expr]. If @racket[type-clause] is a bare @racket[name-id],
+then @racket[name-id] is bound directly to the type alias.
+
+@(hackett-examples
+  #:eval alias-examples-eval
+  (type Num Double)
+  (def n : Num 1.5)
+  (#:type n))
+
+If @racket[param-id]s are specified, then uses of the type alias must supply as many arguments as
+there are @racket[param-id]s. The arguments are supplied like those to a type constructor—i.e. 
+@racket[(name-id type-argument ...)]—and the resulting type is @racket[type-expr] with each
+@racket[param-id] substituted with the corresponding @racket[type-argument].
+
+Though the application of a type alias is syntactically similar to the application of a type
+constructor, type aliases are effectively type-level macros, and they may not be partially applied.
+All uses of a type alias must be fully saturated.
+
+@(hackett-examples
+  #:eval alias-examples-eval
+  (type (Predicate a) {a t:-> t:Bool})
+  (def zero? : (Predicate t:Integer) (== 0))
+  (#:type zero?)
+  (eval:check (zero? 0) True)
+  (eval:check ((: zero? (Predicate t:Integer)) 0) True)
+  (eval:error (: zero? Predicate)))
+@(close-eval alias-examples-eval)}
 
 @subsection[#:tag "reference-numbers"]{Numbers}
 

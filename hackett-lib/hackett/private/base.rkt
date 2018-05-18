@@ -187,18 +187,36 @@
                                              syntax-local-introduce)
                                        xs)])
         (for/lists [es- ts_es]
-                 ([k (in-list ks)]
-                  [e (in-list (map car es+ts))]
-                  [e/elab (in-list es/elab)]
-                  [scoped-intdef-ctx (in-list scoped-intdef-ctxs)])
-        (let* ([e- (local-expand e/elab 'expression stop-ids (if scoped-intdef-ctx
-                                                                 (list intdef-ctx scoped-intdef-ctx)
-                                                                 intdef-ctx))]
-               [t_e (get-type e-)])
-          (unless t_e (raise-syntax-error #f "no inferred type" e))
-          (k (syntax-property e- 'disappeared-binding
-                              (cons (syntax-property e 'disappeared-binding) disappeared-bindings))
-             t_e)))))
+                   ([k (in-list ks)]
+                    [e (in-list (map car es+ts))]
+                    [e/elab (in-list es/elab)]
+                    [scoped-intdef-ctx (in-list scoped-intdef-ctxs)])
+          (let* ([e- (let ([intdef-ctxs (if scoped-intdef-ctx
+                                            (list intdef-ctx scoped-intdef-ctx)
+                                            intdef-ctx)])
+                       (let loop ([e e/elab])
+                         (syntax-parse (local-expand e 'expression stop-ids intdef-ctxs)
+                           #:literals [#%expression]
+                           ; Expand through #%expression forms if we don’t find an inferred type
+                           ; immediately and hope that the nested expression will have a type.
+                           [(head:#%expression e*)
+                            #:when (not (get-type this-syntax))
+                            (syntax-track-origin (loop #'e*) this-syntax #'head)]
+                           ; If we find a bare identifier, it’s either a variable, an out-of-context
+                           ; identifier, or an unbound identifier that stopped expanding just before
+                           ; introducing racket/base’s #%top (since that #%top is implicitly added to
+                           ; the stop list). The former two cases are okay, but the latter is not, so
+                           ; keep going to trigger the unbound identifier error if the identifier is
+                           ; actually unbound.
+                           [_:id
+                            #:when (not (identifier-binding this-syntax))
+                            (local-expand this-syntax 'expression '() intdef-ctxs)]
+                           [_ this-syntax])))]
+                 [t_e (get-type e-)])
+            (unless t_e (raise-syntax-error #f "no inferred type" e-))
+            (k (syntax-property e- 'disappeared-binding
+                                (cons (syntax-property e 'disappeared-binding) disappeared-bindings))
+               t_e)))))
 
     ; With everything inferred and checked, all that’s left to do is return the results.
     (values xs-* es- ts_es))
