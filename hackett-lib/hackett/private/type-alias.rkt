@@ -15,10 +15,12 @@
 (begin-for-syntax
   ; Alias transformer bindings; use the make-alias-transformer constructor instead of creating
   ; instances of this struct directly.
-  (struct alias-transformer (procedure)
-    #:property prop:procedure (struct-field-index procedure))
+  (struct alias-transformer (procedure fixity)
+    #:property prop:procedure (struct-field-index procedure)
+    #:property prop:infix-operator
+    (λ (self) (alias-transformer-fixity self)))
 
-  (define (make-alias-transformer args type-template)
+  (define (make-alias-transformer args type-template fixity)
     (let ([arity (length args)])
       (alias-transformer
        (cond
@@ -33,13 +35,14 @@
              (insts type-template (map cons args (attribute t)))]
             [:id
              #:fail-when #t (~a "expected " arity " argument(s) to type alias")
-             (error "unreachable")])])))))
+             (error "unreachable")])])
+       fixity))))
 
 
 (define-syntax-parser type
   [(_ ctor-spec:type-constructor-spec {~type type-template:expr})
    #:with [ctor-spec*:type-constructor-spec] (type-namespace-introduce #'ctor-spec)
-   #:fail-when (attribute ctor-spec.fixity) "type aliases do not support infix notation"
+   #:with fixity (attribute ctor-spec.fixity)
 
    ; Create a dummy internal definition context with args.
    #:do [(define intdef-ctx (syntax-local-make-definition-context))
@@ -55,5 +58,6 @@
        (define-syntax ctor-spec*.tag
          (make-alias-transformer
           (list (quote-syntax arg*) ...)
-          (quote-syntax type-template-.expansion))))])
+          (quote-syntax type-template-.expansion)
+          'fixity)))])
 

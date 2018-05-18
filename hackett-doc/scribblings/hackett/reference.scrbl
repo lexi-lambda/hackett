@@ -315,7 +315,10 @@ specified controls the fixity used by the associated @racket[type-constructor-id
          (type type-clause type-expr)
          #:grammar
          ([type-clause name-id
-                       (code:line (name-id param-id ...+))])]{
+                       (code:line (name-id param-id ...+))]
+          [maybe-fixity-ann (code:line #:fixity fixity)
+                            (code:line)]
+          [fixity left right])]{
 
 Defines a @deftech{type alias} named @racket[name-id]. Uses of @racket[name-id] are equivalent to
 uses of the type specified in @racket[type-expr]. If @racket[type-clause] is a bare @racket[name-id],
@@ -326,11 +329,6 @@ then @racket[name-id] is bound directly to the type alias.
   (type Num Double)
   (def n : Num 1.5)
   (#:type n))
-
-@margin-note{
-  Type aliases with @racket[param-id]s can only be used with prefix notation, using
-  @racket[(name-id type-argument ...)] rather than
-  @racket[{type-argument name-id type-argument}].}
 
 If @racket[param-id]s are specified, then uses of the type alias must supply as many arguments as
 there are @racket[param-id]s. The arguments are supplied like those to a type constructor—i.e. 

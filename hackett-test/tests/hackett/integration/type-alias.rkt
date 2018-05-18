@@ -29,3 +29,10 @@
 
 (test {{4 int= 6} ==! False})
 (test {{4 int= 4} ==! True})
+
+(type {a ~> b} #:fixity right {a -> (Maybe b)})
+
+(def head* : (forall [a] {(List a) ~> a}) head)
+
+(test {(head* {1 :: Nil}) ==! (Just 1)})
+(test {(head* {Nil : (List Integer)}) ==! Nothing})
