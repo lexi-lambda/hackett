@@ -312,7 +312,7 @@ specified controls the fixity used by the associated @racket[type-constructor-id
 
 @(define alias-examples-eval (make-hackett-eval))
 @defform[#:literals [left right]
-         (type type-clause type-expr)
+         (type type-clause maybe-fixity-ann type-expr)
          #:grammar
          ([type-clause name-id
                        (code:line (name-id param-id ...+))]
@@ -335,17 +335,20 @@ there are @racket[param-id]s. The arguments are supplied like those to a type co
 @racket[(name-id type-argument ...)]—and the resulting type is @racket[type-expr] with each
 @racket[param-id] substituted with the corresponding @racket[type-argument].
 
-Though the application of a type alias is syntactically similar to the application of a type
-constructor, type aliases are effectively type-level macros, and they may not be partially applied.
-All uses of a type alias must be fully saturated.
-
 @(hackett-examples
   #:eval alias-examples-eval
   (type (Predicate a) {a t:-> t:Bool})
   (def zero? : (Predicate t:Integer) (== 0))
   (#:type zero?)
   (eval:check (zero? 0) True)
-  (eval:check ((: zero? (Predicate t:Integer)) 0) True)
+  (eval:check ((: zero? (Predicate t:Integer)) 0) True))
+
+Though the application of a type alias is syntactically similar to the application of a type
+constructor, type aliases are effectively type-level macros, and they may not be partially applied.
+All uses of a type alias must be fully saturated.
+
+@(hackett-examples
+  #:eval alias-examples-eval
   (eval:error (: zero? Predicate)))
 @(close-eval alias-examples-eval)}
 
