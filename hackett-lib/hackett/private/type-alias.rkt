@@ -2,6 +2,8 @@
 
 (require (for-syntax racket/base
                      racket/format
+                     syntax/intdef
+                     threading
 
                      hackett/private/infix
                      hackett/private/typecheck
@@ -28,11 +30,13 @@
           (make-variable-like-transformer type-template)]
          [else
           (syntax-parser
-            [(_ t:type ...)
+            [(head:id t:type ...)
              #:fail-unless (= (length (attribute t)) arity)
                            (~a "expected " arity " argument(s) to type alias, got "
                                (length (attribute t)))
-             (insts type-template (map cons args (attribute t)))]
+             (for/fold ([result (insts type-template (map cons args (attribute t)))])
+                       ([residual (in-list (attribute t.residual))])
+               (syntax-track-origin result residual #'head))]
             [:id
              #:fail-when #t (~a "expected " arity " argument(s) to type alias")
              (error "unreachable")])])
@@ -53,11 +57,12 @@
    ; Expanding the type in `ctx` checks immediately that it is a valid type,
    ; rather than deferring that check to when the type alias is applied.
    #:with {~var type-template- (type intdef-ctx)} #'type-template
-   #'(begin
-       (define-values [] type-template-.residual)
-       (define-syntax ctor-spec*.tag
-         (make-alias-transformer
-          (list (quote-syntax arg*) ...)
-          (quote-syntax type-template-.expansion)
-          'fixity)))])
+   (~>> #'(begin
+            (define-values [] type-template-.residual)
+            (define-syntax ctor-spec*.tag
+              (make-alias-transformer
+               (list (quote-syntax arg*) ...)
+               (quote-syntax type-template-.expansion)
+               'fixity)))
+        (internal-definition-context-track intdef-ctx))])
 
