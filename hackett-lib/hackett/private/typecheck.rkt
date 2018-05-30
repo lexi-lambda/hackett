@@ -21,6 +21,7 @@
          racket/match
          racket/string
          racket/syntax
+         syntax/id-table
          syntax/parse
          syntax/parse/experimental/template
          threading
@@ -32,7 +33,7 @@
 (provide type? type=? constr? type-mono? type-vars^ type->string
          generalize inst insts type<:/full! type<:/elaborate! type<:! type-inst-l! type-inst-r!
          apply-subst apply-current-subst
-         current-type-context modify-type-context
+         empty-ctx current-type-context modify-type-context
          attach-type attach-expected get-type get-expected apply-current-subst-in-tooltips
          make-typed-var-transformer
          (for-template (all-from-out hackett/private/type-language)))
@@ -133,27 +134,12 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; type contexts
 
-(struct ctx:solution (x^ t) #:prefab)
-
-(define (ctx-elem? x) ((disjoin ctx:solution?) x))
-(define (ctx? x) ((listof ctx-elem?) x))
-(define/contract ctx-elem=?
-  (-> ctx-elem? ctx-elem? boolean?)
-  (match-lambda**
-   [[(ctx:solution x^ a) (ctx:solution y^ b)] (and (free-identifier=? x^ y^) (type=? a b))]
-   [[_ _] #f]))
-(define/contract (ctx-member? ctx elem)
-  (-> ctx? ctx-elem? boolean?)
-  (and (member elem ctx ctx-elem=?) #t))
-(define/contract (ctx-remove ctx elem)
-  (-> ctx? ctx-elem? ctx?)
-  (remove elem ctx ctx-elem=?))
+(define (ctx? x) (immutable-free-id-table? x))
+(define empty-ctx (make-immutable-free-id-table))
 
 (define/contract (ctx-find-solution ctx x^)
   (-> ctx? identifier? (or/c type? #f))
-  (and~> (findf #{and (ctx:solution? %)
-                      (free-identifier=? x^ (ctx:solution-x^ %))} ctx)
-         ctx:solution-t))
+  (free-id-table-ref ctx x^ #f))
 
 (define/contract (apply-subst ctx t)
   (-> ctx? type? type?)
@@ -178,7 +164,7 @@
   (-> type? type?)
   (let* ([xs^ (type-vars^ t)]
          [xs (generate-temporaries xs^)]
-         [subst (map ctx:solution xs^ xs)])
+         [subst (make-immutable-free-id-table (map cons xs^ xs))])
     (expand-type (quasitemplate (?#%type:forall* #,xs #,(apply-subst subst t))))))
 
 (define/contract (inst t x s)
@@ -197,7 +183,7 @@
                                   intdef-ctx))
     (expand-type t intdef-ctx)))
 
-(define/contract current-type-context (parameter/c ctx?) (make-parameter '()))
+(define/contract current-type-context (parameter/c ctx?) (make-parameter empty-ctx))
 (define/contract (modify-type-context f)
   (-> (-> ctx? ctx?) void?)
   (current-type-context (f (current-type-context))))
@@ -291,12 +277,12 @@
     ; InstLSolve
     [_
      #:when (type-mono? t)
-     (modify-type-context #{snoc % (ctx:solution x^ t)})]
+     (modify-type-context #{free-id-table-set % x^ t})]
     ; InstLArr
     [(~-> a b)
      #:with [x1^ x2^] (generate-temporaries (list x^ x^))
      (modify-type-context
-      #{snoc % (ctx:solution x^ (template (?->* (#%type:wobbly-var x1^) (#%type:wobbly-var x2^))))})
+      #{free-id-table-set % x^ #'(?->* (#%type:wobbly-var x1^) (#%type:wobbly-var x2^))})
      (type-inst-r! #'a #'x1^)
      (type-inst-l! #'x2^ (apply-current-subst #'b))]
     ; InstLAllR
@@ -313,12 +299,12 @@
     ; InstRSolve
     [_
      #:when (type-mono? t)
-     (modify-type-context #{snoc % (ctx:solution x^ t)})]
+     (modify-type-context #{free-id-table-set % x^ t})]
     ; InstRArr
     [(~-> a b)
      #:with [x1^ x2^] (generate-temporaries (list x^ x^))
      (modify-type-context
-      #{snoc % (ctx:solution x^ (template (?->* (#%type:wobbly-var x1^) (#%type:wobbly-var x2^))))})
+      #{free-id-table-set % x^ #'(?->* (#%type:wobbly-var x1^) (#%type:wobbly-var x2^))})
      (type-inst-l! #'x1^ #'a)
      (type-inst-r! (apply-current-subst #'b) #'x2^)]
     ; InstRAllL

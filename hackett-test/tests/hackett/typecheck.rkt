@@ -15,7 +15,7 @@
 
   (define-syntax-parser typecheck!
     [(_ e:expr)
-     (parameterize ([current-type-context '()])
+     (parameterize ([current-type-context empty-ctx])
        (define-values [e- t] (τ⇒! #'e))
        #`(quote-syntax #,(apply-current-subst t)))])
 
