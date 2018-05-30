@@ -200,7 +200,8 @@
   (struct pat-base (stx) #:transparent)
   (struct pat-var pat-base (id) #:transparent)
   (struct pat-hole pat-base () #:transparent)
-  (struct pat-con pat-base (constructor pats) #:transparent)
+  (struct pat-con pat-base (constructor) #:transparent)
+  (struct pat-app pat-base (head pats) #:transparent)
   (struct pat-str pat-base (str) #:transparent)
   (struct pat-int pat-base (int) #:transparent)
   (define pat? pat-base?)
@@ -218,23 +219,13 @@
              #:with :pat (local-apply-transformer trans #'pat-exp 'expression)]
 
     [pattern {~and constructor:data-constructor-val ~!}
-             #:do [(define val (attribute constructor.local-value))
-                   (define arity (data-constructor-arity val))]
-             #:fail-unless (zero? arity)
-                           (~a "cannot match ‘" (syntax-e #'constructor) "’ as a value; it is a "
-                               "constructor with arity " arity)
-             #:attr pat (pat-con this-syntax val '())
+             #:do [(define val (attribute constructor.local-value))]
+             #:attr pat (pat-con #'constructor val)
              #:attr disappeared-uses (list (syntax-local-introduce #'constructor))]
-    [pattern (~parens constructor:data-constructor-val ~! arg:pat ...)
-             #:do [(define val (attribute constructor.local-value))
-                   (define arity (data-constructor-arity val))]
-             #:fail-when {(length (attribute arg)) . < . arity}
-                         (~a "not enough arguments provided for constructor ‘"
-                             (syntax-e #'constructor) "’, which has arity " arity)
-             #:fail-when {(length (attribute arg)) . > . arity}
-                         (~a "too many arguments provided for constructor ‘"
-                             (syntax-e #'constructor) "’, which has arity " arity)
-             #:attr pat (pat-con this-syntax (attribute constructor.local-value) (attribute arg.pat))
+    [pattern (~parens head:pat ~! arg:pat ...)
+             #:attr pat (pat-app this-syntax
+                                 (attribute head.pat)
+                                 (attribute arg.pat))
              #:attr disappeared-uses (cons (syntax-local-introduce #'constructor)
                                            (append* (attribute arg.disappeared-uses)))]
     [pattern {~braces a:pat constructor:data-constructor-val b:pat}
@@ -246,7 +237,8 @@
              #:fail-when (not (= arity 2))
                          (~a "cannot match ‘" (syntax-e #'constructor) "’ infix; it has arity "
                              arity ", but constructors matched infix must have arity 2")
-             #:attr pat (pat-con this-syntax (attribute constructor.local-value)
+             #:attr pat (pat-app this-syntax
+                                 (pat-con #'constructor val)
                                  (list (attribute a.pat) (attribute b.pat)))
              #:attr disappeared-uses (cons (syntax-local-introduce #'constructor)
                                            (append (attribute a.disappeared-uses)
@@ -301,12 +293,34 @@
        (values (expand-type #'String) '() #{values #`(app force- #,str) %})]
       [(pat-int _ int)
        (values (expand-type #'Integer) '() #{values #`(app force- #,int) %})]
-      [(pat-con _ con pats)
+      [(pat-con stx con)
+       (define arity (data-constructor-arity con))
+       (unless (zero? arity)
+         (raise-syntax-error #f
+           (~a "cannot match ‘" (syntax-e stx) "’ as a value; it is a "
+               "constructor with arity " arity)
+           stx))
+       (pat⇒! (pat-app stx pat '()))]
+      [(pat-app stx (pat-con cstx con) pats)
+       (define arity (data-constructor-arity con))
+       (when {(length pats) . < . arity}
+         (raise-syntax-error #f
+           (~a "not enough arguments provided for constructor ‘"
+               (syntax-e cstx) "’, which has arity " arity)
+           stx))
+       (when {(length pats) . > . arity}
+         (raise-syntax-error #f
+           (~a "too many arguments provided for constructor ‘"
+               (syntax-e cstx) "’, which has arity " arity)
+           stx))
+
        (let*-values ([(τs_args τ_result) (data-constructor-args/result! con)]
                      [(assumps mk-pats) (pats⇐! pats τs_args)])
          (values τ_result assumps
                  (λ (ids) (let-values ([(match-pats rest) (mk-pats ids)])
-                            (values ((data-constructor-make-match-pat con) match-pats) rest)))))]))
+                            (values ((data-constructor-make-match-pat con) match-pats) rest)))))]
+      [(pat-app outer-stx (pat-base inner-stx) _)
+       (raise-syntax-error #f "expected a constructor" outer-stx inner-stx)]))
 
   (define/contract (pat⇐! pat t)
     (-> pat? type?
@@ -435,7 +449,8 @@
         ; When we hit a constructor pattern, we check the ideal. If it is a constructor, compare the
         ; tags and then recur for the sub-patterns. If it is a variable, then split the ideal into new
         ; ideals for each kind of constructor.
-        [(pat-con _ ctor sub-pats)
+        [(or (pat-app _ (pat-con _ ctor) sub-pats)
+             (and (pat-con _ ctor) (app (λ (x) '()) sub-pats)))
          (match q
            [(ideal-con ctor-tag sub-ideals)
             (and (eq? (syntax-local-value ctor-tag) ctor)
