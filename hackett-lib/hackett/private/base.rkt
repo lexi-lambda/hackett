@@ -392,10 +392,10 @@
    #:with id- (generate-temporary #'id)
    #:with t_reduced (if (attribute exact?) #'t.expansion (type-reduce-context #'t.expansion))
    #`(begin-
-       (define- id- (:/use #,((attribute t.scoped-binding-introducer) #'e) t_reduced #:exact))
        #,(indirect-infix-definition
           #'(define-syntax- id (make-typed-var-transformer #'id- (quote-syntax t_reduced)))
-          (attribute fixity.fixity)))]
+          (attribute fixity.fixity))
+       (define- id- (:/use #,((attribute t.scoped-binding-introducer) #'e) t_reduced #:exact)))]
   [(_ id:id
       {~optional fixity:fixity-annotation}
       e:expr)
@@ -404,11 +404,10 @@
    #:do [(match-define-values [(list id-) e-] (τ⇐/λ! #'e #'t_e (list (cons #'id #'t_e))))]
    #:with t_gen (type-reduce-context (generalize (apply-current-subst #'t_e)))
    #`(begin-
-       (define- #,id- #,e-)
        #,(indirect-infix-definition
-          #`(define-syntax- id
-              (make-typed-var-transformer (quote-syntax #,id-) (quote-syntax t_gen)))
-          (attribute fixity.fixity)))])
+          #`(define-syntax- id (make-typed-var-transformer (quote-syntax #,id-) (quote-syntax t_gen)))
+          (attribute fixity.fixity))
+       (define- #,id- #,e-))])
 
 (begin-for-syntax
   (struct todo-item (full summary) #:prefab))
