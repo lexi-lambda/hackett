@@ -220,6 +220,36 @@ Like @racket[case], but matches against multiple values at once. Each case only 
                 [[Nothing Nothing] "neither"])
               "both"))}
 
+@defform[(pattern (name-id param-id ...) body-pattern/expr)]{
+Defines @racket[name-id] as both a function and a pattern, such that @racket[(name-id _arg ...)] is
+equivalent to @racket[body-pattern/expr] with each occurrence of @racket[param-id] substituted with
+the corresponding @racket[_arg].
+
+The @racket[body-pattern/expr] form will be interpreted in two different ways—as a pattern or as an
+expression—depending on the context within which it is used. The pattern @racket[(name-id arg-id ...)]
+will consistently match the value produced by @racket[(name-id arg-expr ...)], assuming every pattern
+used in @racket[body-pattern/expr] also has this property.
+
+@(hackett-examples
+  (data (Exp* e)
+    (Var* t:String)
+    (App* e e)
+    (Lam* t:String e)
+    #:deriving [Show])
+  (data Exp
+    (E (Exp* Exp))
+    #:deriving [Show])
+  (pattern (Var x)   (E (Var* x)))
+  (pattern (App a b) (E (App* a b)))
+  (pattern (Lam x a) (E (Lam* x a)))
+  (defn free : {Exp t:-> (t:List t:String)}
+    [[(Var x)] (List x)]
+    [[(App f a)] {(free f) ++ (free a)}]
+    [[(Lam x b)] (filter (/= x) (free b))])
+  (free (Var "x"))
+  (free (App (Lam "x" (App (Var "x") (Var "y")))
+             (Lam "z" (App (Var "a") (Var "z"))))))}
+
 @subsection[#:tag "reference-imports-exports"]{Imports}
 
 @defform[(require require-spec ...)]{
@@ -684,6 +714,20 @@ second. @racket[(partition-eithers es)] is equivalent to @racket[(Tuple (lefts e
 The @deftech{list} type, which describes lazy linked lists. Since a list is lazy, it may be infinite,
 as long as the entire list is never demanded. The @racket[::] constructor is pronounced “cons”, and it
 is generally intended to be used infix.}
+
+@defform[(List element ...)]{
+Produces a list containing each @racket[element] in order.
+
+@(hackett-examples
+  (List 1 2 6 12 60))
+
+@racket[List] can also be used as a pattern:
+
+@(hackett-examples
+  (case {1 :: 4 :: 9 :: Nil}
+    [(List _ x _) (Just x)]
+    [_ Nothing]))
+}
 
 @defthing[head (t:forall [a] {(t:List a) t:-> (t:Maybe a)})]{
 

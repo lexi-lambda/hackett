@@ -5,9 +5,11 @@
          (for-syntax (multi-in racket [base contract string format list match syntax])
                      (multi-in syntax/parse [class/local-value class/paren-shape
                                              experimental/template])
+                     syntax/apply-transformer
                      threading
 
                      hackett/private/infix
+                     hackett/private/prop-case-pattern-expander
                      hackett/private/util/list
                      hackett/private/util/stx)
 
@@ -207,6 +209,14 @@
     #:description "a pattern"
     #:attributes [pat disappeared-uses]
     #:commit
+
+    [pattern {~and pat-exp
+                   {~or pat-id (pat-id . _)}}
+             #:declare pat-id (local-value case-pattern-expander?)
+             #:do [(define trans
+                     (case-pattern-expander-transformer (attribute pat-id.local-value)))]
+             #:with :pat (local-apply-transformer trans #'pat-exp 'expression)]
+
     [pattern {~and constructor:data-constructor-val ~!}
              #:do [(define val (attribute constructor.local-value))
                    (define arity (data-constructor-arity val))]
