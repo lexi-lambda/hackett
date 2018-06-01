@@ -329,37 +329,40 @@
 ; apply-current-subst-in-tooltips is called, however, we evaluate the thunk early and replace the
 ; property with the new value, improving the information in the tooltips.
 
-(struct deferred-type-in-tooltip (type)
+(struct deferred-type-in-tooltip (type string)
   #:property prop:procedure
-  (λ (self) (type->string (apply-current-subst (deferred-type-in-tooltip-type self)))))
+  (λ (self) (deferred-type-in-tooltip-string self)))
 
 (define/contract (attach-type stx t #:tooltip-src [tooltip-src stx])
   (->* [syntax? type?] [#:tooltip-src any/c] syntax?)
-  (let ([stx* (syntax-property stx ': t)])
+  (let* ([t* (apply-current-subst t)]
+         [stx* (syntax-property stx ': t*)])
     (if (and (not (syntax-property tooltip-src 'omit-type-tooltip))
              (syntax-source tooltip-src)
              (syntax-position tooltip-src)
              (syntax-span tooltip-src))
         (syntax-property
          stx* 'mouse-over-tooltips
-         (syntax-parse tooltip-src
-           ; If it’s a pair, just add the tooltip “on the parens”.
-           [(_ . _)
-            (cons
-             (vector tooltip-src
-                     (sub1 (syntax-position tooltip-src))
-                     (syntax-position tooltip-src)
-                     (deferred-type-in-tooltip t))
-             (vector tooltip-src
-                     (+ (sub1 (syntax-position tooltip-src)) (sub1 (syntax-span tooltip-src)))
-                     (+ (sub1 (syntax-position tooltip-src)) (syntax-span tooltip-src))
-                     (deferred-type-in-tooltip t)))]
-           ; Otherwise, add the tooltip on the whole region.
-           [_
-            (vector tooltip-src
-                    (sub1 (syntax-position tooltip-src))
-                    (+ (sub1 (syntax-position tooltip-src)) (syntax-span tooltip-src))
-                    (deferred-type-in-tooltip t))]))
+         (let* ([t-str (type->string t*)]
+                [deferred-tooltip (deferred-type-in-tooltip t* t-str)])
+           (syntax-parse tooltip-src
+             ; If it’s a pair, just add the tooltip “on the parens”.
+             [(_ . _)
+              (cons
+               (vector tooltip-src
+                       (sub1 (syntax-position tooltip-src))
+                       (syntax-position tooltip-src)
+                       deferred-tooltip)
+               (vector tooltip-src
+                       (+ (sub1 (syntax-position tooltip-src)) (sub1 (syntax-span tooltip-src)))
+                       (+ (sub1 (syntax-position tooltip-src)) (syntax-span tooltip-src))
+                       deferred-tooltip))]
+             ; Otherwise, add the tooltip on the whole region.
+             [_
+              (vector tooltip-src
+                      (sub1 (syntax-position tooltip-src))
+                      (+ (sub1 (syntax-position tooltip-src)) (syntax-span tooltip-src))
+                      deferred-tooltip)])))
         stx*)))
 (define/contract (attach-expected stx t)
   (-> syntax? type? syntax?)
@@ -378,8 +381,8 @@
   (recursively-adjust-property
    stx 'mouse-over-tooltips
    (match-lambda
-     [(vector a b c (? deferred-type-in-tooltip? d))
-      (vector a b c (d))]
+     [(vector a b c (deferred-type-in-tooltip t _))
+      (vector a b c (type->string (apply-current-subst t)))]
      [other other])))
 
 (define/contract (make-typed-var-transformer x t)
