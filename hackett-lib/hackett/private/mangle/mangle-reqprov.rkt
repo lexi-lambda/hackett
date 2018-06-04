@@ -20,14 +20,7 @@
 ;; #:introducer StxIntroducer
 ;; ->
 ;; RequireTransformer
-(define (make-unmangling-require-transformer #:mangle-prefix mangle-prefix
-                                             #:introducer intro)
-
-  (define-values [id-mangler id-unmangler]
-    (make-id-mangler #:prefix mangle-prefix #:introducer intro))
-  (define-values [id-mangler/no-intro id-unmangler/no-intro]
-    (make-id-mangler #:prefix mangle-prefix #:introducer identity))
-
+(define (make-unmangling-require-transformer id-unmangler)
   (make-require-transformer
    (syntax-parser
      [(_ {~alt {~optional {~or {~and #:no-introduce no-introduce?}
@@ -36,19 +29,20 @@
          ...
          require-spec ...)
       #:do [(define id-unmangler*
-              (if (or (@ no-introduce?) (@ prefix))
-                  id-unmangler/no-intro
-                  id-unmangler))
-            (define id-unmangler**
-              (if (@ prefix)
-                  (prefix/unmangler (syntax-e (@ prefix)) id-unmangler*)
-                  id-unmangler*))
+              (let* ([unm id-unmangler]
+                     [unm (if (or (@ no-introduce?) (@ prefix))
+                            (no-introduce/unmangler unm)
+                            unm)]
+                     [unm (if (@ prefix)
+                            (prefix/unmangler (syntax-e (@ prefix)) unm)
+                            unm)])
+                unm))
 
             (define-values [imports sources]
               (expand-import #'(combine-in require-spec ...)))]
 
       (values (for*/list ([i (in-list imports)]
-                          [i* (in-value (unmangle-import i id-unmangler**))]
+                          [i* (in-value (unmangle-import i id-unmangler*))]
                           #:when (if (@ only?) i* #t))
                 (or i* i))
               sources)])))
@@ -57,21 +51,14 @@
 ;; #:introducer StxIntroducer
 ;; ->
 ;; ProvideTransformer
-(define (make-mangling-provide-transformer #:mangle-prefix mangle-prefix
-                                           #:introducer intro)
-
-  (define-values [id-mangler id-unmangler]
-    (make-id-mangler #:prefix mangle-prefix #:introducer intro))
-  (define-values [id-mangler/no-intro id-unmangler/no-intro]
-    (make-id-mangler #:prefix mangle-prefix #:introducer identity))
-
+(define (make-mangling-provide-transformer id-mangler)
   (make-provide-transformer
    (λ (stx modes)
      (syntax-parse stx
        [(_ {~optional {~and #:no-introduce no-introduce?}} provide-spec ...)
         #:do [(define id-mangler*
                 (if (@ no-introduce?)
-                    id-mangler/no-intro
+                    (no-introduce/mangler id-mangler)
                     id-mangler))
 
               (define exports

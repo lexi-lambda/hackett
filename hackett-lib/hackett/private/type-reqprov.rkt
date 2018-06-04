@@ -30,17 +30,18 @@
          syntax/parse/define
 
          (for-syntax hackett/private/typecheck
+                     "mangle/mangle-identifier.rkt"
                      "mangle/mangle-reqprov.rkt"))
 
 (provide for-type unmangle-types-in)
 
 (begin-for-syntax
-  (define type-prefix "#%hackett-type:"))
+  (define-values [type-id-mangler type-id-unmangler]
+    (make-id-mangler #:prefix "#%hackett-type:"
+                     #:introducer type-namespace-introduce)))
 
 (define-syntax for-type
-  (make-mangling-provide-transformer #:mangle-prefix type-prefix
-                                     #:introducer type-namespace-introduce))
+  (make-mangling-provide-transformer type-id-mangler))
 
 (define-syntax unmangle-types-in
-  (make-unmangling-require-transformer #:mangle-prefix type-prefix
-                                       #:introducer type-namespace-introduce))
+  (make-unmangling-require-transformer type-id-unmangler))

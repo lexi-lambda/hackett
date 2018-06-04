@@ -3,9 +3,12 @@
 (provide make-id-mangler
          or/unmangler
          prefix/unmangler
-         id-mangler)
+         no-introduce/unmangler
+         id-mangler
+         no-introduce/mangler)
 
-(require racket/syntax
+(require racket/match
+         racket/syntax
          "mangle-string.rkt")
 
 ;; An IdMangler is an (id-mangler StxIntroducer StringMangler)
@@ -49,6 +52,16 @@
        (format-id unmangled "~a~a" pre unmangled
                   #:source unmangled #:props unmangled)))
 
+;; IdUnmangler -> IdUnmangler
+(define ((no-introduce/unmangler id-un) x)
+  (define unmangled (id-un x))
+  (and unmangled
+       (datum->syntax x (syntax-e unmangled) x x)))
+
+;; IdUnmangler -> IdUnmangler
+(define (no-introduce/mangler id-mangler*)
+  (match-define (id-mangler _ string-mangler) id-mangler*)
+  (id-mangler values string-mangler))
 
 ;; ---------------------------------------------------------
 
@@ -65,4 +78,3 @@
      #false]))
 
 ;; ---------------------------------------------------------
-
