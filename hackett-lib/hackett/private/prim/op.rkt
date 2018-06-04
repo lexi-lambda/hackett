@@ -10,8 +10,8 @@
                                    racket/string))
 
          hackett/private/base
-         (only-in (unmangle-types-in #:no-introduce (only-types-in hackett/private/kernel)) forall)
-         (unmangle-types-in #:no-introduce (only-types-in hackett/private/prim/type))
+         (only-in (unmangle-types-in #:no-introduce #:only hackett/private/kernel) forall)
+         (unmangle-types-in #:no-introduce #:only hackett/private/prim/type)
          (only-in hackett/private/prim/type
                   True False :: Nil
                   [Unit MkUnit] [Tuple MkTuple] [IO MkIO])
