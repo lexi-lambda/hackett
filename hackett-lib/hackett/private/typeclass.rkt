@@ -12,7 +12,6 @@
          racket/list
          racket/match
          racket/format
-         racket/stxparam-exptime
          syntax/parse
          syntax/parse/class/local-value
          syntax/id-table
@@ -30,9 +29,10 @@
                                                [subgoals (listof constr?)]
                                                [ts (listof (and/c type? type-mono?))]
                                                [dict-expr syntax?])])
-         register-global-class-instance! constr->instances lookup-instance!
+         register-global-class-instance! current-local-class-instances
+         constr->instances lookup-instance!
          reduce-context type-reduce-context
-         (for-template local-class-instances @%superclasses-key))
+         (for-template @%superclasses-key))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; instance contexts
@@ -61,15 +61,13 @@
   (-> class:instance? void?)
   (gvector-add! global-class-instances instance))
 
-(module local-instances-stxparam racket/base
-  (require (for-syntax racket/base) racket/stxparam)
-  (provide local-class-instances)
-  (define-syntax-parameter local-class-instances '()))
-(require (for-template 'local-instances-stxparam))
+(define/contract current-local-class-instances
+  (parameter/c (listof class:instance?))
+  (make-parameter '()))
 
 (define/contract (current-class-instances)
   (-> (listof class:instance?))
-  (append (syntax-parameter-value #'local-class-instances)
+  (append (current-local-class-instances)
           (gvector->list global-class-instances)))
 
 (define (current-instances-of-class class)

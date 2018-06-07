@@ -16,6 +16,8 @@
                                                            (-> syntax? syntax?))]
                        [make-pattern-like-pattern-expander (-> (or/c syntax? (-> identifier? syntax?))
                                                                 pattern-expander?)]
+                       [make-trampolining-expression-transformer (-> (-> syntax? syntax?)
+                                                                     (-> syntax? syntax?))]
                        [preservable-property->expression (-> any/c syntax?)]
                        [generate-bound-temporaries (-> (or/c syntax? list?) (listof identifier?))]
                        [generate-bound-temporary (-> any/c identifier?)]
@@ -26,9 +28,9 @@
 ; These two functions are taken with modifications from macrotypes/stx-utils, which implement a
 ; version of make-variable-like-transformer from syntax/transformer that cooperates better with
 ; typechecking.
-(define (replace-stx-loc old new)
-  (let ([old* (syntax-disarm old #f)])
-    (syntax-rearm (datum->syntax old* (syntax-e old*) new old) old)))
+(define (replace-stx-loc stx srcloc)
+  (let ([stx* (syntax-disarm stx #f)])
+    (syntax-rearm (datum->syntax stx* (syntax-e stx*) srcloc stx) stx)))
 
 (define (make-variable-like-transformer ref-stx)
   (syntax-parser
@@ -44,6 +46,11 @@
       (replace-stx-loc (if (procedure? ref-stx) (ref-stx this-syntax) ref-stx) this-syntax)]
      [(head:id . args)
       (syntax/loc this-syntax ({~and head} . args))])))
+
+(define ((make-trampolining-expression-transformer proc) stx)
+  (if (eq? (syntax-local-context) 'expression)
+      (proc stx)
+      (datum->syntax stx (list (replace-stx-loc #'#%expression stx) stx) stx)))
 
 ; Sometimes, it is useful to embed a value in a piece of syntax. Normally, this is easily achievable
 ; using quasisyntax/unsyntax, but in the case of embedding prefab structs, the macroexpander will

@@ -9,8 +9,7 @@
          (for-syntax racket/base
                      racket/list
                      racket/match
-                     racket/require-transform
-                     syntax/parse/experimental/template)
+                     racket/require-transform)
 
          scribble/core
          scribble/example
@@ -76,35 +75,33 @@
       [_
        #`(eval:alts #,stx #,(do-expand-eval-transformers stx))])))
 
-(define-simple-macro (hackett-examples
-                      {~or {~optional {~seq #:eval eval:expr}}
-                           {~optional {~and #:once once}}
-                           {~optional {~seq #:label label:expr}}
-                           {~optional {~and #:no-preserve-source-locations
-                                            no-preserve-source-locations}}
-                           {~optional {~and #:no-prompt no-prompt}}}
-                      ...
-                      body ...)
-  #:with eval* (or (attribute eval) #'(make-hackett-eval))
-  #:with [once* ...] (cond [(attribute once) #'[once]]
-                           [(attribute eval) #'[]]
-                           [else             #'[#:once]])
-  #:with [preserve-source-locations ...] (if (attribute no-preserve-source-locations) #'[]
-                                             #'[#:preserve-source-locations])
-  #:with [body* ...] (map expand-eval-transformers (attribute body))
-  #:with result
-  (template
-   (examples
-    #:eval eval*
-    preserve-source-locations ...
-    once* ...
-    {?? {?@ #:label label}}
-    {?? no-prompt}
-    body* ...))
-  result)
+(define-syntax-parser hackett-examples
+  [(_ {~or {~optional {~seq #:eval eval:expr}}
+           {~optional {~and #:once once}}
+           {~optional {~seq #:label label:expr}}
+           {~optional {~and #:no-preserve-source-locations no-preserve-source-locations}}
+           {~optional {~and #:no-prompt no-prompt}}}
+      ... body ...)
+   #:with eval* (or (attribute eval) #'(make-hackett-eval))
+   #:with [once* ...] (cond [(attribute once) #'[once]]
+                            [(attribute eval) #'[]]
+                            [else             #'[#:once]])
+   #:with [preserve-source-locations ...] (if (attribute no-preserve-source-locations) #'[]
+                                              #'[#:preserve-source-locations])
+   #:with [body* ...] (map expand-eval-transformers (attribute body))
+   (syntax/loc this-syntax
+     (examples
+      #:eval eval*
+      preserve-source-locations ...
+      once* ...
+      {~? {~@ #:label label}}
+      {~? no-prompt}
+      body* ...))])
 
-(define-simple-macro (hackett-interaction body ...)
-  (hackett-examples #:label #f body ...))
+(define-syntax-parser hackett-interaction
+  [(_ body ...)
+   (syntax/loc this-syntax
+     (hackett-examples #:label #f body ...))])
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; cross-manual references
