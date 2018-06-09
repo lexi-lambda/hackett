@@ -217,7 +217,10 @@
              #:declare pat-id (local-value case-pattern-expander?)
              #:do [(define trans
                      (case-pattern-expander-transformer (attribute pat-id.local-value)))]
-             #:with :pat (local-apply-transformer trans #'pat-exp 'expression)]
+             #:with p:pat (local-apply-transformer trans #'pat-exp 'expression)
+             #:attr pat (attribute p.pat)
+             #:attr disappeared-uses (cons (syntax-local-introduce #'pat-id)
+                                           (attribute p.disappeared-uses))]
 
     [pattern {~and constructor:data-constructor-val ~!}
              #:do [(define val (attribute constructor.local-value))]
@@ -227,8 +230,8 @@
              #:attr pat (pat-app this-syntax
                                  (attribute head.pat)
                                  (attribute arg.pat))
-             #:attr disappeared-uses (cons (syntax-local-introduce #'constructor)
-                                           (append* (attribute arg.disappeared-uses)))]
+             #:attr disappeared-uses (append (attribute head.disappeared-uses)
+                                             (append* (attribute arg.disappeared-uses)))]
     [pattern {~braces a:pat constructor:data-constructor-val b:pat}
              #:do [(define val (attribute constructor.local-value))
                    (define arity (data-constructor-arity val))]

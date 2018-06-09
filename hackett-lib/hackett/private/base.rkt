@@ -317,26 +317,34 @@
              (λ- (dict-id) e))
            'expression '())))])])
 
-(define-syntax-parser @%dictionary-placeholder
-  [(_ constr src-expr)
-   #:fail-unless (syntax-local-elaborate-pass) "not currently elaborating"
-   #:fail-when (eq? (syntax-local-elaborate-pass) 'finalize) "not allowed after elaboration"
-   (match (syntax-local-elaborate-pass)
-     ['expand
-      (syntax-local-elaborate-defer this-syntax)]
-     ['elaborate
-      (let*-values ([(instance constrs) (lookup-instance! #'constr #:src #'src-expr)]
-                    [(dict-expr) (replace-stx-loc (class:instance-dict-expr instance) this-syntax)])
-        ; It’s possible that the dictionary itself requires dictionaries for classes with
-        ; subgoals, like (instance ∀ [a] [(Show a)] => (Show (List a)) ...). If there are not
-        ; any constraints, we need to produce a (curried) application to sub-dictionaries, which
-        ; should be recursively elaborated.
-        (foldr (λ (constr acc)
-                 #`(#,acc
-                    #,(quasisyntax/loc this-syntax
-                        (@%dictionary-placeholder #,constr src-expr))))
-               dict-expr
-               constrs))])])
+(define-syntax @%dictionary-placeholder
+  (make-elaborating-transformer
+   (syntax-parser
+     [(_ constr src-expr)
+      (match (syntax-local-elaborate-pass)
+        ['expand
+         (syntax-local-elaborate-defer this-syntax)]
+        [(or 'elaborate 'finalize)
+         (let*-values ([(instance constrs)
+                        (lookup-instance!
+                         #'constr
+                         #:src #'src-expr
+                         #:failure-thunk (and (eq? (syntax-local-elaborate-pass) 'elaborate)
+                                              (λ () (values #f #f))))])
+           (if instance
+               ; It’s possible that the dictionary itself requires dictionaries for classes with
+               ; subgoals, like (instance ∀ [a] [(Show a)] => (Show (List a)) ...). If there are not
+               ; any constraints, we need to produce a (curried) application to sub-dictionaries,
+               ; which should be recursively elaborated.
+               (begin
+                 (syntax-local-elaborate-did-make-progress!)
+                 (foldr (λ (constr acc)
+                          #`(#,acc
+                             #,(quasisyntax/loc this-syntax
+                                 (@%dictionary-placeholder #,constr src-expr))))
+                        (replace-stx-loc (class:instance-dict-expr instance) this-syntax)
+                        constrs))
+               (syntax-local-elaborate-defer this-syntax #:did-defer!? #t)))])])))
 
 ;; ---------------------------------------------------------------------------------------------------
 
