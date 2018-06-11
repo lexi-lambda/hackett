@@ -3,13 +3,12 @@
 (require hackett/private/type-reqprov
 
          (for-label hackett
-                    (only-in (unmangle-types-in #:no-introduce (only-types-in hackett)) =>))
+                    (only-in (unmangle-types-in #:no-introduce (only-types-in hackett)) => ->))
 
          (for-syntax racket/base
                      racket/contract
                      racket/list
-                     syntax/id-table
-                     syntax/parse/experimental/template)
+                     syntax/id-table)
 
          racket/list
          scribble/struct
@@ -20,7 +19,7 @@
          scribble/html-properties
          syntax/parse/define
 
-         (only-in scribble/core make-style make-table-columns nested-flow)
+         (only-in scribble/core make-style make-table-columns nested-flow content?)
          (only-in scribble/private/manual-vars add-background-label)
          (only-in scribble/private/manual-bind
                   id-to-target-maker with-exporting-libraries
@@ -81,9 +80,9 @@
   [(_ k:patched/kind-kw lt:patched/link-target?-kw l:patched/literals-kw
       {~and spec (type:type-binding-id . spec-body)}
       subs:patched/subs-kw c:patched/contracts-kw desc ...)
-   (quasitemplate/loc this-syntax
+   (quasisyntax/loc this-syntax
      (patched/defform
-      {?? {?@ . k} {?@ #:kind "type constructor"}} {?? {?@ . lt}} {?? {?@ . l}}
+      {~? {~@ . k} {~@ #:kind "type constructor"}} {~? {~@ . lt}} {~? {~@ . l}}
       #:id type.prefixed-id
       #,(datum->syntax #'here
                        (cons (datum->syntax #'type.bare-id
@@ -92,7 +91,7 @@
                                             #'type.bare-id)
                              #'spec-body)
                        #'spec)
-      {?? {?@ . subs}} {?? {?@ . c}} desc ...))])
+      {~? {~@ . subs}} {~? {~@ . c}} desc ...))])
 
 (define-syntax-parser deftycon*
   [(_ k:patched/kind-kw lt:patched/link-target?-kw l:patched/literals-kw
@@ -111,21 +110,21 @@
                                              spec-body)
                                        spec
                                        spec))
-   (quasitemplate/loc this-syntax
+   (quasisyntax/loc this-syntax
      (patched/defform*
-      {?? {?@ . k} {?@ #:kind "type constructor"}} {?? {?@ . lt}}
+      {~? {~@ . k} {~@ #:kind "type constructor"}} {~? {~@ . lt}}
       #:id defined-id
-      {?? {?@ . l}}
+      {~? {~@ . l}}
       [spec* ...]
-      {?? {?@ . subs}} {?? {?@ . c}}
+      {~? {~@ . subs}} {~? {~@ . c}}
       desc ...))])
 
 (define-syntax-parser deftype
   [(_ k:patched/kind-kw lt:patched/link-target?-kw d:patched/id-kw type:type-binding-id
       desc ...)
-   (quasitemplate/loc this-syntax
+   (quasisyntax/loc this-syntax
      (patched/defidform
-      {?? {?@ . k} {?@ #:kind "type"}} {?? {?@ . lt}}
+      {~? {~@ . k} {~@ #:kind "type"}} {~? {~@ . lt}}
       #:id type.prefixed-id
       #,(datum->syntax #'type.bare-id (syntax-e #'type.bare-id) #'type #'type.bare-id)
       desc ...))])
@@ -148,20 +147,26 @@
                  (lambda () (list desc ...))))])
 
 (define-syntax-parser defclass
+  #:datum-literals [->]
   [(_ kind:kind-kw 
       lt:link-target?-kw
       {~optional {~seq #:super [super-constraint ...]}
                  #:defaults ([[super-constraint 1] '()])}
-      (name:type-binding-id var-id:id)
+      (name:type-binding-id var-id:id ...)
+      {~optional {~seq #:fundeps [[fundep-determinant:id ...+ -> fundep-dependent:id ...+] ...]}
+                 #:defaults ([[fundep-determinant 2] '()] [[fundep-dependent 2] '()])}
       [method-id:id method-type:expr] ...
       desc ...)
-   #'(let-syntax ([var-id (make-variable-id 'var-id)])
+   #'(let-syntax ([var-id (make-variable-id 'var-id)] ...)
        (*defclass kind.kind
                   lt.expr
                   (quote-syntax name.prefixed-id)
                   (quote-syntax name.bare-id)
                   (list (racket super-constraint) ...)
-                  (racket var-id)
+                  (list (racket var-id) ...)
+                  (list (cons (list (racket fundep-determinant) ...)
+                              (list (racket fundep-dependent) ...))
+                        ...)
                   (list (racket method-id) ...)
                   (list (racket method-type) ...)
                   (lambda () (list desc ...))))])
@@ -224,7 +229,7 @@
                                               (racketparenfont ")")))))))))))))
     (content-thunk))))
 
-(define (*defclass kind link? class-orig-id class-bare-id super-constraints var-id method-ids
+(define (*defclass kind link? class-orig-id class-bare-id super-constraints var-ids fundeps method-ids
                    method-types content-thunk)
   (define class-head
     (let* ([content (to-element class-bare-id #:defn? #t)]
@@ -244,7 +249,8 @@
                            (λ (libs) (make-thing-index-desc (syntax-e class-bare-id) libs))))
                          tag
                          ref-content)))])
-      (list (racketparenfont "(") thing-id (hspace 1) var-id (racketparenfont ")"))))
+      (list (racketparenfont "(") thing-id (if (empty? var-ids) '() (hspace 1))
+            (add-between var-ids (hspace 1)) (racketparenfont ")"))))
   (make-splice
    (cons
     (make-blockquote
@@ -252,29 +258,52 @@
      (list
       (make-table
        boxed-style
-       (list (list ((add-background-label (or kind "typeclass"))
-                    (top-align "argcontract"
-                               (list
-                                (list
-                                 (list (make-omitable-paragraph
-                                        (list (racketparenfont "(")
-                                              (racket class) (hspace 1)
-                                              (if (empty? super-constraints) '()
-                                                  (list (add-between super-constraints (hspace 1))
-                                                        (hspace 1) (racket =>) (hspace 1)))
-                                              class-head
-                                              (for/list ([method-id (in-list method-ids)]
-                                                         [method-type (in-list method-types)])
-                                                (list (linebreak)
-                                                      (hspace 2)
-                                                      (racketparenfont "[")
-                                                      method-id
-                                                      (hspace 1)
-                                                      (racket :)
-                                                      (hspace 1)
-                                                      method-type
-                                                      (racketparenfont "]")))
-                                              (racketparenfont ")")))))))))))))
+       (append
+        (list (list ((add-background-label (or kind "typeclass"))
+                     (list (make-omitable-paragraph
+                            (list (racketparenfont "(") (racket class) (hspace 1)
+                                  (if (empty? super-constraints) '()
+                                      (list (add-between super-constraints (hspace 1))
+                                            (hspace 1) (racket =>) (hspace 1)))
+                                  class-head
+                                  (if (and (empty? fundeps) (empty? method-ids))
+                                      (racketparenfont ")")
+                                      '())))))))
+        (if (empty? fundeps) '()
+            (list
+             (list
+              (list
+               (make-table
+                "RktBlk"
+                (list (list (list (make-omitable-paragraph
+                                   (list (hspace 2) (racket #:fundeps)
+                                         (hspace 1) (racketparenfont "["))))
+                            (list (make-table #f (for/list ([fundep (in-list fundeps)]
+                                                            [i (in-naturals)])
+                                                   (list
+                                                    (list
+                                                     (make-omitable-paragraph
+                                                      (list (racketparenfont "[")
+                                                            (add-between (car fundep) (hspace 1))
+                                                            (hspace 1) (racket ->) (hspace 1)
+                                                            (add-between (cdr fundep) (hspace 1))
+                                                            (racketparenfont "]")
+                                                            (if (= i (sub1 (length fundeps)))
+                                                                (list (racketparenfont "]")
+                                                                      (if (empty? method-ids)
+                                                                          (racketparenfont ")")
+                                                                          '()))
+                                                                '())))))))))))))))
+        (for/list ([method-id (in-list method-ids)]
+                   [method-type (in-list method-types)]
+                   [i (in-naturals)])
+          (list (list (make-omitable-paragraph
+                       (list (hspace 2) (racketparenfont "[")
+                             method-id (hspace 1) (racket :) (hspace 1) method-type
+                             (racketparenfont "]")
+                             (if (= i (sub1 (length method-ids)))
+                                 (racketparenfont ")")
+                                 '()))))))))))
     (content-thunk))))
 
 (define (to-flow e) (nested-flow (make-style #f '()) (list (make-omitable-paragraph (list e)))))

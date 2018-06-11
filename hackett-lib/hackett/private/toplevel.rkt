@@ -138,4 +138,14 @@
                        [(e-/show) (τ⇐! (quasisyntax/loc this-syntax
                                          (@%app show #,e-))
                                        (expand-type #'String))])
-     #`(repl-result (force #,e-/show) '#,(type->string (apply-current-subst τ_e))))])
+     #`(repl-result (force #,e-/show) (type-string #,τ_e)))])
+
+(define-syntax type-string
+  (make-elaborating-transformer
+   (syntax-parser
+     [(_ t)
+      (match (syntax-local-elaborate-pass)
+        [(or 'expand 'elaborate)
+         (syntax-local-elaborate-defer this-syntax)]
+        ['finalize
+         #`'#,(type->string (apply-current-subst #'t))])])))
