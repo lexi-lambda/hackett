@@ -124,9 +124,10 @@
              #:with x- (local-expand #'x 'expression '())
              #:attr expansion #'x-
              #:attr scoped-binding-ctxs '()
-             #:attr residual (syntax-property #'(values)
-                                              'disappeared-use
-                                              (syntax-local-introduce #'x-))]
+             #:attr residual (~> #'(values)
+                                 (syntax-property 'disappeared-use
+                                                  (syntax-local-introduce #'x-))
+                                 (syntax-track-origin #'expansion #'x))]
     [pattern (head:#%expression ~! {~var a (type intdef-ctx)})
              #:attr expansion (syntax-track-origin #'a.expansion this-syntax #'head)
              #:attr scoped-binding-ctxs '()
