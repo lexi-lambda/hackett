@@ -327,7 +327,7 @@
         (values (listof (cons/c identifier? type?))
                 (-> (listof identifier?) (values syntax? (listof identifier?)))))
     (let-values ([(t_⇒ assumps mk-pat) (pat⇒! pat)])
-      (type<:! t_⇒ t #:src (pat-base-stx pat))
+      (type<:! t t_⇒ #:src (pat-base-stx pat))
       (values assumps mk-pat)))
 
   ; Combines a list of `match` pattern constructors to properly run them against a list of identifiers
