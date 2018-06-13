@@ -1299,11 +1299,11 @@ Uses of this form correspond to definitions of @racketid[main] submodules in @ha
 @racketmodname[racket]. For more information, see
 @secref["main-and-test" #:doc '(lib "scribblings/guide/guide.scrbl")].}
 
-@defproc[(print [str t:String]) (t:IO t:Unit)]{
+@defthing[print (t:forall [m] (t:Monad-Base t:IO m) t:=> {t:String t:-> (m t:Unit)})]{
 
-Produces an @tech{I/O action} that prints @racket[str] to standard output.}
+Produces an @tech{I/O action} that prints the given string to standard output.}
 
-@defproc[(println [str t:String]) (t:IO t:Unit)]{
+@defthing[println (t:forall [m] (t:Monad-Base t:IO m) t:=> {t:String t:-> (m t:Unit)})]{
 
 Like @racket[print], but appends a newline to the end of the printed message.}
 
@@ -1321,12 +1321,34 @@ as “monad mixins”.
 Instances should satisfy the following laws:
 
 @racketblock[
-  @#,racket[{lift |.| pure}] @#,elem[#:style 'roman]{=} @#,racket[pure]
-  @#,racket[(lift {_m >>= _f})] @#,elem[#:style 'roman]{=} @#,racket[{(lift _m) >>= {lift |.| _f}}]]
+  {lift |.| pure} @#,elem[#:style 'roman]{=} pure
+  (lift {_m >>= _f}) @#,elem[#:style 'roman]{=} {(lift _m) >>= {lift |.| _f}}]
 
 @defmethod[lift (t:forall [m a] {(m a) t:-> (t m a)})]{
 
 Lifts a computation from the argument monad to the constructed monad.}}
+
+@subsection[#:tag "reference-monad-base"]{Base Monads}
+
+@defmodule[hackett/monad/base]
+
+@defclass[#:super [(t:Monad m)]
+          (t:Monad-Base b m)
+          #:fundeps [[m -> b]]
+          [lift/base (t:forall [a] {(b a) t:-> (m a)})]]{
+
+A @tech[#:key "typeclass"]{class} for access the @deftech{base monad} in a @tech{monad transformer}
+stack. Instances should satisfy the following laws:
+
+@racketblock[
+ {lift/base |.| pure} @#,elem[#:style 'roman]{=} pure
+ {lift/base {_m >>= _f}} @#,elem[#:style 'roman]{=} {(lift/base _m) >>= {lift |.| _f}}]
+
+@defmethod[lift/base (t:forall [a] {(b a) t:-> (m a)})]{
+
+Lifts a computation from the @tech{base monad} @racket[b] into @racket[m]. For base monads, like
+@racket[t:IO], @racket[lift/base] should be @racket[id], and for @tech{monad transformers}, it should
+be @racket[{lift |.| lift/base}].}}
 
 @subsection[#:tag "reference-reader-monad"]{Reader}
 

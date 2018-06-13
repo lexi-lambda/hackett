@@ -2,6 +2,7 @@
 
 (require (for-label hackett
                     hackett/data/identity
+                    hackett/monad/base
                     hackett/monad/error
                     hackett/monad/reader
                     hackett/monad/trans)
@@ -22,6 +23,7 @@
 
 (provide (for-label (all-from-out hackett)
                     (all-from-out hackett/data/identity)
+                    (all-from-out hackett/monad/base)
                     (all-from-out hackett/monad/error)
                     (all-from-out hackett/monad/reader)
                     (all-from-out hackett/monad/trans))
@@ -42,6 +44,7 @@
   (let ([hackett-eval (make-base-eval #:lang 'hackett)])
     (hackett-eval '(require hackett
                             hackett/data/identity
+                            hackett/monad/base
                             hackett/monad/error
                             hackett/monad/reader
                             hackett/monad/trans
@@ -156,6 +159,7 @@
 
 (require (prefix+provide-hackett-types hackett
                                        hackett/data/identity
+                                       hackett/monad/base
                                        hackett/monad/error
                                        hackett/monad/reader
                                        hackett/monad/trans))

@@ -1,6 +1,7 @@
 #lang hackett
 
 (require hackett/data/identity
+         hackett/monad/base
          hackett/monad/trans
          hackett/monad/trans/signatures)
 
@@ -19,9 +20,6 @@
 (defn run-reader : (forall [r a] {((Reader r) a) -> r -> a})
   [[x r] (run-identity (run-reader/t x r))])
 
-(instance (forall [r] (MonadTrans (Reader/T r)))
-  [lift {Reader/T . const}])
-
 (instance (forall [r m] (Functor m) => (Functor (Reader/T r m)))
   [map (λ [f (Reader/T x)] (Reader/T (λ [r] (map f (x r)))))])
 
@@ -33,6 +31,12 @@
   [join (λ [(Reader/T x)]
           (Reader/T (λ [r] (do [x* <- (x r)]
                                (case x* [(Reader/T y) (y r)])))))])
+
+(instance (forall [r] (MonadTrans (Reader/T r)))
+  [lift {Reader/T . const}])
+
+(instance (forall [b r m] (Monad-Base b m) => (Monad-Base b (Reader/T r m)))
+  [lift/base {lift . lift/base}])
 
 (def ask : (forall [r m] (Applicative m) => (Reader/T r m r))
   (Reader/T (λ [r] (pure r))))

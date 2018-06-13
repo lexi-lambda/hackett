@@ -1,6 +1,7 @@
 #lang hackett
 
 (require hackett/data/identity
+         hackett/monad/base
          hackett/monad/trans)
 
 (provide (data Error/T) run-error/t map-error/t (for-type Error) run-error throw catch)
@@ -18,9 +19,6 @@
 
 (defn run-error : (forall [e a] {((Error e) a) -> (Either e a)})
   [[x] (run-identity (run-error/t x))])
-
-(instance (forall [e] (MonadTrans (Error/T e)))
-  [lift {Error/T . (map Right)}])
 
 (instance (forall [e m] (Functor m) => (Functor (Error/T e m)))
   [map (λ [f (Error/T x)] (Error/T (map (map f) x)))])
@@ -41,6 +39,12 @@
                        (case x*
                          [(Right (Error/T x**)) x**]
                          [(Left e) (pure (Left e))]))))])
+
+(instance (forall [e] (MonadTrans (Error/T e)))
+  [lift {Error/T . (map Right)}])
+
+(instance (forall [b e m] (Monad-Base b m) => (Monad-Base b (Error/T e m)))
+  [lift/base {lift . lift/base}])
 
 (def throw : (forall [e a m] (Applicative m) => {e -> (Error/T e m a)})
   {Error/T . pure . Left})
