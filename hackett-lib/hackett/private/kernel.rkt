@@ -21,7 +21,7 @@
          #%require/only-types combine-in except-in only-in prefix-in rename-in
          provide combine-out except-out prefix-out rename-out for-type module+
          : def λ let letrec todo!
-         (for-type #:no-introduce ∀ -> => Integer Double String
+         (for-type #:no-introduce ∀ -> => Integer Double String Bytes
                    (rename-out [@%top #%top]
                                [#%type:app #%app]
                                [∀ forall])))

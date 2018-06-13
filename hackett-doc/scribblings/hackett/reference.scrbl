@@ -443,6 +443,36 @@ Splits a string on all instances of a separator string.
   (string-split "," ",2,,4,")
   (string-split "," ",,,,"))}
 
+@defthing[string->bytes/utf-8 {t:String t:-> t:Bytes}]{
+
+Encodes a string using UTF-8.
+
+@(hackett-examples
+  (eval:check (string->bytes/utf-8 "αβγδ") #"\316\261\316\262\316\263\316\264"))}
+
+@subsection[#:tag "reference-bytes"]{Bytes}
+
+@deftype[t:Bytes]{
+
+The type of byte strings, a fixed-length array of bytes. Byte strings can be constructed with byte
+string literals.}
+
+@defthing[bytes-length {t:Bytes t:-> t:Bytes}]{
+
+Returns the length of a byte string.
+
+@(hackett-examples
+  (eval:check (bytes-length #"abcd") 4)
+  (eval:check (bytes-length (string->bytes/utf-8 "αβγδ")) 8))}
+
+@defthing[bytes->string/utf-8 {t:Bytes t:-> (t:Maybe t:String)}]{
+
+Attempts to decode a string using UTF-8.
+
+@(hackett-examples
+  (bytes->string/utf-8 #"\316\261\316\262\316\263\316\264")
+  (bytes->string/utf-8 #"\xc3\x28"))}
+
 @subsection[#:tag "reference-functions"]{Functions}
 
 @deftycon[(t:-> a b)]{

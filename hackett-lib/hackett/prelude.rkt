@@ -30,7 +30,8 @@
          (for-type IO) main print println
          + - * quotient! remainder! < > <= >=
          d+ d- d* d/ d< d> d<= d>= integer->double
-         string-length string-split
+         string-length string-split string->bytes/utf-8
+         bytes-length bytes->string/utf-8
 
          (class Show)
          (class Eq))

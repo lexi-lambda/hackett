@@ -26,12 +26,13 @@
          @%module-begin @%datum @%app
          @%superclasses-key @%dictionary-placeholder @%with-dictionary
          define-primop define-base-type
-         -> Integer Double String
+         -> Integer Double String Bytes
          : λ1 def let letrec todo!)
 
 (define-base-type Integer)
 (define-base-type Double)
 (define-base-type String)
+(define-base-type Bytes)
 
 (define-syntax-parser define-primop
   #:literals [:]
@@ -362,8 +363,10 @@
   [(_ . n:number)
    #:when (double-flonum? (syntax-e #'n))
    (attach-type #'(#%datum . n) (expand-type #'Double) #:tooltip-src #'n)]
-  [(_ . s:str)
+  [(_ . s:string)
    (attach-type #'(#%datum . s) (expand-type #'String) #:tooltip-src #'s)]
+  [(_ . b:bytes)
+   (attach-type #'(#%datum . b) (expand-type #'Bytes) #:tooltip-src #'b)]
   [(_ . x)
    (raise-syntax-error #f "literal not supported" #'x)])
 

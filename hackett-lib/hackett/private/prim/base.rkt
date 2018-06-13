@@ -108,17 +108,12 @@
       'disappeared-use
       (syntax-local-introduce #'ty-con))]))
 
-(instance (Show Integer)
-  [show show/Integer])
-
-(instance (Show Double)
-  [show show/Double])
-
-(instance (Show String)
-  [show (λ [str] {"\"" ++ str ++ "\""})])
+(instance (Show Integer) [show show/Integer])
+(instance (Show Double) [show show/Double])
+(instance (Show String) [show show/String])
+(instance (Show Bytes) [show show/Bytes])
 
 (derive-instance Show Unit)
-
 (derive-instance Show Bool)
 (derive-instance Show Maybe)
 (derive-instance Show Either)
@@ -166,14 +161,10 @@
   [== (λ* [[True  y] y]
           [[False y] (not y)])])
 
-(instance (Eq Integer)
-  [== equal?/Integer])
-
-(instance (Eq Double)
-  [== equal?/Double])
-
-(instance (Eq String)
-  [== equal?/String])
+(instance (Eq Integer) [== equal?/Integer])
+(instance (Eq Double) [== equal?/Double])
+(instance (Eq String) [== equal?/String])
+(instance (Eq Bytes) [== equal?/Bytes])
 
 (derive-instance Eq Unit)
 (derive-instance Eq Maybe)
@@ -188,8 +179,8 @@
   [++ : {a -> a -> a}
       #:fixity right])
 
-(instance (Semigroup String)
-  [++ append/String])
+(instance (Semigroup String) [++ append/String])
+(instance (Semigroup Bytes) [++ append/Bytes])
 
 (instance (forall [a] (Semigroup a) => (Semigroup (Maybe a)))
   [++ (λ* [[(Just x) (Just y)] (Just {x ++ y})]
@@ -207,8 +198,8 @@
 (class (Semigroup a) => (Monoid a)
   [mempty : a])
 
-(instance (Monoid String)
-  [mempty ""])
+(instance (Monoid String) [mempty ""])
+(instance (Monoid Bytes) [mempty #""])
 
 (instance (forall [a] (Semigroup a) => (Monoid (Maybe a)))
   [mempty Nothing])

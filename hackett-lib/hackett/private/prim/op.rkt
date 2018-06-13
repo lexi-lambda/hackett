@@ -5,6 +5,7 @@
 
          (postfix-in - (combine-in racket/base
                                    racket/flonum
+                                   racket/function
                                    racket/match
                                    racket/promise
                                    racket/string))
@@ -13,7 +14,7 @@
          (only-in (unmangle-types-in #:no-introduce (only-types-in hackett/private/kernel)) forall)
          (unmangle-types-in #:no-introduce (only-types-in hackett/private/prim/type))
          (only-in hackett/private/prim/type
-                  True False :: Nil
+                  True False :: Nil Just Nothing
                   [Unit MkUnit] [Tuple MkTuple] [IO MkIO])
          hackett/private/prim/type-provide)
 
@@ -42,10 +43,17 @@
           [d<= : {Double -> Double -> Bool}]
           [d>= : {Double -> Double -> Bool}]
           [integer->double : {Integer -> Double}]
+          [show/String : {String -> String}]
           [equal?/String : {String -> String -> Bool}]
           [append/String : {String -> String -> String}]
           [string-length : {String -> Integer}]
           [string-split : {String -> String -> (List String)}]
+          [string->bytes/utf-8 : {String -> Bytes}]
+          [show/Bytes : {Bytes -> String}]
+          [equal?/Bytes : {Bytes -> Bytes -> Bool}]
+          [append/Bytes : {Bytes -> Bytes -> Bytes}]
+          [bytes-length : {Bytes -> Integer}]
+          [bytes->string/utf-8 : {Bytes -> (Maybe String)}]
           [seq : (forall [a b] b)]
           [print : {String -> (IO Unit)}]
           [error! : (forall [a] {String -> a})]))
@@ -95,10 +103,23 @@
 ;; ---------------------------------------------------------------------------------------------------
 ;; String
 
+(define (show/String x) (format "~v" (force- x)))
 (define ((equal?/String x) y) (boolean->Bool (string=?- (force- x) (force- y))))
 (define ((append/String x) y) (string-append- (force- x) (force- y)))
 (define (string-length x) (string-length- (force- x)))
 (define ((string-split x) y) (list->List (string-split- (force- y) (force- x) #:trim? #f)))
+(define (string->bytes/utf-8 x) (string->bytes/utf-8- (force- x)))
+
+;; ---------------------------------------------------------------------------------------------------
+;; Bytes
+
+(define (show/Bytes x) (format "~v" (force- x)))
+(define ((equal?/Bytes x) y) (boolean->Bool (bytes=?- (force- x) (force- y))))
+(define ((append/Bytes x) y) (bytes-append- (force- x) (force- y)))
+(define (bytes-length x) (bytes-length- (force- x)))
+(define (bytes->string/utf-8 x)
+  (with-handlers ([exn:fail:contract? (const- Nothing)])
+    (Just (bytes->string/utf-8- (force- x)))))
 
 ;; ---------------------------------------------------------------------------------------------------
 
