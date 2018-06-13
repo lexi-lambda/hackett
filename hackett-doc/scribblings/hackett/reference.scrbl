@@ -1311,7 +1311,7 @@ Like @racket[print], but appends a newline to the end of the printed message.}
 
 @defmodule[hackett/monad/trans]
 
-@defclass[(t:MonadTrans t)
+@defclass[(t:Monad-Trans t)
           [lift (t:forall [m a] {(m a) t:-> (t m a)})]]{
 
 The class of @deftech{monad transformers}. A monad transformer builds a new monad from an existing

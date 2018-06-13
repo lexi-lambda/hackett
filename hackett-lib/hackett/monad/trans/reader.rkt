@@ -32,7 +32,7 @@
           (Reader/T (λ [r] (do [x* <- (x r)]
                                (case x* [(Reader/T y) (y r)])))))])
 
-(instance (forall [r] (MonadTrans (Reader/T r)))
+(instance (forall [r] (Monad-Trans (Reader/T r)))
   [lift {Reader/T . const}])
 
 (instance (forall [b r m] (Monad-Base b m) => (Monad-Base b (Reader/T r m)))

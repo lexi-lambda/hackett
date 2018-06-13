@@ -40,7 +40,7 @@
                          [(Right (Error/T x**)) x**]
                          [(Left e) (pure (Left e))]))))])
 
-(instance (forall [e] (MonadTrans (Error/T e)))
+(instance (forall [e] (Monad-Trans (Error/T e)))
   [lift {Error/T . (map Right)}])
 
 (instance (forall [b e m] (Monad-Base b m) => (Monad-Base b (Error/T e m)))
