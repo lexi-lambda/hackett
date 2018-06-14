@@ -3,7 +3,7 @@
 (require hackett/private/type-reqprov
 
          (for-label hackett
-                    (only-in (unmangle-types-in #:no-introduce (only-types-in hackett)) =>))
+                    (only-in (unmangle-types-in #:no-introduce #:only hackett) =>))
 
          (for-syntax racket/base
                      racket/contract

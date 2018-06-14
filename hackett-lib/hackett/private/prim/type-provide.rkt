@@ -8,7 +8,7 @@
          (postfix-in - racket/base)
          (only-in hackett/private/base define-primop type)
          (only-in hackett/private/kernel :)
-         (only-in (unmangle-types-in #:no-introduce (only-types-in hackett/private/kernel))
+         (only-in (unmangle-types-in #:no-introduce #:only hackett/private/kernel)
                   [#%app @%app]))
 
 (provide typed-out)

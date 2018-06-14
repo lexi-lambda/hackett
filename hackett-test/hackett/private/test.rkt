@@ -13,7 +13,7 @@
            syntax/parse/define
 
            hackett/private/type-reqprov
-           (prefix-in t: (unmangle-types-in #:no-introduce (only-types-in hackett)))
+           (prefix-in t: (unmangle-types-in #:no-introduce #:only hackett))
            (only-in hackett [#%app @%app] module+ : Unit Tuple)
            (only-in hackett/private/prim IO unsafe-run-io!)
            hackett/private/prim/type-provide

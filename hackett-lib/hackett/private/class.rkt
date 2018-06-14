@@ -12,7 +12,7 @@
 
          (for-syntax hackett/private/infix)
          (except-in hackett/private/base @%app)
-         (only-in (unmangle-types-in #:no-introduce (only-types-in hackett/private/kernel))
+         (only-in (unmangle-types-in #:no-introduce #:only hackett/private/kernel)
                   ∀ => [#%app @%app]))
 
 (provide (for-syntax class-id)

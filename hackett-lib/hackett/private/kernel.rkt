@@ -54,8 +54,7 @@
 
 (define-syntax-parser #%require/only-types
   [(_ require-spec ...)
-   (type-namespace-introduce
-    #'(@%require (only-types-in require-spec ...)))])
+   #'(require (unmangle-types-in #:only require-spec ...))])
 
 (define-syntax-parser λ
   [(_ [x:id] e:expr)

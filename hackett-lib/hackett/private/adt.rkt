@@ -19,7 +19,7 @@
          (except-in hackett/private/base @%app)
          (only-in hackett/private/class class-id derive-instance)
          (only-in hackett/private/kernel [λ plain-λ])
-         (only-in (unmangle-types-in #:no-introduce (only-types-in hackett/private/kernel))
+         (only-in (unmangle-types-in #:no-introduce #:only hackett/private/kernel)
                   forall [#%app @%app]))
 
 (provide (for-syntax type-constructor-spec data-constructor-spec
