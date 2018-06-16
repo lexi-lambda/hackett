@@ -12,7 +12,8 @@
          racket/stxparam
          syntax/parse/define
 
-         (for-syntax hackett/private/infix
+         (for-syntax hackett/private/expand+elaborate
+                     hackett/private/infix
                      hackett/private/typecheck
                      hackett/private/typeclass
                      hackett/private/util/list
@@ -23,7 +24,7 @@
                      τs⇔/λ! τ⇔/λ! τ⇔! τ⇐/λ! τ⇐! τ⇒/λ! τ⇒! τ⇒app! τs⇒!)
          (rename-out [#%top @%top])
          @%module-begin @%datum @%app
-         @%superclasses-key @%dictionary-placeholder @%with-dictionary #%defer-expansion
+         @%superclasses-key @%dictionary-placeholder @%with-dictionary
          define-primop define-base-type
          -> Integer Double String
          : λ1 def let letrec todo!)
@@ -42,10 +43,6 @@
 (begin-for-syntax
   ;; -------------------------------------------------------------------------------------------------
   ;; inference/checking + erasure/expansion
-
-  (define stop-ids (list #'@%dictionary-placeholder
-                         #'@%with-dictionary
-                         #'#%defer-expansion))
 
   ; The following functions perform type inference and typechecking. This process is performed by
   ; expanding expressions, which can also be seen as a type erasure pass. These functions follow a
@@ -193,9 +190,9 @@
                     [scoped-intdef-ctx (in-list scoped-intdef-ctxs)])
           (let* ([e- (let ([intdef-ctxs (if scoped-intdef-ctx
                                             (list intdef-ctx scoped-intdef-ctx)
-                                            intdef-ctx)])
+                                            (list intdef-ctx))])
                        (let loop ([e e/elab])
-                         (syntax-parse (local-expand e 'expression stop-ids intdef-ctxs)
+                         (syntax-parse (local-expand/defer-elaborate e 'expression '() intdef-ctxs)
                            #:literals [#%expression]
                            ; Expand through #%expression forms if we don’t find an inferred type
                            ; immediately and hope that the nested expression will have a type.
@@ -288,48 +285,75 @@
 
 (define-syntax-parser @%with-dictionary
   [(_ constr e)
-   #:with this #`(quote-syntax #,this-syntax)
    #:with dict-id (generate-temporary #'constr)
-   #'(λ- (dict-id)
-       (syntax-parameterize
-           ([local-class-instances
-             (let ([existing-instances (syntax-parameter-value #'local-class-instances)]
-                   [new-instances (constr->instances (quote-syntax constr) #'dict-id)])
-               (append new-instances existing-instances))])
-         e))])
+   (syntax/loc this-syntax
+     (@%with-dictionary* constr dict-id e))])
 
-(define-syntax-parser @%dictionary-placeholder
-  [(_ constr-expr src-expr)
-   #:with this #`(quote-syntax #,this-syntax)
-   #'(let-syntax-
-         ([dict-expr
-           (let*-values ([(constr) (quote-syntax constr-expr)]
-                         [(instance constrs) (lookup-instance! constr #:src (quote-syntax src-expr))]
-                         [(dict-expr) (class:instance-dict-expr instance)])
-             ; It’s possible that the dictionary itself requires dictionaries for classes with
-             ; subgoals, like (instance ∀ [a] [(Show a)] => (Show (List a)) ...). If there are not
-             ; any constraints, we need to produce a (curried) application to sub-dictionaries, which
-             ; should be recursively elaborated.
-             (make-variable-like-transformer
-              (foldr (λ (constr acc)
-                       #`(#,acc
-                          #,(quasisyntax/loc this
-                              (@%dictionary-placeholder #,constr src-expr))))
-                     dict-expr
-                     constrs)))])
-       dict-expr)])
+(define-syntax-parser @%with-dictionary*
+  [(head constr dict-id:id e)
+   #:fail-unless (syntax-local-elaborate-pass) "not currently elaborating"
+   (match (syntax-local-elaborate-pass)
+     ['expand
+      (syntax-local-elaborate-defer
+       (quasisyntax/loc this-syntax
+         (head constr dict-id #,(local-expand/defer-elaborate #'e 'expression '()))))]
+     ['elaborate
+      (let* ([intdef-ctx (syntax-local-make-definition-context)]
+             [dict-id* (internal-definition-context-introduce intdef-ctx #'dict-id)]
+             [new-instances (constr->instances #'constr dict-id*)])
+        (syntax-local-bind-syntaxes (list #'dict-id) #f intdef-ctx)
+        (parameterize ([current-local-class-instances
+                        (append new-instances (current-local-class-instances))])
+          (syntax-local-elaborate-defer
+           (quasisyntax/loc this-syntax
+             (head constr #,dict-id*
+                   #,(local-expand/defer-elaborate #'e 'expression '() (list intdef-ctx)))))))]
+     ['finalize
+      (let ([new-instances (constr->instances #'constr #'dict-id)])
+        (parameterize ([current-local-class-instances
+                        (append new-instances (current-local-class-instances))])
+          (local-expand/defer-elaborate
+           (syntax/loc this-syntax
+             (λ- (dict-id) e))
+           'expression '())))])])
 
-(define-syntax-parser #%defer-expansion
-  [(_ e) #'e])
+(define-syntax @%dictionary-placeholder
+  (make-elaborating-transformer
+   (syntax-parser
+     [(_ constr src-expr)
+      (match (syntax-local-elaborate-pass)
+        ['expand
+         (syntax-local-elaborate-defer this-syntax)]
+        [(or 'elaborate 'finalize)
+         (let*-values ([(instance constrs)
+                        (lookup-instance!
+                         #'constr
+                         #:src #'src-expr
+                         #:failure-thunk (and (eq? (syntax-local-elaborate-pass) 'elaborate)
+                                              (λ () (values #f #f))))])
+           (if instance
+               ; It’s possible that the dictionary itself requires dictionaries for classes with
+               ; subgoals, like (instance ∀ [a] [(Show a)] => (Show (List a)) ...). If there are not
+               ; any constraints, we need to produce a (curried) application to sub-dictionaries,
+               ; which should be recursively elaborated.
+               (begin
+                 (syntax-local-elaborate-did-make-progress!)
+                 (foldr (λ (constr acc)
+                          #`(#,acc
+                             #,(quasisyntax/loc this-syntax
+                                 (@%dictionary-placeholder #,constr src-expr))))
+                        (replace-stx-loc (class:instance-dict-expr instance) this-syntax)
+                        constrs))
+               (syntax-local-elaborate-defer this-syntax #:did-defer!? #t)))])])))
 
 ;; ---------------------------------------------------------------------------------------------------
 
 (define-syntax-parser @%module-begin
   [(_ form ...)
-   (~> (local-expand (value-namespace-introduce
-                      (syntax/loc this-syntax
-                        (#%plain-module-begin- form ...)))
-                     'module-begin '())
+   (~> (syntax/loc this-syntax
+         (#%plain-module-begin- form ...))
+       value-namespace-introduce
+       local-expand+elaborate
        apply-current-subst-in-tooltips)])
 
 (define-syntax-parser @%datum
@@ -343,43 +367,50 @@
   [(_ . x)
    (raise-syntax-error #f "literal not supported" #'x)])
 
-(define-syntax-parser :
-  ; The #:exact option prevents : from performing context reduction. This is not normally important,
-  ; but it is required for forms that use : to ensure an expression has a particular shape in order to
-  ; interface with untyped (i.e. Racket) code, and therefore the resulting type is ignored. For
-  ; example, the def form wraps an expression in its expansion with :, but it binds the actual
-  ; identifier to a syntax transformer that attaches the type directly. Therefore, it needs to perform
-  ; context reduction itself prior to expanding to :, and it must use #:exact.
-  [(_ e {~type t:type} {~optional {~and #:exact exact?}})
-   #:with t_reduced (if (attribute exact?)
-                        #'t.expansion
-                        (type-reduce-context #'t.expansion))
-   (attach-type #`(let-values- ([() t.residual])
-                  #,(τ⇐! ((attribute t.scoped-binding-introducer) #'e) #'t_reduced))
-                #'t_reduced)])
+(define-syntax :
+  (make-trampolining-expression-transformer
+   (syntax-parser
+     ; The #:exact option prevents : from performing context reduction. This is not normally
+     ; important, but it is required for forms that use : to ensure an expression has a particular
+     ; shape in order to interface with untyped (i.e. Racket) code, and therefore the resulting type
+     ; is ignored. For example, the def form wraps an expression in its expansion with :, but it binds
+     ; the actual identifier to a syntax transformer that attaches the type directly. Therefore, it
+     ; needs to perform context reduction itself prior to expanding to :, and it must use #:exact.
+     [(_ e {~type t:type} {~optional {~and #:exact exact?}})
+      #:with t_reduced (if (attribute exact?)
+                           #'t.expansion
+                           (type-reduce-context #'t.expansion))
+      (attach-type #`(let-values- ([() t.residual])
+                                  #,(τ⇐! ((attribute t.scoped-binding-introducer) #'e) #'t_reduced))
+                   #'t_reduced)])))
 
-(define-syntax-parser λ1
-  [(_ x:id e:expr)
-   #:do [(define t (get-expected this-syntax))]
-   #:fail-unless t "no expected type, add more type annotations"
-   #:with {~or {~-> a b} {~fail (format "expected ~a, given function" (type->string t))}} t
-   #:do [(define-values [xs- e-] (τ⇐/λ! #'e #'b (list (cons #'x #'a))))]
-   #:with [x-] xs-
-   (attach-type #`(λ- (x-) #,e-) t)]
-  [(_ x:id e:expr)
-   #:with x^ (generate-temporary)
-   #:with y^ (generate-temporary)
-   #:do [(define-values [xs- e-]
-           (τ⇐/λ! #'e #'(#%type:wobbly-var y^) (list (cons #'x #'(#%type:wobbly-var x^)))))]
-   #:with [x-] xs-
-   (attach-type #`(λ- (x-) #,e-) (template (?->* (#%type:wobbly-var x^) (#%type:wobbly-var y^))))])
+(define-syntax λ1
+  (make-trampolining-expression-transformer
+   (syntax-parser
+     [(_ x:id e:expr)
+      #:do [(define t (get-expected this-syntax))]
+      #:fail-unless t "no expected type, add more type annotations"
+      #:with {~or {~-> a b} {~fail (format "expected ~a, given function" (type->string t))}} t
+      #:do [(define-values [xs- e-] (τ⇐/λ! #'e #'b (list (cons #'x #'a))))]
+      #:with [x-] xs-
+      (attach-type #`(λ- (x-) #,e-) t)]
+     [(_ x:id e:expr)
+      #:with x^ (generate-temporary)
+      #:with y^ (generate-temporary)
+      #:do [(define-values [xs- e-]
+              (τ⇐/λ! #'e #'(#%type:wobbly-var y^) (list (cons #'x #'(#%type:wobbly-var x^)))))]
+      #:with [x-] xs-
+      (attach-type #`(λ- (x-) #,e-)
+                   (template (?->* (#%type:wobbly-var x^) (#%type:wobbly-var y^))))])))
 
-(define-syntax-parser @%app
-  [(_ f:expr e:expr)
-   #:do [(define-values [f- t_f] (τ⇒! #'f))
-         (define-values [r- t_r] (τ⇒app! f- (apply-current-subst t_f) #'e
-                                         #:src this-syntax))]
-   (attach-type r- t_r #:tooltip-src this-syntax)])
+(define-syntax @%app
+  (make-trampolining-expression-transformer
+   (syntax-parser
+     [(_ f:expr e:expr)
+      #:do [(define-values [f- t_f] (τ⇒! #'f))
+            (define-values [r- t_r] (τ⇒app! f- (apply-current-subst t_f) #'e
+                                            #:src this-syntax))]
+      (attach-type r- t_r #:tooltip-src this-syntax)])))
 
 (define-syntax-parser def
   #:literals [:]
@@ -396,52 +427,62 @@
           #'(define-syntax- id (make-typed-var-transformer #'id- (quote-syntax t_reduced)))
           (attribute fixity.fixity))
        (define- id- (:/use #,((attribute t.scoped-binding-introducer) #'e) t_reduced #:exact)))]
-  [(_ id:id
-      {~optional fixity:fixity-annotation}
-      e:expr)
-   #:with x^ (generate-temporary)
-   #:with t_e #'(#%type:wobbly-var x^)
-   #:do [(match-define-values [(list id-) e-] (τ⇐/λ! #'e #'t_e (list (cons #'id #'t_e))))]
-   #:with t_gen (type-reduce-context (generalize (apply-current-subst #'t_e)))
-   #`(begin-
-       #,(indirect-infix-definition
-          #`(define-syntax- id (make-typed-var-transformer (quote-syntax #,id-) (quote-syntax t_gen)))
-          (attribute fixity.fixity))
-       (define- #,id- #,e-))])
+  [(_ id:id {~optional fixity:fixity-annotation} e:expr)
+   (if (and (eq? (syntax-local-context) 'top-level)
+            (not (syntax-local-elaborate-pass)))
+       (syntax-local-elaborate-top this-syntax)
+       (match-let*-values ([[t_e] #`(#%type:wobbly-var #,(generate-temporary))]
+                           [[(list id-) e-] (τ⇐/λ! #'e t_e (list (cons #'id t_e)))]
+                           [[t_gen] (type-reduce-context (generalize (apply-current-subst t_e)))])
+         #`(begin-
+             #,(indirect-infix-definition
+                #`(define-syntax- id (make-typed-var-transformer (quote-syntax #,id-)
+                                                                 (quote-syntax #,t_gen)))
+                (attribute fixity.fixity))
+             (define- #,id- #,e-))))])
 
 (begin-for-syntax
   (struct todo-item (full summary) #:prefab))
 
-(define-syntax-parser todo!*
-  [(_ v e ...)
-   #:do [(define type (apply-current-subst #'(#%type:wobbly-var v)))
-         (define type-str (type->string type))]
-   #:with message (string-append (source-location->prefix this-syntax)
-                                 "todo! with type "
-                                 type-str)
-   (syntax-property (syntax/loc this-syntax (error 'message))
-                    'todo (todo-item type-str type-str))])
+(define-syntax todo!*
+  (make-elaborating-transformer
+   (syntax-parser
+     [(_ v e ...)
+      (match (syntax-local-elaborate-pass)
+        [(or 'expand 'elaborate)
+         (syntax-local-elaborate-defer this-syntax)]
+        ['finalize
+         (let* ([type-str (type->string (apply-current-subst #'(#%type:wobbly-var v)))]
+                [message (string-append (source-location->prefix this-syntax)
+                                        "todo! with type "
+                                        type-str)])
+           (syntax-property (quasisyntax/loc this-syntax (error '#,message))
+                            'todo (todo-item type-str type-str)))])])))
 
-(define-syntax-parser todo!
-  [(_ e ...)
-   #:with var (generate-temporary #'t_todo!)
-   #:with contents (syntax/loc this-syntax (todo!* var e ...))
-   (attach-type (syntax/loc this-syntax (#%defer-expansion contents))
-                #'(#%type:wobbly-var var))])
+(define-syntax todo!
+  (make-elaborating-transformer
+   #:allowed-passes '[expand]
+   (syntax-parser
+     [(_ e ...)
+      #:with var (generate-temporary #'t_todo!)
+      (attach-type (syntax-local-elaborate-defer (syntax/loc this-syntax (todo!* var e ...)))
+                   #'(#%type:wobbly-var var))])))
 
-(define-syntax-parser let1
-  #:literals [:]
-  [(_ [id:id {~optional {~seq colon:: {~type t-ann:type}}} val:expr] body:expr)
-   #:do [(define-values [val- t_val]
-           (τ⇔! #'val (and~> (attribute t-ann.expansion) type-reduce-context)))
-         (match-define-values [(list id-) body- t_body]
-           (τ⇔/λ! #'body (get-expected this-syntax) (list (cons #'id t_val))))]
-   (~> (quasitemplate/loc this-syntax
-         (let-values- ([(#,id-) #,val-]
-                       {?? [() t-ann.residual]})
-           #,body-))
-       (attach-type t_body)
-       (syntax-property 'disappeared-use (and~> (attribute colon) syntax-local-introduce)))])
+(define-syntax let1
+  (make-trampolining-expression-transformer
+   (syntax-parser
+     #:literals [:]
+     [(_ [id:id {~optional {~seq colon:: {~type t-ann:type}}} val:expr] body:expr)
+      #:do [(define-values [val- t_val]
+              (τ⇔! #'val (and~> (attribute t-ann.expansion) type-reduce-context)))
+            (match-define-values [(list id-) body- t_body]
+              (τ⇔/λ! #'body (get-expected this-syntax) (list (cons #'id t_val))))]
+      (~> (quasitemplate/loc this-syntax
+                             (let-values- ([(#,id-) #,val-]
+                                           {?? [() t-ann.residual]})
+                                          #,body-))
+          (attach-type t_body)
+          (syntax-property 'disappeared-use (and~> (attribute colon) syntax-local-introduce)))])))
 
 (define-syntax-parser let
   #:literals [:]
@@ -456,49 +497,53 @@
           #,(syntax/loc this-syntax
               (let (binding-pairs ...) body))))])])
 
-(define-syntax-parser letrec
-  #:literals [:]
-  [(_ ([id:id {~optional {~seq colon:: {~type t-ann:type}}} val:expr] ...+) body:expr)
-   #:do [; First, start by grouping bindings into two sets: those with explicit type annotations, and
-         ; those without. For those without explicit type annotations, synthesize a fresh type
-         ; variable to serve as their types.
-         (define-values [ids+ts+vals/ann ids+ts+vals/unann]
-           (let-values
-               ([(ids+ts+vals/ann ids+ts+vals/unann)
-                 (for/fold ([ids+ts+vals/ann '()]
-                            [ids+ts+vals/unann '()])
-                           ([id (in-list (attribute id))]
-                            [t-ann (in-list (attribute t-ann.expansion))]
-                            [val (in-list (attribute val))])
-                   (if t-ann
-                       (values (cons (list id (type-reduce-context t-ann) val)
-                                     ids+ts+vals/ann)
-                               ids+ts+vals/unann)
-                       (let* ([t_val-id (generate-temporary)]
-                              [t_val #`(#%type:wobbly-var #,t_val-id)])
-                         (values ids+ts+vals/ann (cons (list id t_val val) ids+ts+vals/unann)))))])
-             (values (reverse ids+ts+vals/ann) (reverse ids+ts+vals/unann))))
+(define-syntax letrec
+  (make-trampolining-expression-transformer
+   (syntax-parser
+     #:literals [:]
+     [(_ ([id:id {~optional {~seq colon:: {~type t-ann:type}}} val:expr] ...+) body:expr)
+      #:do [; First, start by grouping bindings into two sets: those with explicit type annotations,
+            ; and those without. For those without explicit type annotations, synthesize a fresh type
+            ; variable to serve as their types.
+            (define-values [ids+ts+vals/ann ids+ts+vals/unann]
+              (let-values
+                  ([(ids+ts+vals/ann ids+ts+vals/unann)
+                    (for/fold ([ids+ts+vals/ann '()]
+                               [ids+ts+vals/unann '()])
+                              ([id (in-list (attribute id))]
+                               [t-ann (in-list (attribute t-ann.expansion))]
+                               [val (in-list (attribute val))])
+                      (if t-ann
+                          (values (cons (list id (type-reduce-context t-ann) val)
+                                        ids+ts+vals/ann)
+                                  ids+ts+vals/unann)
+                          (let* ([t_val-id (generate-temporary)]
+                                 [t_val #`(#%type:wobbly-var #,t_val-id)])
+                            (values ids+ts+vals/ann (cons (list id t_val val) ids+ts+vals/unann)))))])
+                (values (reverse ids+ts+vals/ann) (reverse ids+ts+vals/unann))))
 
-         ; Next, establish a dictionary mapping all bindings to their types. This will be used as a
-         ; binding context when typechecking.
-         (define ids+ts (map #{cons (first %) (second %)} (append ids+ts+vals/ann ids+ts+vals/unann)))
-         ; We also need to produce a mapping of expressions to their annotations, plus the body. This
-         ; will be handed off to the expander to be typechecked.
-         (define es+ts
-           (snoc (map #{cons (third %) (second %)} (append ids+ts+vals/ann ids+ts+vals/unann))
-                 (cons #'body (get-expected this-syntax))))
+            ; Next, establish a dictionary mapping all bindings to their types. This will be used as a
+            ; binding context when typechecking.
+            (define ids+ts (map #{cons (first %) (second %)}
+                                (append ids+ts+vals/ann ids+ts+vals/unann)))
+            ; We also need to produce a mapping of expressions to their annotations, plus the body.
+            ; This will be handed off to the expander to be typechecked.
+            (define es+ts
+              (snoc (map #{cons (third %) (second %)} (append ids+ts+vals/ann ids+ts+vals/unann))
+                    (cons #'body (get-expected this-syntax))))
 
-         ; With the setup out of the way, we can now call τs⇔/λ! to perform the actual typechecking.
-         (match-define-values [ids- (list vals- ... body-) (list _ ... t_body)]
-           (τs⇔/λ! es+ts ids+ts))]
+            ; With the setup out of the way, we can now call τs⇔/λ! to perform the actual
+            ; typechecking.
+            (match-define-values [ids- (list vals- ... body-) (list _ ... t_body)]
+              (τs⇔/λ! es+ts ids+ts))]
 
-   ; Finally, expand to the runtime value.
-   #:with [id- ...] ids-
-   #:with [val- ...] vals-
-   (~> (quasitemplate/loc this-syntax
-         (letrec-values ([(id-) val-] ...
-                         {?? [() t-ann.residual]} ...)
-           #,body-))
-       (attach-type t_body)
-       (syntax-property 'disappeared-use
-                        (map syntax-local-introduce (filter values (attribute colon)))))])
+      ; Finally, expand to the runtime value.
+      #:with [id- ...] ids-
+      #:with [val- ...] vals-
+      (~> (quasitemplate/loc this-syntax
+                             (letrec-values ([(id-) val-] ...
+                                             {?? [() t-ann.residual]} ...)
+                               #,body-))
+          (attach-type t_body)
+          (syntax-property 'disappeared-use
+                           (map syntax-local-introduce (filter values (attribute colon)))))])))

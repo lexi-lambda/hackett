@@ -252,6 +252,9 @@
   [map (λ* [[f {y :: ys}] {(f y) :: (map f ys)}]
            [[_ Nil      ] Nil])])
 
+(instance (forall [r] (Functor (-> r)))
+  [map .])
+
 (instance (Functor IO)
   [map (λ [f (IO mx)]
          (IO (λ [rw]
@@ -285,6 +288,10 @@
 (instance (Applicative List)
   [pure (λ [x] {x :: Nil})]
   [<*> ap])
+
+(instance (forall [r] (Applicative (-> r)))
+  [pure const]
+  [<*> (λ [f g x] (f x (g x)))])
 
 (instance (Applicative IO)
   [pure (λ [x] (IO (λ [rw] (Tuple rw x))))]
@@ -335,6 +342,10 @@
   [join (λ* [[{{z :: zs} :: yss}] {z :: (join {zs :: yss})}]
             [[{Nil       :: yss}] (join yss)]
             [[Nil               ] Nil])])
+
+(instance (forall [r] (Monad (-> r)))
+  [join (λ [f x] (f x x))]
+  [=<< (λ [f g x] (f (g x) x))])
 
 (instance (Monad IO)
   [join (λ [(IO outer)]

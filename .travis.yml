@@ -15,7 +15,7 @@ env:
 before_install:
   - export DISPLAY=:99.0
   - sh -e /etc/init.d/xvfb start
-  - git clone https://github.com/greghendershott/travis-racket.git
+  - git clone -b utah --depth 1 https://github.com/lexi-lambda/travis-racket.git
   - cat travis-racket/install-racket.sh | bash
   - export PATH="${RACKET_DIR}/bin:${PATH}"
 

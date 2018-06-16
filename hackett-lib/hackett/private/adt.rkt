@@ -8,6 +8,7 @@
                      syntax/apply-transformer
                      threading
 
+                     hackett/private/expand+elaborate
                      hackett/private/infix
                      hackett/private/prop-case-pattern-expander
                      hackett/private/util/list
@@ -216,7 +217,10 @@
              #:declare pat-id (local-value case-pattern-expander?)
              #:do [(define trans
                      (case-pattern-expander-transformer (attribute pat-id.local-value)))]
-             #:with :pat (local-apply-transformer trans #'pat-exp 'expression)]
+             #:with p:pat (local-apply-transformer trans #'pat-exp 'expression)
+             #:attr pat (attribute p.pat)
+             #:attr disappeared-uses (cons (syntax-local-introduce #'pat-id)
+                                           (attribute p.disappeared-uses))]
 
     [pattern {~and constructor:data-constructor-val ~!}
              #:do [(define val (attribute constructor.local-value))]
@@ -226,8 +230,8 @@
              #:attr pat (pat-app this-syntax
                                  (attribute head.pat)
                                  (attribute arg.pat))
-             #:attr disappeared-uses (cons (syntax-local-introduce #'constructor)
-                                           (append* (attribute arg.disappeared-uses)))]
+             #:attr disappeared-uses (append (attribute head.disappeared-uses)
+                                             (append* (attribute arg.disappeared-uses)))]
     [pattern {~braces a:pat constructor:data-constructor-val b:pat}
              #:do [(define val (attribute constructor.local-value))
                    (define arity (data-constructor-arity val))]
@@ -276,23 +280,19 @@
 
   (define/contract (pat⇒! pat)
     (-> pat?
-        (values
-         type?                                        ; the inferred type the pattern matches against;
-         (listof (cons/c identifier? type?))          ; the types of bindings produced by the pattern;
-         (-> (listof identifier?)                     ; a function that produces a Racket `match`
-             (values syntax? (listof identifier?))))) ; pattern given a set of binding ids
+        (values type?                                 ; the inferred type the pattern matches against;
+                (listof (cons/c identifier? type?)))) ; the types of bindings produced by the pattern
     (match pat
       [(pat-var _ id)
        (let ([a^ (generate-temporary)])
-         (values #`(#%type:wobbly-var #,a^) (list (cons id #`(#%type:wobbly-var #,a^)))
-                 (match-lambda [(cons id rest) (values id rest)])))]
+         (values #`(#%type:wobbly-var #,a^) (list (cons id #`(#%type:wobbly-var #,a^)))))]
       [(pat-hole _)
        (let ([a^ (generate-temporary)])
-         (values #`(#%type:wobbly-var #,a^) '() #{values #'_ %}))]
+         (values #`(#%type:wobbly-var #,a^) '()))]
       [(pat-str _ str)
-       (values (expand-type #'String) '() #{values #`(app force- #,str) %})]
+       (values (expand-type #'String) '())]
       [(pat-int _ int)
-       (values (expand-type #'Integer) '() #{values #`(app force- #,int) %})]
+       (values (expand-type #'Integer) '())]
       [(pat-con stx con)
        (define arity (data-constructor-arity con))
        (unless (zero? arity)
@@ -315,52 +315,67 @@
            stx))
 
        (let*-values ([(τs_args τ_result) (data-constructor-args/result! con)]
-                     [(assumps mk-pats) (pats⇐! pats τs_args)])
-         (values τ_result assumps
-                 (λ (ids) (let-values ([(match-pats rest) (mk-pats ids)])
-                            (values ((data-constructor-make-match-pat con) match-pats) rest)))))]
+                     [(assumps) (pats⇐! pats τs_args)])
+         (values τ_result assumps))]
       [(pat-app outer-stx (pat-base inner-stx) _)
        (raise-syntax-error #f "expected a constructor" outer-stx inner-stx)]))
 
   (define/contract (pat⇐! pat t)
-    (-> pat? type?
-        (values (listof (cons/c identifier? type?))
-                (-> (listof identifier?) (values syntax? (listof identifier?)))))
-    (let-values ([(t_⇒ assumps mk-pat) (pat⇒! pat)])
+    (-> pat? type? (listof (cons/c identifier? type?)))
+    (let-values ([(t_⇒ assumps) (pat⇒! pat)])
       (type<:! t t_⇒ #:src (pat-base-stx pat))
-      (values assumps mk-pat)))
+      assumps))
 
-  ; Combines a list of `match` pattern constructors to properly run them against a list of identifiers
-  ; in sequence, then combine the results into a list of patterns. Used by pats⇐! and pats⇒!.
+  (define/contract (pats⇒! pats)
+    (-> (listof pat?) (values (listof type?) (listof (cons/c identifier? type?))))
+    (define-values [ts assumps]
+      (for/lists [ts assumps]
+                 ([pat (in-list pats)])
+        (pat⇒! pat)))
+    (values ts (append* assumps)))
+
+  (define/contract (pats⇐! pats ts)
+    (-> (listof pat?) (listof type?) (listof (cons/c identifier? type?)))
+    (append* (for/list ([pat (in-list pats)]
+                        [t (in-list ts)])
+               (pat⇐! pat t))))
+
+  ; Given a pattern, returns a function that produces a racket/match pattern given a list of binding
+  ; identifiers. The input to this function may provide more identifiers than the pattern actually
+  ; binds, and any leftover identifiers will be returned as the second value.
+  ;
+  ; The order in which identifiers are “consumed” by the produced function must agree with the order
+  ; in which they are returned from pat⇒! and pat⇐!.
+  (define/contract (pat->mk-match-pat pat)
+    (-> pat? (-> (listof identifier?) (values syntax? (listof identifier?))))
+    (match pat
+      [(pat-var _ _)
+       (match-lambda [(cons id rest) (values id rest)])]
+      [(pat-hole _)
+       #{values #'_ %}]
+      [(pat-str _ str)
+       #{values #`(app force- #,str) %}]
+      [(pat-int _ int)
+       #{values #`(app force- #,int) %}]
+      [(pat-con stx con)
+       (pat->mk-match-pat (pat-app stx pat '()))]
+      [(pat-app stx (pat-con cstx con) pats)
+       (let ([mk-pats (combine-pattern-constructors (map pat->mk-match-pat pats))])
+         (λ (ids) (let-values ([(match-pats rest) (mk-pats ids)])
+                    (values ((data-constructor-make-match-pat con) match-pats) rest))))]))
+
+  ; Combines a list of racket/match pattern constructors to properly run them against a list of
+  ; identifiers in sequence, then combine the results into a list of patterns. Used by
+  ; pat->mk-match-pat.
   (define/contract (combine-pattern-constructors mk-pats)
     (-> (listof (-> (listof identifier?) (values syntax? (listof identifier?))))
         (-> (listof identifier?) (values (listof syntax?) (listof identifier?))))
     (λ (ids) (for/fold ([match-pats '()]
-                        [rest ids])
+                        [rest ids]
+                        #:result (values (reverse match-pats) rest))
                        ([mk-pat (in-list mk-pats)])
                (let-values ([(match-pat rest*) (mk-pat rest)])
-                 (values (snoc match-pats match-pat) rest*)))))
-
-  (define/contract (pats⇒! pats)
-    (-> (listof pat?)
-        (values (listof type?) (listof (cons/c identifier? type?))
-                (-> (listof identifier?) (values (listof syntax?) (listof identifier?)))))
-    (define-values [ts assumps mk-pats]
-      (for/lists [ts assumps mk-pats]
-                 ([pat (in-list pats)])
-        (pat⇒! pat)))
-    (values ts (append* assumps) (combine-pattern-constructors mk-pats)))
-
-  (define/contract (pats⇐! pats ts)
-    (-> (listof pat?) (listof type?)
-        (values (listof (cons/c identifier? type?))
-                (-> (listof identifier?) (values (listof syntax?) (listof identifier?)))))
-    (define-values [assumps mk-pats]
-      (for/lists [assumps mk-pats]
-                 ([pat (in-list pats)]
-                  [t (in-list ts)])
-        (pat⇐! pat t)))
-    (values (append* assumps) (combine-pattern-constructors mk-pats)))
+                 (values (cons match-pat match-pats) rest*)))))
 
 
   ;; -------------------------------------------------------------------------------------------------
@@ -554,93 +569,130 @@
 
 (begin-for-syntax
   (define-syntax-class (case*-clause num-pats)
-    #:attributes [[pat 1] [pat.pat 1] pat.disappeared-uses body]
+    #:attributes [[pat 1] [pat.pat 1] body]
     #:description "a pattern-matching clause"
     [pattern [[p:pat ...+] body:expr]
              #:fail-unless (= (length (attribute p)) num-pats)
                            (~a "mismatch between number of patterns and number of values (expected "
                                num-pats " patterns, found " (length (attribute p)) ")")
              #:attr [pat 1] (attribute p)
-             #:attr [pat.pat 1] (attribute p.pat)
-             #:attr pat.disappeared-uses (attribute p.disappeared-uses)]))
+             #:attr [pat.pat 1] (attribute p.pat)]))
 
-(define-syntax-parser case*
-  [(_ [val:expr ...+] {~var clause (case*-clause (length (attribute val)))} ...+)
-   #:do [; Determine the type to use to unify all of the body clauses. If there is
-         ; an expected type (from τ⇐/λ!), then use that type, otherwise generate a
-         ; wobbly var that will be unified against each body type.
-         (define t_body
-           (or (get-expected this-syntax)
-               #`(#%type:wobbly-var #,(generate-temporary #'body))))
+(define-syntax case*
+  (make-elaborating-transformer
+   #:allowed-passes '[expand]
+   (syntax-parser
+     [(_ [val:expr ...+] {~var clause (case*-clause (length (attribute val)))} ...+)
+      #:do [; Determine the type to use to unify all of the body clauses. If there is
+            ; an expected type (from τ⇐/λ!), then use that type, otherwise generate a
+            ; wobbly var that will be unified against each body type.
+            (define t_body
+              (or (get-expected this-syntax)
+                  #`(#%type:wobbly-var #,(generate-temporary #'body))))
 
-         ; Infer the types of each clause and expand the bodies. Each clause has N patterns, each of
-         ; which match against a particular type, and it also has a body, which must be typechecked
-         ; as well. Additionally, inferring the pattern types produces a racket/match pattern, which
-         ; we can use to implement the untyped expression.
-         (define-values [tss_pats match-pats- bodies-]
-           (for/lists [tss_pats match-pats- bodies-]
-                      ([clause (in-list (attribute clause))]
-                       [body (in-list (attribute clause.body))]
-                       [pats (in-list (attribute clause.pat.pat))])
-             (match-let*-values
+            ; Infer the types of each clause and expand the bodies. Each clause has N patterns, each
+            ; of which match against a particular type, and it also has a body, which must be
+            ; typechecked as well. Additionally, inferring the pattern types produces a racket/match
+            ; pattern, which we can use to implement the untyped expression.
+            (define-values [tss_pats bound-idss- bodies-]
+              (for/lists [tss_pats bound-idss- bodies-]
+                         ([clause (in-list (attribute clause))]
+                          [body (in-list (attribute clause.body))]
+                          [pats (in-list (attribute clause.pat.pat))])
+                (match-let*-values
                  ([; Infer the type each pattern will match against and collect the assumptions.
-                   (ts_pats assumpss mk-match-pats)
-                   (for/lists [ts_pats assumpss mk-match-pats]
+                   (ts_pats assumpss)
+                   (for/lists [ts_pats assumpss]
                               ([pat (in-list pats)])
                      (pat⇒! pat))]
                   ; Collect the set of bindings introduced by the patterns.
                   [(assumps) (append* assumpss)]
                   ; Typecheck the body expression against the expected type.
-                  [(bound-ids- body-) (τ⇐/λ! body t_body assumps)]
-                  ; Use the bound ids to construct racket/match patterns from the case patterns.
-                  [(match-pats- (list))
-                   (for/fold ([match-pats- '()]
-                              [bound-ids- bound-ids-])
-                             ([mk-match-pat (in-list mk-match-pats)])
-                     (let-values ([(match-pat- bound-ids-*) (mk-match-pat bound-ids-)])
-                       (values (cons match-pat- match-pats-) bound-ids-*)))]
-                  ; Collect the racket/match patterns into a single, multi-pattern clause.
-                  [(match-pat-) (quasisyntax/loc clause
-                                  (#,@(reverse match-pats-)))])
-               ; Return all the results of the inference process.
-               (values ts_pats match-pat- body-))))
+                  [(bound-ids- body-) (τ⇐/λ! body t_body assumps)])
+                 ; Return all the results of the inference process.
+                 (values ts_pats bound-ids- body-))))
 
-         ; Now that we’ve inferred the types that each pattern can match against, we should infer the
-         ; types of each value being matched and ensure that all the patterns match against it. In
-         ; order to do this, we want to transpose the list of inferred pattern types so that we can
-         ; group all the types together that correspond to the same value. We also want to do the same
-         ; for the patterns themselves, though only to provide useful source location information for
-         ; type errors errors.
-         (define tss_pats-transposed (apply map list tss_pats))
-         (define patss-transposed (apply map list (attribute clause.pat)))]
-   ; Now we can iterate over the types and ensure each value has the appropriate type.
-   #:with [val- ...] (for/list ([val (in-list (attribute val))]
-                                [ts_pats (in-list tss_pats-transposed)]
-                                [pats (in-list patss-transposed)])
-                       (let ([val^ (generate-temporary)])
-                         (for-each #{type<:! %1 #`(#%type:wobbly-var #,val^) #:src %2} ts_pats pats)
-                         (τ⇐! val (apply-current-subst #`(#%type:wobbly-var #,val^)))))
+            ; Now that we’ve inferred the types that each pattern can match against, we should infer
+            ; the types of each value being matched and ensure that all the patterns match against it.
+            ; In order to do this, we want to transpose the list of inferred pattern types so that we
+            ; can group all the types together that correspond to the same value. We also want to do
+            ; the same for the patterns themselves, though only to provide useful source location
+            ; information for type errors errors.
+            (define tss_pats-transposed (apply map list tss_pats))
+            (define patss-transposed (apply map list (attribute clause.pat)))]
+      ; Now we can iterate over the types and ensure each value has the appropriate type.
+      #:with [val- ...] (for/list ([val (in-list (attribute val))]
+                                   [ts_pats (in-list tss_pats-transposed)]
+                                   [pats (in-list patss-transposed)])
+                          (let ([val^ (generate-temporary)])
+                            (for ([t_pat (in-list ts_pats)]
+                                  [pat (in-list pats)])
+                              (type<:! t_pat #`(#%type:wobbly-var #,val^) #:src pat))
+                            (τ⇐! val (apply-current-subst #`(#%type:wobbly-var #,val^)))))
 
-   #:do [; Perform exhaustiveness checking.
-         (define non-exhaust (check-exhaustiveness (attribute clause.pat.pat)
-                                                   (length (attribute val))))]
-   #:fail-when non-exhaust
-               (string-append "non-exhaustive pattern match\n  unmatched case"
-                              (if (= (length non-exhaust) 1) "" "s")
-                              ":" (string-append* (map #{string-append "\n    " (ideal->string %)}
-                                                       non-exhaust)))
+      #:do [; Perform exhaustiveness checking.
+            (define non-exhaust (check-exhaustiveness (attribute clause.pat.pat)
+                                                      (length (attribute val))))]
+      #:fail-when non-exhaust (string-append
+                               "non-exhaustive pattern match\n  unmatched case"
+                               (if (= (length non-exhaust) 1) "" "s")
+                               ":" (string-append* (map #{string-append "\n    " (ideal->string %)}
+                                                        non-exhaust)))
 
-   #:do [; The resulting type of the case expression is the type we unified each clause against.
-         (define t_result
-           (apply-current-subst t_body))]
+      #:do [; The resulting type of the case expression is the type we unified each clause against.
+            (define t_result
+              (apply-current-subst t_body))]
 
-   ; Finally, we can actually emit the result syntax, using racket/match.
-   #:with [match-pat- ...] match-pats-
-   #:with [body- ...] bodies-
-   (~> (syntax/loc this-syntax
-         (lazy- (match*- [val- ...] [match-pat- body-] ...)))
-       (attach-type t_result)
-       (syntax-property 'disappeared-use (attribute clause.pat.disappeared-uses)))])
+      ; Finally, we can actually emit the result syntax, using racket/match.
+      #:with [[bound-id- ...] ...] bound-idss-
+      #:with [body- ...] bodies-
+      (~> (syntax/loc this-syntax
+            (deferred-case* [val- ...] [[bound-id- ...] [clause.pat ...] body-] ...))
+          (attach-type t_result))])))
+
+; Since racket/match uses syntax-parameterize, which in turn uses local-expand, we need to avoid
+; expanding to `match` too early, since that will potentially force expansion of things that should be
+; deferred to elaboration. To accommodate this, this macro waits until finalization to actually expand
+; into `match`.
+;
+; (This will hopefully get less ugly once Hackett has a real core language, since a core #%case form
+; should be able to subsume this macro.)
+(define-syntax deferred-case*
+  (make-elaborating-transformer
+   (syntax-parser
+     [(head [val-:expr ...+] [[x-:id ...] [pat:pat ...] body-:expr] ...)
+      (match (syntax-local-elaborate-pass)
+        ; In 'expand or 'elaborate mode, we need to manually expand the body forms, making sure the
+        ; runtime binding are locally bound using a definition context.
+        [(or 'expand 'elaborate)
+         (let ([intdef-ctx (syntax-local-make-definition-context)])
+           (syntax-local-bind-syntaxes (append* (attribute x-)) #f intdef-ctx)
+           (with-syntax ([[[x-* ...] ...]
+                          (internal-definition-context-introduce intdef-ctx #'[[x- ...] ...])]
+                         [[body-* ...]
+                          (for/list ([body- (in-list (attribute body-))])
+                            (local-expand/defer-elaborate body- 'expression '() (list intdef-ctx)))])
+             (syntax-local-elaborate-defer
+              (syntax/loc this-syntax
+                (head [val- ...] [[x-* ...] [pat ...] body-*] ...)))))]
+
+        ; In 'finalize mode, we actually generate racket/match patterns from Hackett patterns and
+        ; expand to a use of `match` from racket/match.
+        ['finalize
+         (with-syntax ([[match-pats- ...]
+                        (for/list ([xs- (in-list (attribute x-))]
+                                   [pats (in-list (attribute pat.pat))])
+                          (match-define-values [match-pats- (list)]
+                            (for/fold ([match-pats- '()]
+                                       [xs- xs-])
+                                      ([pat (in-list pats)])
+                              (let-values ([(match-pat- xs-*) ((pat->mk-match-pat pat) xs-)])
+                                (values (cons match-pat- match-pats-) xs-*))))
+                          (reverse match-pats-))])
+           (~> (quasisyntax/loc this-syntax
+                 (lazy- #,(syntax/loc this-syntax
+                            (match*- [val- ...] [match-pats- body-] ...))))
+               (syntax-property 'disappeared-use (attribute pat.disappeared-uses))))])])))
 
 (define-syntax-parser case
   [(_ val:expr {~describe "a pattern-matching clause" [pat:pat body:expr]} ...+)
