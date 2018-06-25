@@ -27,7 +27,7 @@ install:
       $TRAVIS_BUILD_DIR/hackett-test
 
 script:
-  - raco test -ep hackett-demo hackett-lib hackett-test
+  - raco test -ep hackett-demo hackett-doc hackett-lib hackett-test
 
 after_success:
   - bash deploy-docs.sh
