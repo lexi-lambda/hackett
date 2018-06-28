@@ -3,7 +3,7 @@
 (define collection 'multi)
 
 (define deps
-  '(["base" #:version "6.90.0.30"]
+  '(["base" #:version "7.0.0.2"]
     "curly-fn-lib"
     "data-lib"
     "syntax-classes-lib"

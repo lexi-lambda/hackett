@@ -443,6 +443,36 @@ Splits a string on all instances of a separator string.
   (string-split "," ",2,,4,")
   (string-split "," ",,,,"))}
 
+@defthing[string->bytes/utf-8 {t:String t:-> t:Bytes}]{
+
+Encodes a string using UTF-8.
+
+@(hackett-examples
+  (eval:check (string->bytes/utf-8 "αβγδ") #"\316\261\316\262\316\263\316\264"))}
+
+@subsection[#:tag "reference-bytes"]{Bytes}
+
+@deftype[t:Bytes]{
+
+The type of byte strings, a fixed-length array of bytes. Byte strings can be constructed with byte
+string literals.}
+
+@defthing[bytes-length {t:Bytes t:-> t:Bytes}]{
+
+Returns the length of a byte string.
+
+@(hackett-examples
+  (eval:check (bytes-length #"abcd") 4)
+  (eval:check (bytes-length (string->bytes/utf-8 "αβγδ")) 8))}
+
+@defthing[bytes->string/utf-8 {t:Bytes t:-> (t:Maybe t:String)}]{
+
+Attempts to decode a string using UTF-8.
+
+@(hackett-examples
+  (bytes->string/utf-8 #"\316\261\316\262\316\263\316\264")
+  (bytes->string/utf-8 #"\xc3\x28"))}
+
 @subsection[#:tag "reference-functions"]{Functions}
 
 @deftycon[(t:-> a b)]{
@@ -835,13 +865,17 @@ Adds the elements of @racket[xs] together and returns the sum. Equivalent to @ra
 
 @subsection[#:tag "reference-defining-typeclasses"]{Defining typeclasses and typeclass instances}
 
-@defform[#:literals [: t:=>]
+@defform[#:literals [: t:=> t:->]
          (class maybe-superclasses (class-id var-id ...)
+           maybe-fundeps
            [method-id : method-type maybe-default-method-impl] ...
            maybe-deriving-transformer)
          #:grammar
          ([maybe-superclasses (code:line superclass-constraint ... t:=>)
                               (code:line)]
+          [maybe-fundeps (code:line #:fundeps [fundep-spec ...])
+                         (code:line)]
+          [fundep-spec [determinant-id ...+ t:-> dependent-id ...+]]
           [maybe-default-method-impl default-method-impl-expr
                                      (code:line)]
           [maybe-deriving-transformer (code:line #:deriving-transformer deriving-transformer-expr)
@@ -863,6 +897,35 @@ valid implementation for any instance of the class. Default methods are generall
 typeclass method may be defined in terms of other typeclass methods, but the implementor can be given
 a choice of which methods to implement, or they can provide a more efficient implementation for
 commonly-used methods.
+
+Each @racket[fundep-spec], if provided, declares a @deftech{functional dependency} between parameters
+of the class, where each @racket[determinant-id] and @racket[dependent-id] must be included in the
+class’s @racket[var-id]s. A functional dependency introduces a constraint between instances of the
+class: each combination of the parameters specified by the @racket[determinant-id]s must uniquely
+determine the parameters specified by the @racket[dependent-id]s. For example, given the following
+class declaration:
+
+@(racketblock
+  (class (C a b c) #:fundeps [[a t:-> c]]))
+
+…then each instance of @racket[C] with the same type for @racket[a] must also have the same type for
+@racket[c]. For example, these instances would be permitted together:
+
+@(racketblock
+  (instance (C Integer Unit String))
+  (instance (C Integer Bool String)))
+
+…but these instances would not:
+
+@(racketblock
+  (instance (C Integer Unit String))
+  (instance (C Integer Bool Double)))
+
+Restriction of this sort is useful mostly because the knowledge that a class will be used this way
+allows the typechecker to perform better type inference. Without a functional dependency, use of a
+typeclass-constrained function requires all of its parameters to be known, but with a functional
+dependency, the typechecker can solve a typeclass constraint when only a subset of the parameters are
+known.
 
 If @racket[deriving-transformer-expr] is provided, it is evaluated in the
 @tech/racket-reference{transformer environment} to obtain a @deftech{deriving transformer} for the
@@ -1266,11 +1329,11 @@ Uses of this form correspond to definitions of @racketid[main] submodules in @ha
 @racketmodname[racket]. For more information, see
 @secref["main-and-test" #:doc '(lib "scribblings/guide/guide.scrbl")].}
 
-@defproc[(print [str t:String]) (t:IO t:Unit)]{
+@defthing[print (t:forall [m] (t:Monad-Base t:IO m) t:=> {t:String t:-> (m t:Unit)})]{
 
-Produces an @tech{I/O action} that prints @racket[str] to standard output.}
+Produces an @tech{I/O action} that prints the given string to standard output.}
 
-@defproc[(println [str t:String]) (t:IO t:Unit)]{
+@defthing[println (t:forall [m] (t:Monad-Base t:IO m) t:=> {t:String t:-> (m t:Unit)})]{
 
 Like @racket[print], but appends a newline to the end of the printed message.}
 
@@ -1278,7 +1341,7 @@ Like @racket[print], but appends a newline to the end of the printed message.}
 
 @defmodule[hackett/monad/trans]
 
-@defclass[(t:MonadTrans t)
+@defclass[(t:Monad-Trans t)
           [lift (t:forall [m a] {(m a) t:-> (t m a)})]]{
 
 The class of @deftech{monad transformers}. A monad transformer builds a new monad from an existing
@@ -1288,40 +1351,51 @@ as “monad mixins”.
 Instances should satisfy the following laws:
 
 @racketblock[
-  @#,racket[{lift |.| pure}] @#,elem[#:style 'roman]{=} @#,racket[pure]
-  @#,racket[(lift {_m >>= _f})] @#,elem[#:style 'roman]{=} @#,racket[{(lift _m) >>= {lift |.| _f}}]]
+  {lift |.| pure} @#,elem[#:style 'roman]{=} pure
+  (lift {_m >>= _f}) @#,elem[#:style 'roman]{=} {(lift _m) >>= {lift |.| _f}}]
 
 @defmethod[lift (t:forall [m a] {(m a) t:-> (t m a)})]{
 
 Lifts a computation from the argument monad to the constructed monad.}}
 
+@subsection[#:tag "reference-monad-base"]{Base Monads}
+
+@defmodule[hackett/monad/base]
+
+@defclass[#:super [(t:Monad m)]
+          (t:Monad-Base b m)
+          #:fundeps [[m -> b]]
+          [lift/base (t:forall [a] {(b a) t:-> (m a)})]]{
+
+A @tech[#:key "typeclass"]{class} for access the @deftech{base monad} in a @tech{monad transformer}
+stack. Instances should satisfy the following laws:
+
+@racketblock[
+ {lift/base |.| pure} @#,elem[#:style 'roman]{=} pure
+ {lift/base {_m >>= _f}} @#,elem[#:style 'roman]{=} {(lift/base _m) >>= {lift |.| _f}}]
+
+@defmethod[lift/base (t:forall [a] {(b a) t:-> (m a)})]{
+
+Lifts a computation from the @tech{base monad} @racket[b] into @racket[m]. For base monads, like
+@racket[t:IO], @racket[lift/base] should be @racket[id], and for @tech{monad transformers}, it should
+be @racket[{lift |.| lift/base}].}}
+
 @subsection[#:tag "reference-reader-monad"]{Reader}
 
 @defmodule[hackett/monad/reader]
 
-@defdata[(t:ReaderT r m a) (ReaderT {r t:-> (m a)})]{
+@defclass[#:super [(t:Monad m)]
+          (t:Monad-Reader r m)
+          #:fundeps [[m -> r]]
+          [ask (m r)]
+          [local (t:forall [a] {{r t:-> r} t:-> (m a) t:-> (m a)})]
+          [reader (t:forall [a] {{r t:-> a} t:-> (m a)})]]{
 
-The @deftech{reader monad transformer}, a @tech{monad transformer} that extends a monad with a
-read-only dynamic environment. The environment can be accessed with @racket[ask] and locally modified
-with @racket[local].
+The @tech[#:key "typeclass"]{class} of @tech{monads} that support reading values from a read-only
+implicit environment. The environment can be accessed with @racket[ask] and locally modified with
+@racket[local].
 
-@(hackett-interaction
-  (run-reader-t (do [x <- ask]
-                    [y <- (lift {{x + 1} :: {x - 1} :: Nil})]
-                    (lift {{y * 2} :: {y * 3} :: Nil}))
-                10))}
-
-@defproc[(run-reader-t [x (t:ReaderT r m a)] [ctx r]) (m a)]{
-
-Runs the @tech{reader monad transformer} computation @racket[x] with the context @racket[ctx] and
-produces a computation in the argument monad.}
-
-@defproc[(run-reader [x (t:ReaderT r t:Identity a)] [ctx r]) a]{
-
-Runs the @tech{reader monad transformer} computation @racket[x] with the context @racket[ctx] and
-extracts the result.}
-
-@defthing[ask (t:forall [r m] (t:ReaderT r m r))]{
+@defmethod[ask (m r)]{
 
 A computation that fetches the value of the current dynamic environment.
 
@@ -1329,7 +1403,7 @@ A computation that fetches the value of the current dynamic environment.
   (eval:check (run-reader ask 5) 5)
   (eval:check (run-reader ask "hello") "hello"))}
 
-@defproc[(asks [f {r t:-> a}]) (t:ReaderT r m a)]{
+@defmethod[reader (t:forall [a] {{r t:-> a} t:-> (m a)})]{
 
 Produces a computation that fetches a value from the current dynamic environment, applies @racket[f]
 to it, and returns the result.
@@ -1338,44 +1412,55 @@ to it, and returns the result.
   (eval:check (run-reader (asks (+ 1)) 5) 6)
   (eval:check (run-reader (asks head) {5 :: Nil}) (Just 5)))}
 
-@defproc[(local [f {r t:-> r}] [x (t:ReaderT r m a)]) (t:ReaderT r m a)]{
+@defmethod[local (t:forall [a] {{r t:-> r} t:-> (m a) t:-> (m a)})]{
 
-Produces a computation like @racket[x], except that the environment is modified in its dynamic extent
-by applying @racket[f] to it.}
+Given a function @racket[_f] and a computation @racket[_x], produces a computation like @racket[_x],
+except that its environment is modified by applying @racket[_f] to it.}}
+
+@defthing[asks (t:forall [r m a] (t:Monad-Reader r m) t:=> {{r t:-> a} t:-> (m a)})]{
+
+An alias for @racket[reader].}
+
+@defdata[(t:Reader/T r m a) (Reader/T {r t:-> (m a)})]{
+
+The @deftech{reader monad transformer}, a @tech{monad transformer} that implements the
+@racket[t:Monad-Reader] class to add support for reading values from a read-only implicit environment
+to an existing monad.
+
+@(hackett-interaction
+  (run-reader/t (do [x <- ask]
+                    [y <- (lift {{x + 1} :: {x - 1} :: Nil})]
+                    (lift {{y * 2} :: {y * 3} :: Nil}))
+                10))}
+
+@defproc[(run-reader/t [x (t:Reader/T r m a)] [ctx r]) (m a)]{
+
+Runs the @tech{reader monad transformer} computation @racket[x] with the context @racket[ctx] and
+produces a computation in the argument monad.}
+
+@defproc[(run-reader [x (t:Reader/T r t:Identity a)] [ctx r]) a]{
+
+Runs the @tech{reader monad transformer} computation @racket[x] with the context @racket[ctx] and
+extracts the result.}
 
 @subsection[#:tag "reference-error-monad"]{Error}
 
 @defmodule[hackett/monad/error]
 
-@defdata[(t:ErrorT e m a) (ErrorT (m (t:Either e a)))]{
+@defclass[#:super [(t:Monad m)]
+          (t:Monad-Error e m)
+          #:fundeps [[m -> e]]
+          [throw (t:forall [a] {e t:-> (m a)})]
+          [catch (t:forall [a] {(m a) t:-> {e t:-> (m a)} t:-> (m a)})]]{
 
-The @deftech{error monad transformer}, a @tech{monad transformer} that extends a monad with a notion
-of failure. Failures short-circuit other computations in the monad, and they can carry information,
-usually information about what caused the failure.
+The @tech[#:key "typeclass"]{class} of @tech{monads} that support a notion of failure. Failures
+short-circuit other computations in the monad, and they can carry information, usually information
+about what caused the failure.
 
-@(hackett-interaction
-  (eval:alts (run-error-t (do (lift (println "This gets printed."))
-                              (throw "Oops!")
-                              (lift (println "Never gets here."))))
-             (unsafe-run-io!
-              (run-error-t (do (lift (println "This gets printed."))
-                               (throw "Oops!")
-                               (lift (println "Never gets here.")))))))}
+@defmethod[throw (t:forall [a] {e t:-> (m a)})]{
 
-@defproc[(run-error-t [x (t:ErrorT e m a)]) (m (t:Either e a))]{
-
-Runs the @tech{error monad transformer} computation @racket[x] and produces the possibly-aborted
-result in the argument monad.}
-
-@defproc[(run-error [x (t:ErrorT e t:Identity a)]) (t:Either e a)]{
-
-Runs the @tech{error monad transformer} computation @racket[x] and extracts the possibly-aborted
-result.}
-
-@defproc[(throw [ex e]) (t:ErrorT e m a)]{
-
-Produces a computation that raises @racket[ex] as an error, aborting the current computation (unless
-caught with @racket[catch]).
+Produces a computation that raises the given value as an error, aborting the current computation
+(unless caught with @racket[catch]).
 
 @(hackett-interaction
   (eval:check (: (run-error (pure 42)) (t:Either t:String t:Integer))
@@ -1383,18 +1468,41 @@ caught with @racket[catch]).
   (eval:check (run-error (do (throw "Ack!") (pure 42)))
               (: (Left "Ack!") (t:Either t:String t:Integer))))}
 
-@defproc[(catch [x (t:ErrorT e m a)] [handler {e t:-> (t:ErrorT e* m a)}]) (t:ErrorT e* m a)]{
+@defmethod[catch (t:forall [a] {(m a) t:-> {e -> (m a)} t:-> (m a)})]{
 
-Produces a computation like @racket[x], except any errors raised are handled via @racket[handler]
-instead of immediately aborting.
+Produces a computation like the given one, except any errors raised are handled via the given handler
+function instead of immediately aborting.
 
 @(hackett-interaction
   (eval:check (: (run-error (throw "Ack!")) (t:Either t:String t:String))
               (: (Left "Ack!") (t:Either t:String t:String)))
-  (eval:check (: (run-error (catch (throw "Ack!")
-                              (λ [str] (pure {"Caught error: " ++ str}))))
-                 (t:Either t:Unit t:String))
-              (: (Right "Caught error: Ack!") (t:Either t:Unit t:String))))}
+  (eval:check (run-error (catch (throw "Ack!")
+                           (λ [str] (pure {"Caught error: " ++ str}))))
+              (: (Right "Caught error: Ack!") (t:Either t:String t:String))))}}
+
+@defdata[(t:Error/T e m a) (Error/T (m (t:Either e a)))]{
+
+The @deftech{error monad transformer}, a @tech{monad transformer} that implements the
+@racket[t:Monad-Error] class to extend a monad with a notion of failure.
+
+@(hackett-interaction
+  (eval:alts (run-error/t (do (lift (println "This gets printed."))
+                              (throw "Oops!")
+                              (lift (println "Never gets here."))))
+             (unsafe-run-io!
+              (run-error/t (do (lift (println "This gets printed."))
+                               (throw "Oops!")
+                               (lift (println "Never gets here.")))))))}
+
+@defproc[(run-error/t [x (t:Error/T e m a)]) (m (t:Either e a))]{
+
+Runs the @tech{error monad transformer} computation @racket[x] and produces the possibly-aborted
+result in the argument monad.}
+
+@defproc[(run-error [x (t:Error/T e t:Identity a)]) (t:Either e a)]{
+
+Runs the @tech{error monad transformer} computation @racket[x] and extracts the possibly-aborted
+result.}
 
 @section[#:tag "reference-controlling-evaluation"]{Controlling Evaluation}
 

@@ -1,4 +1,4 @@
-#lang curly-fn racket/base
+#lang racket/base
 
 ; This module implements #%top-interaction for the Hackett REPL. It does some tricks to make Hackett
 ; forms cooperate more nicely with the top level while still being able to do things like print the
@@ -58,16 +58,25 @@
 ; eval-syntax in the current namespace instead of yielding control to the expander. That avoids the
 ; need to trampoline, but it isn’t possible to use during the extent of #%top-interaction’s expansion,
 ; since we are at phase 1, but the forms need to be evaluated at phase 0.
+;
+; The story is complicated slightly further by the additional need to perform Hackett’s dictionary
+; elaboration passes, even on parts of the form that aren’t relevant for printing type information.
+; Since elaboration involves complete expansion, the aforementioned trampolining must be formed prior
+; to elaboration. Once we discover a non-begin form, we wrap it in a form that will perform
+; elaboration.
 
 (require (for-syntax racket/base
                      racket/match
                      syntax/kerncase
                      threading
 
-                     hackett/private/typecheck)
+                     hackett/private/expand+elaborate
+                     hackett/private/typecheck
+                     hackett/private/util/stx)
          racket/promise
          syntax/parse/define
 
+         (submod hackett/private/expand+elaborate elaborate-top-transformer)
          hackett/private/type-reqprov
          (only-in hackett/private/base τ⇒! τ⇐!)
          (only-in (unmangle-types-in #:no-introduce hackett/private/kernel) String)
@@ -87,28 +96,56 @@
   [(define (write-proc result port mode)
      (fprintf port ": ~a" (type-result-type result)))])
 
-(define-simple-macro (@%top-interaction . form)
-  #:with form* (value-namespace-introduce #'form)
-  (@%top-interaction* . form*))
-
-(define-syntax-parser @%top-interaction*
-  [(_ . (#:type ~! expr:expr))
-   (match-let-values ([(_ τ_e) (τ⇒! #'expr)])
-     #`(type-result '#,(type->string (apply-current-subst τ_e))))]
+(define-syntax-parser @%top-interaction
   [(_ . form)
-   (syntax-parse (local-expand #'form 'top-level (kernel-form-identifier-list))
-     #:context this-syntax
-     #:literal-sets [kernel-literals]
-     [({~or #%require begin-for-syntax define-syntaxes define-values} . _)
-      this-syntax]
-     [(begin)
-      this-syntax]
-     [(begin form ... form*)
-      (syntax/loc this-syntax
-        (begin form ... (@%top-interaction* . form*)))]
-     [expr
-      (match-let*-values ([(e- τ_e) (τ⇒! #'expr)]
-                          [(e-/show) (τ⇐! (quasisyntax/loc this-syntax
-                                            (@%app show #,e-))
-                                          (expand-type #'String))])
-        #`(repl-result (force #,e-/show) '#,(type->string (apply-current-subst τ_e))))])])
+   (syntax-parse (value-namespace-introduce #'form)
+     [(#:type ~! expr:expr)
+      #'(infer+print-type expr)]
+     [form*
+      #'(infer+elaborate+print-value+type form*)])])
+
+(define-syntax-parser infer+print-type
+  [(_ expr:expr)
+   (match-let-values ([(_ τ_e) (τ⇒! #'expr)])
+     #`(type-result '#,(type->string (apply-current-subst τ_e))))])
+
+(define-syntax infer+elaborate+print-value+type
+  (let ([stops (cons #'#%elaborate-top (kernel-form-identifier-list))])
+    (syntax-parser
+      [(_ form)
+       (syntax-parse (local-expand #'form 'top-level stops)
+         #:context this-syntax
+         #:literal-sets [kernel-literals]
+         #:literals [#%elaborate-top]
+         [{~or (begin)
+               ({~or #%require begin-for-syntax define-syntaxes define-values} . _)}
+          #`(elaborate #,this-syntax)]
+         [(begin form ... form*)
+          (syntax/loc this-syntax
+            (begin (elaborate form) ... (infer+elaborate+print-value+type form*)))]
+         [(#%elaborate-top form)
+          #'(elaborate form)]
+         [expr
+          #'(elaborate (infer+print-value+type expr))])])))
+
+(define-syntax-parser elaborate
+  [(_ form)
+   (local-expand+elaborate #'form)])
+
+(define-syntax-parser infer+print-value+type
+  [(_ expr:expr)
+   (match-let*-values ([(e- τ_e) (τ⇒! #'expr)]
+                       [(e-/show) (τ⇐! (quasisyntax/loc this-syntax
+                                         (@%app show #,e-))
+                                       (expand-type #'String))])
+     #`(repl-result (force #,e-/show) (type-string #,τ_e)))])
+
+(define-syntax type-string
+  (make-elaborating-transformer
+   (syntax-parser
+     [(_ t)
+      (match (syntax-local-elaborate-pass)
+        [(or 'expand 'elaborate)
+         (syntax-local-elaborate-defer this-syntax)]
+        ['finalize
+         #`'#,(type->string (apply-current-subst #'t))])])))

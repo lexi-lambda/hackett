@@ -1,38 +1,31 @@
 #lang hackett
 
-(require hackett/data/identity
-         hackett/monad/trans)
+(require hackett/monad/trans
+         hackett/monad/trans/error
+         (rename-in hackett/monad/trans/reader
+                    [ask trans:ask]
+                    [local trans:local]
+                    [asks trans:asks]))
 
-(provide (data ReaderT) run-reader-t run-reader ask asks local)
+(provide (class Monad-Reader) (rename-out [reader asks])
+         (data Reader/T) run-reader/t (for-type Reader) run-reader)
 
-(data (ReaderT r m a) (ReaderT {r -> (m a)}))
+(class (Monad m) => (Monad-Reader r m) #:fundeps [[m -> r]]
+  [ask : (m r)]
+  [local : (forall [a] {{r -> r} -> (m a) -> (m a)})]
+  [reader : (forall [a] {{r -> a} -> (m a)})])
 
-(defn run-reader-t : (forall [r m a] {(ReaderT r m a) -> r -> (m a)})
-  [[(ReaderT f)] f])
+(instance (forall [r] (Monad-Reader r (-> r)))
+  [ask id]
+  [local (flip .)]
+  [reader $])
 
-(defn run-reader : (forall [r a] {(ReaderT r Identity a) -> r -> a})
-  [[x r] (run-identity (run-reader-t x r))])
+(instance (forall [r m] (Monad m) => (Monad-Reader r (Reader/T r m)))
+  [ask trans:ask]
+  [local trans:local]
+  [reader trans:asks])
 
-(instance (forall [r] (MonadTrans (ReaderT r)))
-  [lift {ReaderT . const}])
-
-(instance (forall [r m] (Functor m) => (Functor (ReaderT r m)))
-  [map (λ [f (ReaderT x)] (ReaderT (λ [r] (map f (x r)))))])
-
-(instance (forall [r m] (Applicative m) => (Applicative (ReaderT r m)))
-  [pure {ReaderT . const . pure}]
-  [<*> (λ [(ReaderT f) (ReaderT x)] (ReaderT (λ [r] {(f r) <*> (x r)})))])
-
-(instance (forall [r m] (Monad m) => (Monad (ReaderT r m)))
-  [join (λ [(ReaderT x)]
-          (ReaderT (λ [r] (do [x* <- (x r)]
-                               (case x* [(ReaderT y) (y r)])))))])
-
-(def ask : (forall [r m] (Applicative m) => (ReaderT r m r))
-  (ReaderT (λ [r] (pure r))))
-
-(defn asks : (forall [r m a] (Applicative m) => {{r -> a} -> (ReaderT r m a)})
-  [[f] (ReaderT (λ [r] (pure (f r))))])
-
-(defn local : (forall [r m a] {{r -> r} -> (ReaderT r m a) -> (ReaderT r m a)})
-  [[f x] (ReaderT (λ [r] (run-reader-t x (f r))))])
+(instance (forall [r e m] (Monad-Reader r m) => (Monad-Reader r (Error/T e m)))
+  [ask (lift ask)]
+  [local {map-error/t . local}]
+  [reader {lift . reader}])

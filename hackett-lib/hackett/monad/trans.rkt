@@ -1,6 +1,6 @@
 #lang hackett
 
-(provide (class MonadTrans))
+(provide (class Monad-Trans))
 
-(class (MonadTrans t)
+(class (Monad-Trans t)
   [lift : (forall [m a] (Monad m) => {(m a) -> (t m a)})])

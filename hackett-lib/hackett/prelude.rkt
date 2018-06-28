@@ -1,13 +1,13 @@
-#lang hackett/private/kernel
+#lang hackett/base
 
 (require (only-in racket/base all-from-out)
-
-         (except-in hackett/private/adt data)
 
          hackett/data/either
          hackett/data/list
          hackett/data/maybe
+         hackett/monad/base
 
+         (prefix-in prim: hackett/private/prim)
          hackett/private/prim
          hackett/private/provide)
 
@@ -30,7 +30,8 @@
          (for-type IO) main print println
          + - * quotient! remainder! < > <= >=
          d+ d- d* d/ d< d> d<= d>= integer->double
-         string-length string-split
+         string-length string-split string->bytes/utf-8
+         bytes-length bytes->string/utf-8
 
          (class Show)
          (class Eq))
@@ -40,6 +41,9 @@
 (def undefined! : (forall [a] a)
   (error! "undefined!"))
 
-(defn println : {String -> (IO Unit)}
+(def print : (forall [m] (Monad-Base IO m) => {String -> (m Unit)})
+  {lift/base . prim:print})
+
+(defn println : (forall [m] (Monad-Base IO m) => {String -> (m Unit)})
   [[str] (do (print str)
              (print "\n"))])

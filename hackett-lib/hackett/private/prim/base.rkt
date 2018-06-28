@@ -108,17 +108,12 @@
       'disappeared-use
       (syntax-local-introduce #'ty-con))]))
 
-(instance (Show Integer)
-  [show show/Integer])
-
-(instance (Show Double)
-  [show show/Double])
-
-(instance (Show String)
-  [show (λ [str] {"\"" ++ str ++ "\""})])
+(instance (Show Integer) [show show/Integer])
+(instance (Show Double) [show show/Double])
+(instance (Show String) [show show/String])
+(instance (Show Bytes) [show show/Bytes])
 
 (derive-instance Show Unit)
-
 (derive-instance Show Bool)
 (derive-instance Show Maybe)
 (derive-instance Show Either)
@@ -166,14 +161,10 @@
   [== (λ* [[True  y] y]
           [[False y] (not y)])])
 
-(instance (Eq Integer)
-  [== equal?/Integer])
-
-(instance (Eq Double)
-  [== equal?/Double])
-
-(instance (Eq String)
-  [== equal?/String])
+(instance (Eq Integer) [== equal?/Integer])
+(instance (Eq Double) [== equal?/Double])
+(instance (Eq String) [== equal?/String])
+(instance (Eq Bytes) [== equal?/Bytes])
 
 (derive-instance Eq Unit)
 (derive-instance Eq Maybe)
@@ -188,8 +179,8 @@
   [++ : {a -> a -> a}
       #:fixity right])
 
-(instance (Semigroup String)
-  [++ append/String])
+(instance (Semigroup String) [++ append/String])
+(instance (Semigroup Bytes) [++ append/Bytes])
 
 (instance (forall [a] (Semigroup a) => (Semigroup (Maybe a)))
   [++ (λ* [[(Just x) (Just y)] (Just {x ++ y})]
@@ -207,8 +198,8 @@
 (class (Semigroup a) => (Monoid a)
   [mempty : a])
 
-(instance (Monoid String)
-  [mempty ""])
+(instance (Monoid String) [mempty ""])
+(instance (Monoid Bytes) [mempty #""])
 
 (instance (forall [a] (Semigroup a) => (Monoid (Maybe a)))
   [mempty Nothing])
@@ -252,6 +243,9 @@
   [map (λ* [[f {y :: ys}] {(f y) :: (map f ys)}]
            [[_ Nil      ] Nil])])
 
+(instance (forall [r] (Functor (-> r)))
+  [map .])
+
 (instance (Functor IO)
   [map (λ [f (IO mx)]
          (IO (λ [rw]
@@ -285,6 +279,10 @@
 (instance (Applicative List)
   [pure (λ [x] {x :: Nil})]
   [<*> ap])
+
+(instance (forall [r] (Applicative (-> r)))
+  [pure const]
+  [<*> (λ [f g x] (f x (g x)))])
 
 (instance (Applicative IO)
   [pure (λ [x] (IO (λ [rw] (Tuple rw x))))]
@@ -335,6 +333,10 @@
   [join (λ* [[{{z :: zs} :: yss}] {z :: (join {zs :: yss})}]
             [[{Nil       :: yss}] (join yss)]
             [[Nil               ] Nil])])
+
+(instance (forall [r] (Monad (-> r)))
+  [join (λ [f x] (f x x))]
+  [=<< (λ [f g x] (f (g x) x))])
 
 (instance (Monad IO)
   [join (λ [(IO outer)]
