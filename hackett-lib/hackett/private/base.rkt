@@ -483,6 +483,9 @@
   #:literals [:]
   [(_ x:id/binding-declaration e:expr)
    #:with x- #'x.internal-id
+   ;; if x- is already defined, move on to the case where
+   ;; this is treated as a new definition
+   #:when (not (identifier-binding #'x-))
    (syntax-property
     #`(define- x-
         (: #,((attribute x.scoped-binding-introducer) #'e)
