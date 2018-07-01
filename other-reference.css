@@ -1,0 +1,19 @@
+.flexible-container {
+  display: -webkit-flex;
+  display: flex;
+}
+
+.flexible-element {
+  -webkit-flex: 1;
+  flex: 1;
+}
+
+.margin-note__image-left {
+  float: left;
+  font-size: 1.25em;
+  margin-right: 0.4em;
+}
+
+.margin-note__image-left--finger::before {
+  content: '☞';
+}
