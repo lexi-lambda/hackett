@@ -667,14 +667,17 @@
         [(or 'expand 'elaborate)
          (let ([intdef-ctx (syntax-local-make-definition-context)])
            (syntax-local-bind-syntaxes (append* (attribute x-)) #f intdef-ctx)
-           (with-syntax ([[[x-* ...] ...]
+           (with-syntax ([[val-* ...]
+                          (for/list ([val- (in-list (attribute val-))])
+                            (local-expand/defer-elaborate val- 'expression '()))]
+                         [[[x-* ...] ...]
                           (internal-definition-context-introduce intdef-ctx #'[[x- ...] ...])]
                          [[body-* ...]
                           (for/list ([body- (in-list (attribute body-))])
                             (local-expand/defer-elaborate body- 'expression '() (list intdef-ctx)))])
              (syntax-local-elaborate-defer
               (syntax/loc this-syntax
-                (head [val- ...] [[x-* ...] [pat ...] body-*] ...)))))]
+                (head [val-* ...] [[x-* ...] [pat ...] body-*] ...)))))]
 
         ; In 'finalize mode, we actually generate racket/match patterns from Hackett patterns and
         ; expand to a use of `match` from racket/match.
