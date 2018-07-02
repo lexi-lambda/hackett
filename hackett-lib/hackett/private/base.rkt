@@ -27,6 +27,7 @@
          @%superclasses-key @%dictionary-placeholder @%with-dictionary
          define-primop define-base-type
          -> Integer Double String Bytes
+         core-def
          : λ1 def let letrec todo!)
 
 (define-base-type Integer)
@@ -415,34 +416,48 @@
                                             #:src this-syntax))]
       (attach-type r- t_r #:tooltip-src this-syntax)])))
 
-(define-syntax-parser def
+;; core-def is an annotated definition
+;; a `def` expands to `core-def` to define a typed variable
+(define-syntax-parser core-def
   #:literals [:]
-  [(_ id:id
-      {~or {~once {~seq {~and : {~var :/use}} {~type t:type}
-                        {~optional {~and #:exact exact?}}}}
-           {~optional fixity:fixity-annotation}}
+  [(_ id:id id-:id
+      {~alt {~once {~seq {~and : {~var :/use}} {~type t:type}
+                         {~optional {~and #:exact exact?}}}}
+            {~optional fixity:fixity-annotation}}
       ...
       e:expr)
-   #:with id- (generate-temporary #'id)
    #:with t_reduced (if (attribute exact?) #'t.expansion (type-reduce-context #'t.expansion))
    #`(begin-
        #,(indirect-infix-definition
           #'(define-syntax- id (make-typed-var-transformer #'id- (quote-syntax t_reduced)))
           (attribute fixity.fixity))
-       (define- id- (:/use #,((attribute t.scoped-binding-introducer) #'e) t_reduced #:exact)))]
-  [(_ id:id {~optional fixity:fixity-annotation} e:expr)
+       (define- id- (:/use #,((attribute t.scoped-binding-introducer) #'e) t_reduced #:exact)))])
+
+(define-syntax-parser def
+  #:literals [:]
+  [(_ id:id
+      {~and
+       {~seq stuff ...}
+       {~seq
+        {~or {~once {~seq {~and : {~var :/use}} {~type t:type}
+                          {~optional {~and #:exact exact?}}}}
+             {~optional fixity:fixity-annotation}}
+        ...
+        e:expr}})
+   #:with id- (generate-temporary #'id)
+   #'(core-def id id- stuff ...)]
+  [(_ id:id
+      {~and {~seq fixity-stuff ...}
+            {~optional fixity:fixity-annotation}}
+      e:expr)
    (if (and (eq? (syntax-local-context) 'top-level)
             (not (syntax-local-elaborate-pass)))
        (syntax-local-elaborate-top this-syntax)
        (match-let*-values ([[t_e] #`(#%type:wobbly-var #,(generate-temporary))]
                            [[(list id-) e-] (τ⇐/λ! #'e t_e (list (cons #'id t_e)))]
                            [[t_gen] (type-reduce-context (generalize (apply-current-subst t_e)))])
-         #`(begin-
-             #,(indirect-infix-definition
-                #`(define-syntax- id (make-typed-var-transformer (quote-syntax #,id-)
-                                                                 (quote-syntax #,t_gen)))
-                (attribute fixity.fixity))
-             (define- #,id- #,e-))))])
+         #`(core-def id #,id- : #,t_gen #:exact fixity-stuff ...
+             #,e-)))])
 
 (begin-for-syntax
   (struct todo-item (full summary) #:prefab))
