@@ -6,7 +6,9 @@
                      syntax/parse/experimental/template
                      syntax/intdef
                      syntax/srcloc
-                     threading)
+                     syntax/parse/class/local-value
+                     threading
+                     serialize-syntax-introducer)
          (postfix-in - (combine-in racket/base
                                    racket/promise))
          racket/stxparam
@@ -27,7 +29,7 @@
          @%superclasses-key @%dictionary-placeholder @%with-dictionary
          define-primop define-base-type
          -> Integer Double String Bytes
-         : λ1 def let letrec todo!)
+         : ⋮ λ1 def let letrec todo!)
 
 (define-base-type Integer)
 (define-base-type Double)
@@ -349,6 +351,37 @@
 
 ;; ---------------------------------------------------------------------------------------------------
 
+(begin-for-syntax
+  ; Instances of this struct are created by `⋮` when declaring the types of bindings
+  ; seperately from their definitions. When a binding is defined (with `def` or related
+  ; forms), it searches for a `binding-declaration` and fills in `internal-id` with the
+  ; actual definition. The `type` field is used as the expected type of the definition.
+  ; fixity : [Maybe Fixity]
+  (struct binding-declaration [internal-id type scoped-binding-introducer fixity]
+    #:property prop:procedure
+    (λ (this stx)
+      (match-define (binding-declaration x- type _ _) this)
+      ((make-typed-var-transformer x- type) stx))
+    #:property prop:infix-operator
+    (λ (this) (binding-declaration-fixity this)))
+
+  (define-syntax-class id/binding-declaration
+    #:attributes [internal-id type scoped-binding-introducer fixity]
+    [pattern (~var x (local-value binding-declaration?))
+             #:do [(match-define (binding-declaration x-* type* sbi* fixity*)
+                     (attribute x.local-value))]
+             #:attr internal-id (syntax-local-introduce x-*)
+             #:with type        (syntax-local-introduce type*)
+             #:attr scoped-binding-introducer (deserialize-syntax-introducer sbi*)
+             #:attr fixity      fixity*]))
+
+(define-syntax-parser define/binding-declaration
+  [(_ x:id/binding-declaration rhs)
+   #:with x- #'x.internal-id
+   #'(define- x- rhs)])
+
+;; ---------------------------------------------------------------------------------------------------
+
 (define-syntax-parser @%module-begin
   [(_ form ...)
    (~> (syntax/loc this-syntax
@@ -369,7 +402,8 @@
    (attach-type #'(#%datum . b) (expand-type #'Bytes) #:tooltip-src #'b)]
   [(_ . x)
    (raise-syntax-error #f "literal not supported" #'x)])
-
+   
+;; The `:` form annotates an expression with an expected type.
 (define-syntax :
   (make-trampolining-expression-transformer
    (syntax-parser
@@ -386,6 +420,36 @@
       (attach-type #`(let-values- ([() t.residual])
                                   #,(τ⇐! ((attribute t.scoped-binding-introducer) #'e) #'t_reduced))
                    #'t_reduced)])))
+
+;; The `⋮` form declares that an id will be defined with an expected type.
+;; For example:
+;;     (⋮ x τ)
+;;     (def x e)
+;; Defines `x` with type `τ` to be equal to the value produced by `e`,
+;; which must produce 
+(define-syntax ⋮
+  (λ (stx)
+    (syntax-parse stx
+      [(_ x:id {~type t:type}
+          {~alt {~optional {~and #:exact exact?}}
+                {~optional f:fixity-annotation}}
+          ...)
+       #:with x- (generate-temporary #'x)
+       #:with exct? (and (attribute exact?) #true)
+       #:with fixity (attribute f.fixity)
+       #:with t_reduced (if (attribute exact?)
+                            #'t.expansion
+                            (type-reduce-context #'t.expansion))
+       #:with sbi (serialize-syntax-introducer
+                   (attribute t.scoped-binding-introducer))
+       #`(begin-
+           (define-values- [] t.residual)
+           (define-syntax- x
+             (binding-declaration
+              (quote-syntax x-)
+              (quote-syntax t_reduced)
+              (quote-syntax sbi)
+              'fixity)))])))
 
 (define-syntax λ1
   (make-trampolining-expression-transformer
@@ -417,20 +481,33 @@
 
 (define-syntax-parser def
   #:literals [:]
-  [(_ id:id
-      {~or {~once {~seq {~and : {~var :/use}} {~type t:type}
-                        {~optional {~and #:exact exact?}}}}
-           {~optional fixity:fixity-annotation}}
-      ...
+  [(_ x:id/binding-declaration e:expr)
+   #:with x- #'x.internal-id
+   ;; if x- is already defined, move on to the case where
+   ;; this is treated as a new definition
+   #:when (not (identifier-binding #'x-))
+   (syntax-property
+    #`(define- x-
+        (: #,((attribute x.scoped-binding-introducer) #'e)
+           x.type
+           #:exact))
+    'disappeared-use
+    (syntax-local-introduce #'x))]
+
+  [(_ x:id : type:expr
+      {~and {~seq stuff ...}
+            {~seq {~alt {~optional {~and #:exact exact?}}
+                        {~optional f:fixity-annotation}}
+                  ...}}
       e:expr)
-   #:with id- (generate-temporary #'id)
-   #:with t_reduced (if (attribute exact?) #'t.expansion (type-reduce-context #'t.expansion))
-   #`(begin-
-       #,(indirect-infix-definition
-          #'(define-syntax- id (make-typed-var-transformer #'id- (quote-syntax t_reduced)))
-          (attribute fixity.fixity))
-       (define- id- (:/use #,((attribute t.scoped-binding-introducer) #'e) t_reduced #:exact)))]
-  [(_ id:id {~optional fixity:fixity-annotation} e:expr)
+   #'(begin-
+       (⋮ x type stuff ...)
+       (def x e))]
+
+  [(_ id:id 
+      {~and {~seq fixity-stuff ...}
+            {~optional fixity:fixity-annotation}}
+      e:expr)
    (if (and (eq? (syntax-local-context) 'top-level)
             (not (syntax-local-elaborate-pass)))
        (syntax-local-elaborate-top this-syntax)
@@ -438,11 +515,10 @@
                            [[(list id-) e-] (τ⇐/λ! #'e t_e (list (cons #'id t_e)))]
                            [[t_gen] (type-reduce-context (generalize (apply-current-subst t_e)))])
          #`(begin-
-             #,(indirect-infix-definition
-                #`(define-syntax- id (make-typed-var-transformer (quote-syntax #,id-)
-                                                                 (quote-syntax #,t_gen)))
-                (attribute fixity.fixity))
-             (define- #,id- #,e-))))])
+             (⋮ id #,t_gen fixity-stuff ... #:exact)
+             (define/binding-declaration id
+               (let-syntax ([#,id- (make-rename-transformer (quote-syntax id))])
+                 #,e-)))))])
 
 (begin-for-syntax
   (struct todo-item (full summary) #:prefab))

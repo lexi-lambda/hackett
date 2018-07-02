@@ -7,6 +7,7 @@
     "curly-fn-lib"
     "data-lib"
     "syntax-classes-lib"
-    "threading-lib"))
+    "threading-lib"
+    "serialize-syntax-introducer"))
 (define build-deps
   '())
