@@ -307,7 +307,7 @@ contains the provided values.
   (Foo2 "hello")
   Foo3)
 
-Additionally, the bound @racket[value-id]s and @racket[data-constructor-id]s serve as @tech{patterns}
+Additionally, the bound @racket[value-id]s and @racket[data-constructor-id]s serve as @tech[#:key "pattern"]{patterns}
 that match against different values of the defined type. The pattern associated with each
 @racket[data-constuctor-id] accepts patterns that match against the contained values, so
 pattern-matching allows extracting values stored “inside” data constructors.

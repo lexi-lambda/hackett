@@ -402,7 +402,7 @@ enumeration, we would like to be able to @emph{do something} with its values. Fo
 wish to write a function that determines if a weekday is a weekend—that is, if it is @racket[sunday]
 or @racket[saturday]. To do this, we need some way to check if a weekday is a particular value.
 
-We can do this by using @italic{pattern matching}, which makes it possible to make a decision based on
+We can do this by using @deftech[#:key "pattern"]{pattern matching}, which makes it possible to make a decision based on
 the different values of an enumeration. Here’s one way to write our @racket[is-weekend?] function:
 
 @(hackett-interaction
