@@ -4,23 +4,23 @@
 
 (module shared hackett
   (#%require/only-types hackett)
-  (provide (data KeyEvent) (data MouseEvent))
+  (provide (data Key-Event) (data Mouse-Event))
 
-  (data KeyEvent
-    (ke:char String)
-    ke:left ke:right ke:up ke:down
-    ke:shift ke:rshift ke:control ke:rcontrol ke:escape
-    ke:wheel-up ke:wheel-down ke:wheel-left ke:wheel-right
-    (ke:function Integer)
-    (ke:unknown String))
+  (data Key-Event
+    (KE:Char String)
+    KE:Left KE:Right KE:Up KE:Down
+    KE:Shift KE:Rshift KE:Control KE:R-Control KE:Escape
+    KE:Wheel-Up KE:Wheel-Down KE:Wheel-Left KE:Wheel-Right
+    (KE:Function Integer)
+    (KE:Unknown String))
 
-  (data MouseEvent
-    me:button-down
-    me:button-up
-    me:drag
-    me:move
-    me:enter
-    (me:unknown String)))
+  (data Mouse-Event
+    ME:Button-Down
+    ME:Button-Up
+    ME:Drag
+    ME:Move
+    ME:Enter
+    (ME:Unknown String)))
 
 (module untyped racket/base
   (require hackett/private/type-reqprov
@@ -48,31 +48,31 @@
                   {state
                    -> {state -> (t:IO state)} -> Double
                    -> {state -> hackett:t:Pict}
-                   -> {hackett:t:KeyEvent -> state -> (t:IO state)}
-                   -> {hackett:t:KeyEvent -> state -> (t:IO state)}
-                   -> {Integer -> Integer -> hackett:t:MouseEvent -> state -> (t:IO state)}
+                   -> {hackett:t:Key-Event -> state -> (t:IO state)}
+                   -> {hackett:t:Key-Event -> state -> (t:IO state)}
+                   -> {Integer -> Integer -> hackett:t:Mouse-Event -> state -> (t:IO state)}
                    -> (t:IO state)})]))
 
   (define (pict->image p) (pict->bitmap- (force- p)))
 
-  (define (string->KeyEvent str)
+  (define (string->Key-Event str)
     (match- str
-      [(app string-length- (==- 1 =-)) (hackett:ke:char str)]
-      [(regexp #px"^f(\\d+)$" (list _ (app string->number- n))) (hackett:ke:function n)]
-      ["left" hackett:ke:left] ["right" hackett:ke:right]
-      ["up" hackett:ke:up] ["down" hackett:ke:down]
-      ["shift" hackett:ke:shift] ["rshift" hackett:ke:rshift]
-      ["control" hackett:ke:control] ["rcontrol" hackett:ke:rcontrol]
-      ["escape" hackett:ke:escape]
-      ["wheel-up" hackett:ke:wheel-up] ["wheel-down" hackett:ke:wheel-down]
-      ["wheel-left" hackett:ke:wheel-left] ["wheel-right" hackett:ke:wheel-right]
-      [_ (hackett:ke:unknown str)]))
+      [(app string-length- (==- 1 =-)) (hackett:KE:Char str)]
+      [(regexp #px"^f(\\d+)$" (list _ (app string->number- n))) (hackett:KE:Function n)]
+      ["left" hackett:KE:Left] ["right" hackett:KE:Right]
+      ["up" hackett:KE:Up] ["down" hackett:KE:Down]
+      ["shift" hackett:KE:Shift] ["rshift" hackett:KE:Rshift]
+      ["control" hackett:KE:Control] ["rcontrol" hackett:KE:R-Control]
+      ["escape" hackett:KE:Escape]
+      ["wheel-up" hackett:KE:Wheel-Up] ["wheel-down" hackett:KE:Wheel-Down]
+      ["wheel-left" hackett:KE:Wheel-Left] ["wheel-right" hackett:KE:Wheel-Right]
+      [_ (hackett:KE:Unknown str)]))
 
-  (define (string->MouseEvent str)
+  (define (string->Mouse-Event str)
     (match- str
-      ["button-down" hackett:me:button-down] ["button-up" hackett:me:button-up]
-      ["drag" hackett:me:drag] ["move" hackett:me:move] ["enter" hackett:me:enter]
-      [_ (hackett:me:unknown str)]))
+      ["button-down" hackett:ME:Button-Down] ["button-up" hackett:ME:Button-Up]
+      ["drag" hackett:ME:Drag] ["move" hackett:ME:Move] ["enter" hackett:ME:Enter]
+      [_ (hackett:ME:Unknown str)]))
 
   (define ((random-integer low) high)
     (IO (λ- (rw) ((hackett:Tuple rw) (random- (force- low) (force- high))))))
@@ -99,10 +99,10 @@
              [to-draw- (λ- (s) (pict->image ((force- render-fn) s)))]
              [on-key-
               (λ- (s str)
-                (force- (unsafe-run-io! ((force- ((force- key-fn) (string->KeyEvent str))) s))))]
+                (force- (unsafe-run-io! ((force- ((force- key-fn) (string->Key-Event str))) s))))]
              [on-release-
               (λ- (s str)
-                (force- (unsafe-run-io! ((force- ((force- release-fn) (string->KeyEvent str))) s))))]
+                (force- (unsafe-run-io! ((force- ((force- release-fn) (string->Key-Event str))) s))))]
              [on-mouse-
               (λ- (s x y str)
                   (~> mouse-fn
@@ -111,7 +111,7 @@
                       force-
                       (#%app y)
                       force-
-                      (#%app (string->MouseEvent str))
+                      (#%app (string->Mouse-Event str))
                       force-
                       (#%app s)
                       unsafe-run-io!
@@ -123,7 +123,7 @@
          (submod "." shared)
          (submod "." untyped))
 
-(provide (data KeyEvent) (data MouseEvent) animate big-bang
+(provide (data Key-Event) (data Mouse-Event) animate big-bang
          random-integer random-double)
 
 (define-syntax-parser big-bang
