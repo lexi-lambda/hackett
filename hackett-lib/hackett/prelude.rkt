@@ -6,6 +6,7 @@
          hackett/data/list
          hackett/data/maybe
          hackett/monad/base
+         hackett/todo
 
          (prefix-in prim: hackett/private/prim)
          hackett/private/prim
@@ -14,6 +15,7 @@
 (provide (all-from-out hackett/data/either)
          (all-from-out hackett/data/list)
          (all-from-out hackett/data/maybe)
+         (all-from-out hackett/todo)
 
          (data Unit) (data Bool) (data Tuple) (data Maybe) (data Either) (data List)
          || && not if fst snd

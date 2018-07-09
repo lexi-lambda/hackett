@@ -195,9 +195,9 @@
                                  (syntax-track-origin #'t-.residual #'head)
                                  (syntax-track-origin #'expansion #'head))])
 
-  (define (expand-type stx [intdef-ctx #f])
+  (define (expand-type stx [intdef-ctx #f] #:context [context 'expand-type])
     (syntax-parse stx
-      #:context 'expand-type
+      #:context context
       [{~var t (type intdef-ctx)} #'t.expansion]))
 
 ;; ---------------------------------------------------------------------------------------------------
