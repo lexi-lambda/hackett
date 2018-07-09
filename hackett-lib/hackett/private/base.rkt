@@ -27,7 +27,7 @@
          @%superclasses-key @%dictionary-placeholder @%with-dictionary
          define-primop define-base-type
          -> Integer Double String Bytes
-         : λ1 def let letrec todo!)
+         : λ1 def let letrec)
 
 (define-base-type Integer)
 (define-base-type Double)
@@ -443,33 +443,6 @@
                                                                  (quote-syntax #,t_gen)))
                 (attribute fixity.fixity))
              (define- #,id- #,e-))))])
-
-(begin-for-syntax
-  (struct todo-item (full summary) #:prefab))
-
-(define-syntax todo!*
-  (make-elaborating-transformer
-   (syntax-parser
-     [(_ v e ...)
-      (match (syntax-local-elaborate-pass)
-        [(or 'expand 'elaborate)
-         (syntax-local-elaborate-defer this-syntax)]
-        ['finalize
-         (let* ([type-str (type->string (apply-current-subst #'(#%type:wobbly-var v)))]
-                [message (string-append (source-location->prefix this-syntax)
-                                        "todo! with type "
-                                        type-str)])
-           (syntax-property (quasisyntax/loc this-syntax (error '#,message))
-                            'todo (todo-item type-str type-str)))])])))
-
-(define-syntax todo!
-  (make-elaborating-transformer
-   #:allowed-passes '[expand]
-   (syntax-parser
-     [(_ e ...)
-      #:with var (generate-temporary #'t_todo!)
-      (attach-type (syntax-local-elaborate-defer (syntax/loc this-syntax (todo!* var e ...)))
-                   #'(#%type:wobbly-var var))])))
 
 (define-syntax let1
   (make-trampolining-expression-transformer
