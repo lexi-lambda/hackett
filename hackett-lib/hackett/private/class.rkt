@@ -6,7 +6,9 @@
                      (multi-in syntax/parse [class/local-value experimental/template])
                      syntax/id-set
                      syntax/id-table
-                     threading)
+                     threading
+
+                     hackett/private/util/stx)
          (postfix-in - (combine-in racket/base
                                    syntax/id-table))
          syntax/parse/define
@@ -204,6 +206,7 @@
          (define var+skolem-ids
            (map #{cons %1 #`(#%type:rigid-var #,%2)} (attribute var-id-) skolem-ids))
          (define bare-ts/skolemized (map #{insts % var+skolem-ids} (attribute bare-t-.expansion)))]
+   #:with [skolem-id ...] skolem-ids
    #:with [constr/skolemized ...] (map #{insts % var+skolem-ids} (attribute constr-/reduced))
 
    ; With the skolemized constraints and instance head, we need to synthesize expected types for each
@@ -222,7 +225,11 @@
                                  (map cons (attribute method-id) (attribute impl))))]
    #:with [every-impl ...] (for/list ([method-id (in-list all-method-ids)])
                              (let ([provided-impl (free-id-table-ref provided-impls method-id #f)])
-                               (or provided-impl (free-id-table-ref default-methods method-id))))
+                               (if provided-impl
+                                   ; Add the type variable scope to implementations to enable scoped
+                                   ; type variables.
+                                   (internal-definition-context-introduce t-intdef-ctx provided-impl)
+                                   (free-id-table-ref default-methods method-id))))
 
    ; Finally, generate some temporaries and expressions needed in the output.
    #:with dict-id- (generate-temporary #'class)
@@ -251,11 +258,15 @@
                  #'(define-syntaxes- [dict-id-] (values))
                  #'(begin-))
            (define- dict-id-
-             #,(syntax/loc this-syntax
-                 (:/instance-dictionary
-                  #:methods ([every-method-id : expected-t every-impl] ...)
-                  #:instance-constrs [constr/skolemized ...]
-                  #:superclass-constrs [superclass-constr ...]))))
+             ; Keep skolem bindings in scope in expressions to support scoped type variables.
+             (let-syntax ([var-id- (make-variable-like-transformer
+                                    (quote-syntax (#%type:rigid-var skolem-id)))]
+                          ...)
+               #,(syntax/loc this-syntax
+                   (:/instance-dictionary
+                    #:methods ([every-method-id : expected-t every-impl] ...)
+                    #:instance-constrs [constr/skolemized ...]
+                    #:superclass-constrs [superclass-constr ...])))))
        (syntax-property 'disappeared-binding
                         (~>> (attribute var-id)
                              (map (λ~>> (internal-definition-context-introduce t-intdef-ctx)
