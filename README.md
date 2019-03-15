@@ -1,4 +1,4 @@
-<a href=hacket-assetts/2000px-Hackett-logo.png""><img src="hacket-assetts/250px-Hackett-logo.png" style="float:right" /></a>
+<a href="https://raw.githubusercontent.com/haskell-lisp/hackett/add-logo/hackett-assetts/2000px-Hackett-logo.png"><img src="https://raw.githubusercontent.com/haskell-lisp/hackett/add-logo/hackett-assetts/50px-Hackett-logo.png" align="right" /></a>
 
 # Hackett [![Build Status](https://travis-ci.org/lexi-lambda/hackett.svg?branch=master)](https://travis-ci.org/lexi-lambda/hackett)
 
