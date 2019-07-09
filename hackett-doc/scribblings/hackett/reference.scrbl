@@ -573,7 +573,7 @@ used higher-order if desired.
   (eval:check (if True "first" "second") "first")
   (eval:check (if False "first" "second") "second"))}
 
-@defthing[\|\| {t:Bool t:-> t:Bool t:-> t:Bool}]{
+@defthing[|| {t:Bool t:-> t:Bool t:-> t:Bool}]{
 
 Returns @racket[True] if its first argument is @racket[True]; otherwise, returns its second argument.
 Notably, the second argument will not be evaluated at all if the first argument is @racket[True], but
