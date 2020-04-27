@@ -67,5 +67,5 @@ $ raco pkg install hackett
 
 Now you can use Hackett by writing `#lang hackett` at the top of a file.
 
-[hackett-docs]: https://pkg-build.racket-lang.org/doc/hackett@hackett-doc/
+[hackett-docs]: https://lexi-lambda.github.io/hackett/
 [types-as-macros]: http://www.ccs.neu.edu/home/stchang/pubs/ckg-popl2017.pdf
