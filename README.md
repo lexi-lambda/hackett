@@ -1,3 +1,5 @@
+<a href="https://raw.githubusercontent.com/haskell-lisp/hackett/add-logo/hackett-assetts/2000px-Hackett-logo.png"><img src="https://raw.githubusercontent.com/haskell-lisp/hackett/add-logo/hackett-assetts/50px-Hackett-logo.png" align="right" /></a>
+
 # Hackett [![Build Status](https://travis-ci.org/lexi-lambda/hackett.svg?branch=master)](https://travis-ci.org/lexi-lambda/hackett)
 
 Hackett is an attempt to implement a Haskell-like language with support for Racket’s macro system, built using the techniques described in the paper [*Type Systems as Macros*][types-as-macros]. It is currently *extremely* work-in-progress.
