@@ -361,7 +361,7 @@ then @racket[name-id] is bound directly to the type alias.
   (#:type n))
 
 If @racket[param-id]s are specified, then uses of the type alias must supply as many arguments as
-there are @racket[param-id]s. The arguments are supplied like those to a type constructor—i.e. 
+there are @racket[param-id]s. The arguments are supplied like those to a type constructor—i.e.
 @racket[(name-id type-argument ...)]—and the resulting type is @racket[type-expr] with each
 @racket[param-id] substituted with the corresponding @racket[type-argument].
 
@@ -840,9 +840,9 @@ the following expression:
 @defproc[(foldl [f {b t:-> a t:-> b}] [acc b] [xs (t:List a)]) b]{
 
 Reduces @racket[xs] to a single value using a left-associative binary operator, @racket[f], using
-@racket[acc] as a “seed” element. Uses of @racket[foldr] can be thought of as a series of nested,
+@racket[acc] as a “seed” element. Uses of @racket[foldl] can be thought of as a series of nested,
 left-associative applications of @racket[f], so if @racket[xs] contains elements named @racket[_x0],
-@racket[_x1], @racket[_x2] etc., up to @racket[_xn], then @racket[(foldr f acc xs)] is equivalent to
+@racket[_x1], @racket[_x2] etc., up to @racket[_xn], then @racket[(foldl f acc xs)] is equivalent to
 the following expression:
 
 @(racketblock
